@@ -8,7 +8,12 @@ declare module "react" {
         alt?: string;
         poster?: string;
         "camera-controls"?: boolean;
+        "disable-pan"?: boolean;
+        "disable-zoom"?: boolean;
         "touch-action"?: string;
+        "camera-orbit"?: string;
+        "camera-target"?: string;
+        "field-of-view"?: string;
         exposure?: string;
         "shadow-intensity"?: string;
         "environment-image"?: string;

@@ -1,4 +1,4 @@
-export type Stage = "menu" | "team" | "story" | "inspection" | "compression" | "recap" | "prediction" | "summary";
+export type Stage = "menu" | "team" | "story" | "inspection" | "materials" | "design" | "compression" | "recap" | "prediction" | "summary";
 
 export type TeamMember = { name: string; avatar: string };
 
@@ -7,6 +7,26 @@ export type CompressionResult = {
   measurements: number[];
   residual: number;
   recovered: number;
+};
+
+export const COMPRESSION_FRAME_KEYS = ["idle", "load1", "load2", "load3", "released"] as const;
+export type CompressionFrameKey = (typeof COMPRESSION_FRAME_KEYS)[number];
+
+export type MaterialDefinition = {
+  id: string;
+  name: string;
+  image: string;
+  guide: string;
+  testFrames: Record<CompressionFrameKey, string>;
+  sag: readonly [number, number, number];
+  residual: number;
+  releaseSummary: string;
+  motion: {
+    loadMs: number;
+    releaseMs: number;
+    easing: string;
+    releaseEffect: "settle" | "soft" | "spring";
+  };
 };
 
 export type GameSave = {
@@ -18,6 +38,8 @@ export type GameSave = {
   compressionIndex: number;
   compressionResults: Record<string, CompressionResult>;
   recapIndex: number;
+  runId: string;
+  designChoices: Record<string, string>;
   predictions: Record<string, string>;
   audio: boolean;
 };
@@ -31,6 +53,8 @@ export const EMPTY_SAVE: GameSave = {
   compressionIndex: 0,
   compressionResults: {},
   recapIndex: 0,
+  runId: "",
+  designChoices: {},
   predictions: {},
   audio: true,
 };
@@ -54,20 +78,70 @@ export const STORY = [
 ] as const;
 
 export const DAMAGES = [
-  { id: "dent", title: "จุดไหนยุบจากแรงกดทับ?", image: "damaged_box_preview_top.png", hint: "ลองดูบริเวณด้านบนของกล่อง" },
-  { id: "wet", title: "จุดไหนเปียกน้ำ?", image: "damaged_box_preview_wet.png", hint: "มองหาคราบสีเข้มบริเวณผิวกล่อง" },
-  { id: "torn", title: "จุดไหนฉีกขาด?", image: "damaged_box_preview_torn.png", hint: "ลองหมุนดูด้านข้างและมุมล่าง" },
-  { id: "corner", title: "มุมไหนบุบจากการตกกระแทก?", image: "damaged_box_preview.png", hint: "มองหามุมที่เสียรูปไม่เท่ากับด้านอื่น" },
+  { id: "dent", title: "จุดไหนยุบจากแรงกดทับ?", hint: "ลองดูบริเวณด้านบนของกล่อง", success: "พบรอยยุบจากแรงกดทับ", position: "0.52m 0.955m 0.1m", normal: "0 1 0" },
+  { id: "wet", title: "จุดไหนเปียกน้ำ?", hint: "มองหาคราบสีเข้มบริเวณผิวกล่อง", success: "พบคราบเปียกน้ำ", position: "-1.08m -0.02m 1.325m", normal: "0 0 1" },
+  { id: "torn", title: "จุดไหนฉีกขาด?", hint: "ลองหมุนดูด้านข้างและมุมล่าง", success: "พบรอยฉีกขาด", position: "-1.87m 0.02m 0.06m", normal: "-1 0 0" },
+  { id: "corner", title: "มุมไหนบุบจากการตกกระแทก?", hint: "มองหามุมที่เสียรูปไม่เท่ากับด้านอื่น", success: "พบมุมบุบจากการกระแทก", position: "1.43m -0.78m 1.175m", normal: "0.22 -0.64 0.74" },
 ] as const;
 
+const testFrames = (id: string): Record<CompressionFrameKey, string> => ({
+  idle: `${id}-idle.webp`,
+  load1: `${id}-load1.webp`,
+  load2: `${id}-load2.webp`,
+  load3: `${id}-load3.webp`,
+  released: `${id}-released.webp`,
+});
+
 export const MATERIALS = [
-  { id: "corrugated_cardboard", name: "กระดาษลูกฟูก", image: "corrugated_cardboard.png", sag: [1, 2, 4], residual: 1 },
-  { id: "closed_cell_pe_foam", name: "แผ่นโฟม PE", image: "closed_cell_pe_foam.png", sag: [2, 4, 7], residual: 0 },
-  { id: "bubble_wrap", name: "แผ่นกันกระแทก", image: "bubble_wrap.png", sag: [3, 6, 10], residual: 1 },
-  { id: "cardboard", name: "กระดาษแข็ง", image: "cardboard.png", sag: [3, 6, 9], residual: 3 },
-  { id: "pe_sheet", name: "แผ่นพลาสติก PE", image: "pe_sheet.png", sag: [4, 8, 12], residual: 2 },
-  { id: "kraft_paper", name: "กระดาษคราฟต์", image: "kraft_paper.png", sag: [6, 12, 18], residual: 14 },
-  { id: "waxed_paper", name: "กระดาษเคลือบไข", image: "waxed_paper.png", sag: [5, 10, 16], residual: 11 },
+  {
+    id: "corrugated_cardboard", name: "กระดาษลูกฟูก", image: "corrugated_cardboard.png", guide: "มีลอนช่วยรับแรงกด เหมาะกับโครงกล่อง",
+    testFrames: testFrames("corrugated_cardboard"), sag: [1, 2, 4], residual: 1,
+    releaseSummary: "คืนเกือบหมด · ลอนยังบุบเล็กน้อย",
+    motion: { loadMs: 220, releaseMs: 320, easing: "cubic-bezier(.2,.8,.2,1)", releaseEffect: "settle" },
+  },
+  {
+    id: "closed_cell_pe_foam", name: "แผ่นโฟม PE", image: "closed_cell_pe_foam.png", guide: "นุ่ม คืนรูปดี ช่วยรองรับแรงกระแทก",
+    testFrames: testFrames("closed_cell_pe_foam"), sag: [2, 4, 7], residual: 0,
+    releaseSummary: "เด้งกลับเต็มที่",
+    motion: { loadMs: 300, releaseMs: 650, easing: "cubic-bezier(.22,.8,.3,1)", releaseEffect: "soft" },
+  },
+  {
+    id: "bubble_wrap", name: "แผ่นกันกระแทก", image: "bubble_wrap.png", guide: "ฟองอากาศช่วยลดแรงชนของสิ่งของ",
+    testFrames: testFrames("bubble_wrap"), sag: [3, 6, 10], residual: 1,
+    releaseSummary: "ฟองอากาศเด้งกลับเกือบหมด",
+    motion: { loadMs: 180, releaseMs: 420, easing: "cubic-bezier(.2,.9,.25,1)", releaseEffect: "spring" },
+  },
+  {
+    id: "cardboard", name: "กระดาษแข็ง", image: "cardboard.png", guide: "ผิวเรียบและแข็ง ช่วยเสริมรูปทรงกล่อง",
+    testFrames: testFrames("cardboard"), sag: [3, 6, 9], residual: 3,
+    releaseSummary: "คืนบางส่วน · มีรอยพับ",
+    motion: { loadMs: 240, releaseMs: 320, easing: "cubic-bezier(.25,.7,.25,1)", releaseEffect: "settle" },
+  },
+  {
+    id: "pe_sheet", name: "แผ่นพลาสติก PE", image: "pe_sheet.png", guide: "น้ำผ่านได้ยาก ใช้เป็นชั้นป้องกันความชื้น",
+    testFrames: testFrames("pe_sheet"), sag: [4, 8, 12], residual: 2,
+    releaseSummary: "เด้งกลับมาก · เหลือรอยพับเล็กน้อย",
+    motion: { loadMs: 220, releaseMs: 380, easing: "cubic-bezier(.15,.9,.2,1)", releaseEffect: "spring" },
+  },
+  {
+    id: "kraft_paper", name: "กระดาษคราฟต์", image: "kraft_paper.png", guide: "ขยำเพื่อเติมช่องว่าง ลดการขยับของสิ่งของ",
+    testFrames: testFrames("kraft_paper"), sag: [6, 12, 18], residual: 14,
+    releaseSummary: "คืนเล็กน้อย · รอยยับคงอยู่",
+    motion: { loadMs: 160, releaseMs: 240, easing: "cubic-bezier(.3,.6,.4,1)", releaseEffect: "settle" },
+  },
+  {
+    id: "waxed_paper", name: "กระดาษเคลือบไข", image: "waxed_paper.png", guide: "ผิวเคลือบช่วยกันละอองน้ำและความชื้น",
+    testFrames: testFrames("waxed_paper"), sag: [5, 10, 16], residual: 11,
+    releaseSummary: "คืนเล็กน้อย · รอยพับคมคงอยู่",
+    motion: { loadMs: 200, releaseMs: 280, easing: "cubic-bezier(.3,.65,.35,1)", releaseEffect: "settle" },
+  },
+] satisfies readonly MaterialDefinition[];
+
+export const DESIGN_QUESTIONS = [
+  { id: "pressure", damage: "กล่องยุบจากแรงกด", prompt: "ทีมจะเลือกวัสดุใดทำโครงกล่องให้รับแรงกดดีขึ้น?", choices: ["corrugated_cardboard", "cardboard", "kraft_paper"] },
+  { id: "water", damage: "กล่องเปียกน้ำ", prompt: "ทีมจะเลือกวัสดุใดเพิ่มเป็นชั้นช่วยกันเปียก?", choices: ["pe_sheet", "waxed_paper", "cardboard"] },
+  { id: "impact", damage: "มุมกล่องบุบจากการกระแทก", prompt: "ทีมจะเลือกวัสดุใดห่อของด้านในเพื่อลดแรงกระแทก?", choices: ["bubble_wrap", "closed_cell_pe_foam", "kraft_paper"] },
+  { id: "movement", damage: "ของขยับจนเสียดสี", prompt: "ทีมจะเลือกวัสดุใดเติมช่องว่างไม่ให้ของขยับ?", choices: ["kraft_paper", "closed_cell_pe_foam", "pe_sheet"] },
 ] as const;
 
 export const RECAP = [

@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
-  AVATARS, BOX_PARTS, DAMAGES, EMPTY_SAVE, MATERIALS, RECAP, STORY,
-  type CompressionResult, type GameSave, type Stage, type TeamMember,
+  AVATARS, BOX_PARTS, COMPRESSION_FRAME_KEYS, DAMAGES, DESIGN_QUESTIONS, EMPTY_SAVE, MATERIALS, RECAP, STORY,
+  type CompressionFrameKey, type CompressionResult, type GameSave, type Stage, type TeamMember,
 } from "./data";
 
 const SAVE_KEY = "parcel-lab-web-save-v1";
+const STATS_KEY = "parcel-lab-group-design-statistics-v1";
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+function createRunId() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 function asset(path: string) {
   return `${BASE_PATH}/assets/${path}`;
@@ -42,6 +47,19 @@ export function GameApp() {
     localStorage.removeItem(SAVE_KEY);
     setSave(EMPTY_SAVE);
   };
+  const saveGroupDesign = (designChoices: Record<string, string>) => {
+    const runId = save.runId || createRunId();
+    try {
+      const raw = localStorage.getItem(STATS_KEY);
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      const records = Array.isArray(parsed) ? parsed : [];
+      if (!records.some((record) => typeof record === "object" && record !== null && "runId" in record && record.runId === runId)) {
+        records.push({ runId, submittedAt: new Date().toISOString(), members: save.team.map((member) => member.name), answers: designChoices });
+        localStorage.setItem(STATS_KEY, JSON.stringify(records));
+      }
+    } catch { /* keep the game playable if browser storage is unavailable */ }
+    patch({ runId, designChoices, stage: "compression" });
+  };
 
   if (!loaded) return <main className="loading-screen">กำลังเตรียมห้องทดลอง…</main>;
 
@@ -50,13 +68,15 @@ export function GameApp() {
       {save.stage !== "menu" && <audio className="game-bgm" src={asset("audio/happy_clappy_loop.ogg")} autoPlay loop muted={!save.audio} />}
       <section className="game-frame" aria-live="polite">
         {save.stage === "menu" && <MainMenu onStart={() => go("team")} />}
-        {save.stage === "team" && <TeamSetup initial={save.team} onBack={() => go("menu")} onDone={(team) => patch({ team, stage: "story", storyIndex: 0 })} />}
+        {save.stage === "team" && <TeamSetup initial={save.team} onBack={() => go("menu")} onDone={(team) => patch({ team, runId: createRunId(), designChoices: {}, stage: "story", storyIndex: 0 })} />}
         {save.stage === "story" && <ComicStory index={save.storyIndex} audio={save.audio} onAudio={() => patch({ audio: !save.audio })} onIndex={(storyIndex) => patch({ storyIndex })} onDone={() => go("inspection")} />}
-        {save.stage === "inspection" && <DamageInspection index={save.inspectionIndex} audio={save.audio} onIndex={(inspectionIndex) => patch({ inspectionIndex })} onDone={() => go("compression")} />}
+        {save.stage === "inspection" && <DamageInspection index={save.inspectionIndex} audio={save.audio} onIndex={(inspectionIndex) => patch({ inspectionIndex })} onDone={() => go("materials")} />}
+        {save.stage === "materials" && <MaterialGuide onDone={() => go("design")} />}
+        {save.stage === "design" && <GroupBoxDesign initial={save.designChoices} onDone={saveGroupDesign} />}
         {save.stage === "compression" && <CompressionLab save={save} onSave={(compressionResults, compressionIndex) => patch({ compressionResults, compressionIndex })} onAudio={() => patch({ audio: !save.audio })} onDone={() => go("recap")} />}
         {save.stage === "recap" && <Recap index={save.recapIndex} onIndex={(recapIndex) => patch({ recapIndex })} onDone={() => go("prediction")} />}
         {save.stage === "prediction" && <Prediction values={save.predictions} results={save.compressionResults} onChange={(predictions) => patch({ predictions })} onDone={() => go("summary")} />}
-        {save.stage === "summary" && <Summary save={save} onReplay={() => patch({ stage: "story", storyIndex: 0, inspectionIndex: 0, recapIndex: 0 })} onReset={reset} />}
+        {save.stage === "summary" && <Summary save={save} onReplay={() => patch({ stage: "story", runId: createRunId(), designChoices: {}, storyIndex: 0, inspectionIndex: 0, recapIndex: 0 })} onReset={reset} />}
       </section>
     </main>
   );
@@ -128,27 +148,168 @@ function ComicStory({ index, audio, onAudio, onIndex, onDone }: { index: number;
 }
 
 function DamageInspection({ index, audio, onIndex, onDone }: { index: number; audio: boolean; onIndex: (n: number) => void; onDone: () => void }) {
-  const [hint, setHint] = useState("ลากเพื่อหมุนกล่อง แล้วแตะจุดที่คิดว่าถูก");
+  type ViewerMaterial = { name: string; pbrMetallicRoughness: { setBaseColorFactor: (color: string | number[]) => void } };
+  type ViewerElement = HTMLElement & { model?: { materials: ViewerMaterial[] } };
+
+  const defaultHint = "ลากเพื่อหมุนกล่อง แล้วแตะบริเวณที่คิดว่าถูก";
+  const [hint, setHint] = useState(defaultHint);
   const [ready, setReady] = useState(false);
+  const [modelLoaded, setModelLoaded] = useState(false);
+  const [solved, setSolved] = useState(false);
+  const viewerRef = useRef<ViewerElement | null>(null);
   useEffect(() => { void import("@google/model-viewer").then(() => setReady(true)); }, []);
-  const positions = [{ left: "51%", top: "32%" }, { left: "41%", top: "57%" }, { left: "65%", top: "59%" }, { left: "61%", top: "68%" }];
-  const answer = () => {
+  useEffect(() => {
+    if (!ready || !viewerRef.current) return;
+    const viewer = viewerRef.current;
+    const hideInternalFocusFrame = () => {
+      viewer.shadowRoot?.querySelector<HTMLElement>(".userInput")?.style.setProperty("outline", "none");
+    };
+    hideInternalFocusFrame();
+    const finishLoading = () => {
+      hideInternalFocusFrame();
+      const cardboard = viewer.model?.materials.find((material) => material.name === "MAT_Cardboard_Fiber");
+      cardboard?.pbrMetallicRoughness.setBaseColorFactor("#C9823E");
+      setModelLoaded(true);
+    };
+    viewer.addEventListener("load", finishLoading);
+    if (viewer.model) finishLoading();
+    return () => viewer.removeEventListener("load", finishLoading);
+  }, [ready]);
+  useEffect(() => {
+    setHint(defaultHint);
+    setSolved(false);
+  }, [index]);
+  const answer = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (solved) return;
+    setSolved(true);
     playSound("10_idea_chime.ogg", audio);
     setHint("ถูกต้อง! พบความเสียหายแล้ว");
-    setTimeout(() => { setHint("ลากเพื่อหมุนกล่อง แล้วแตะจุดที่คิดว่าถูก"); if (index >= DAMAGES.length - 1) onDone(); else onIndex(index + 1); }, 650);
+    setTimeout(() => { if (index >= DAMAGES.length - 1) onDone(); else onIndex(index + 1); }, 1200);
   };
+  const damage = DAMAGES[index];
   return (
     <div className="screen inspection-screen">
       <img className="inspection-bg" src={asset("inspection/background.png")} alt="โต๊ะตรวจสอบกล่อง" />
-      <div className="floating-question">{DAMAGES[index].title}</div>
+      <div className="floating-question">{damage.title}</div>
       <div className="inspection-counter">{index + 1} / {DAMAGES.length}</div>
       <div className="model-stage">
-        {ready ? <model-viewer src={asset("models/damaged_box.glb")} poster={asset(`inspection/${DAMAGES[index].image}`)} alt="กล่องพัสดุเสียหายที่หมุนตรวจสอบได้" camera-controls touch-action="pan-y" exposure="1.05" shadow-intensity="1" /> : <img src={asset(`inspection/${DAMAGES[index].image}`)} alt="กล่องเสียหาย" />}
-        <button className="damage-hotspot" style={positions[index]} aria-label="เลือกตำแหน่งเสียหาย" onClick={answer}>＋</button>
-        <button className="damage-hotspot decoy one" onClick={() => setHint(DAMAGES[index].hint)}>＋</button>
-        <button className="damage-hotspot decoy two" onClick={() => setHint(DAMAGES[index].hint)}>＋</button>
+        {ready && (
+          <model-viewer
+            ref={viewerRef}
+            src={asset("models/damaged_box.glb")}
+            alt="กล่องพัสดุเสียหายที่หมุนตรวจสอบและแตะตอบได้"
+            camera-controls
+            disable-pan
+            disable-zoom
+            touch-action="none"
+            camera-orbit="35deg 65deg 7m"
+            camera-target="0m 0m 0m"
+            field-of-view="35deg"
+            exposure="1.05"
+            shadow-intensity="1"
+            onClick={() => { if (!solved) setHint(damage.hint); }}
+          >
+            {DAMAGES.map((spot) => {
+              const active = spot.id === damage.id;
+              return (
+                <button
+                  key={spot.id}
+                  slot={`hotspot-${spot.id}`}
+                  className={`damage-target ${active && solved ? "is-solved" : ""}`}
+                  data-position={spot.position}
+                  data-normal={spot.normal}
+                  aria-label={active ? "เลือกบริเวณความเสียหายนี้" : undefined}
+                  aria-hidden={!active}
+                  tabIndex={active ? 0 : -1}
+                  onClick={active ? answer : (event) => { event.stopPropagation(); if (!solved) setHint(damage.hint); }}
+                >
+                  {active && solved ? "✓" : null}
+                </button>
+              );
+            })}
+          </model-viewer>
+        )}
+        {!modelLoaded && <div className="model-loading" role="status"><span className="loading-box" /><b>กำลังเตรียมกล่อง 3 มิติ…</b></div>}
+        {solved && <div className="inspection-success" role="status"><span>✓</span><div><b>ถูกต้อง!</b><small>{damage.success}</small></div></div>}
       </div>
-      <div className="inspection-hint">{hint}</div>
+      <div className={`inspection-hint ${solved ? "is-success" : ""}`}>{solved ? `ถูกต้อง! ${damage.success}` : hint}</div>
+    </div>
+  );
+}
+
+function MaterialGuide({ onDone }: { onDone: () => void }) {
+  return (
+    <div className="screen material-guide-screen">
+      <img className="material-guide-bg" src={asset("compression/lab_background.png")} alt="" />
+      <header className="material-guide-header">
+        <span>ขั้นที่ 4/9</span>
+        <div>
+          <h1>รู้จักวัสดุก่อนออกแบบ</h1>
+          <p>อ่านคุณสมบัติของวัสดุทั้ง 7 ชนิด แล้วช่วยกันคุยในทีม</p>
+        </div>
+      </header>
+      <section className="material-guide-grid" aria-label="ข้อมูลวัสดุสำหรับออกแบบกล่อง">
+        {MATERIALS.map((material) => (
+          <article key={material.id}>
+            <img src={asset(`materials/${material.image}`)} alt={material.name} />
+            <div><h2>{material.name}</h2><p>{material.guide}</p></div>
+          </article>
+        ))}
+      </section>
+      <footer className="material-guide-footer">
+        <span>เมื่อทีมอ่านครบแล้ว ไปเลือกวัสดุเพื่อแก้ปัญหาที่กล่องใบเดิมเคยพบ</span>
+        <button className="button button-orange" onClick={onDone}>อ่านครบแล้ว เริ่มออกแบบ</button>
+      </footer>
+    </div>
+  );
+}
+
+function GroupBoxDesign({ initial, onDone }: { initial: Record<string, string>; onDone: (values: Record<string, string>) => void }) {
+  const [values, setValues] = useState<Record<string, string>>(initial);
+  const complete = DESIGN_QUESTIONS.every((question) => Boolean(values[question.id]));
+  return (
+    <div className="screen group-design-screen">
+      <img className="group-design-bg" src={asset("compression/lab_background.png")} alt="" />
+      <header className="group-design-header">
+        <span>ขั้นที่ 5/9</span>
+        <div>
+          <h1>ช่วยกันสร้างกล่องที่ดีขึ้น</h1>
+          <p>เลือกคำตอบของกลุ่ม ไม่มีคำตอบผิดหรือถูก</p>
+        </div>
+        <strong>ตอบร่วมกันทั้งกลุ่ม</strong>
+      </header>
+      <section className="group-design-grid" aria-label="คำถามเลือกวัสดุของกลุ่ม">
+        {DESIGN_QUESTIONS.map((question) => (
+          <article key={question.id}>
+            <div className="design-problem"><small>ปัญหาของกล่องเดิม</small><b>{question.damage}</b></div>
+            <h2>{question.prompt}</h2>
+            <div className="design-options">
+              {question.choices.map((materialId) => {
+                const material = MATERIALS.find((item) => item.id === materialId);
+                if (!material) return null;
+                const selected = values[question.id] === materialId;
+                return (
+                  <button
+                    key={materialId}
+                    className={selected ? "selected" : ""}
+                    aria-pressed={selected}
+                    onClick={() => setValues((current) => ({ ...current, [question.id]: materialId }))}
+                  >
+                    <img src={asset(`materials/${material.image}`)} alt="" />
+                    <span>{material.name}</span>
+                    {selected && <i>เลือกแล้ว</i>}
+                  </button>
+                );
+              })}
+            </div>
+          </article>
+        ))}
+      </section>
+      <footer className="group-design-footer">
+        <span>คำตอบของทีมจะถูกเก็บเป็นสถิติ โดยไม่ตัดสินถูกหรือผิด</span>
+        <button className="button button-orange" disabled={!complete} onClick={() => onDone(values)}>บันทึกคำตอบของกลุ่ม</button>
+      </footer>
     </div>
   );
 }
@@ -158,7 +319,25 @@ function CompressionLab({ save, onSave, onAudio, onDone }: { save: GameSave; onS
   const [bottles, setBottles] = useState(0);
   const [released, setReleased] = useState(false);
   const sag = released ? material.residual : bottles ? material.sag[bottles - 1] : 0;
+  const frameKey: CompressionFrameKey = released ? "released" : bottles === 0 ? "idle" : `load${bottles}` as CompressionFrameKey;
+  const plateDrop = sag * .9375;
+  const visibleBottles = released ? 0 : bottles;
   const selector = MATERIALS.slice(save.compressionIndex, save.compressionIndex + 3);
+  const motionStyle = {
+    "--material-motion-duration": `${released ? material.motion.releaseMs : material.motion.loadMs}ms`,
+    "--material-motion-easing": material.motion.easing,
+  } as CSSProperties;
+
+  useEffect(() => {
+    const nextMaterial = MATERIALS[save.compressionIndex + 1];
+    [material, nextMaterial].filter((item): item is typeof material => Boolean(item)).forEach((item) => {
+      COMPRESSION_FRAME_KEYS.forEach((key) => {
+        const image = new Image();
+        image.src = asset(`compression/materials/${item.testFrames[key]}`);
+      });
+    });
+  }, [material, save.compressionIndex]);
+
   const addBottle = () => { if (bottles < 3 && !released) { setBottles((n) => n + 1); playSound("06_box_impact.ogg", save.audio); } };
   const reset = () => { setBottles(0); setReleased(false); };
   const action = () => {
@@ -175,20 +354,32 @@ function CompressionLab({ save, onSave, onAudio, onDone }: { save: GameSave; onS
     <div className="screen compression-screen">
       <img className="compression-bg" src={asset("compression/lab_background.png")} alt="ห้องทดลอง" />
       <div className="compression-wash" />
-      <header className="compression-title"><span>ขั้นที่ 4/7</span><div><h1>ทดลองแรงกด</h1><p>เพิ่มน้ำหนัก แล้วดูว่ายุบแค่ไหน</p></div></header>
+      <header className="compression-title"><span>ขั้นที่ 6/9</span><div><h1>ทดลองแรงกด</h1><p>เพิ่มน้ำหนัก แล้วดูว่ายุบแค่ไหน</p></div></header>
       <button className="sound-button" onClick={onAudio}>เสียง {save.audio ? "เปิด" : "ปิด"}</button>
       <aside className="material-rail">
         {selector.map((item, slot) => <article className={`material-tile ${slot === 0 ? "active" : ""}`} key={item.id}><img src={asset(`materials/${item.image}`)} alt={item.name} /><span>{item.name}</span></article>)}
       </aside>
-      <section className="compression-machine" aria-label="แท่นทดสอบแรงกด">
-        <div className="bottles" style={{ transform: `translateY(${sag * 1.2}px)` }}>{Array.from({ length: bottles }, (_, i) => <img key={i} src={asset("compression/water_bottle.png")} alt="ขวดน้ำหนัก 500 กรัม" />)}</div>
-        <div className="plate plate-top" style={{ transform: `translateY(${sag * 3}px)` }} />
-        <img className={`tested-material material-${material.id}`} style={{ transform: `translateY(${sag * 1.5}px) scaleX(${material.id === "corrugated_cardboard" ? 2.15 : 1}) scaleY(${Math.max(.7, 1 - sag * .012)})` }} src={asset(`materials/${material.image}`)} alt={material.name} />
+      <section className={`compression-machine effect-${material.motion.releaseEffect}`} style={motionStyle} aria-label="แท่นทดสอบแรงกด">
+        <div className="bottles" style={{ top: `${3.5 + plateDrop}%` }}>{Array.from({ length: visibleBottles }, (_, i) => <img key={i} src={asset("compression/water_bottle.png")} alt="ขวดน้ำหนัก 500 กรัม" />)}</div>
+        <div className="plate plate-top" style={{ top: `${44 + plateDrop}%` }} />
+        <div className={`material-sprite-stack ${released ? "is-released" : ""}`}>
+          {COMPRESSION_FRAME_KEYS.map((key) => {
+            const active = key === frameKey;
+            return <img key={key} className={`material-sprite ${active ? "active" : ""}`} src={asset(`compression/materials/${material.testFrames[key]}`)} alt={active ? `${material.name} สถานะยุบ ${sag} มิลลิเมตร` : ""} aria-hidden={!active} />;
+          })}
+        </div>
         <div className="plate plate-bottom" />
         <div className="ruler"><span className="ruler-body">{[0, 5, 10, 15, 20].map((n) => <i key={n} style={{ top: `${n * 5}%` }}>{n}</i>)}</span></div>
-        <div className="measure-arrow" style={{ top: `59.5%`, height: `${Math.max(2, sag * .55)}%` }}><b>{sag} มม.</b></div>
+        <div className="measure-arrow" style={{ top: "56.5%", height: `${Math.max(1.5, plateDrop)}%` }}><b>{sag} มม.</b></div>
       </section>
-      <aside className="measurement-card"><h2>ผลที่วัดได้</h2><ResultBox tone="blue" icon="▣" value={`${bottles} ขวด`} /><ResultBox tone="pink" icon="↓" value={`${sag} มม.`} /><ResultBox tone="green" icon="↻" value={released ? `คืน ${material.sag[2] - material.residual} มม.` : "คืนรูป"} /><small>1 ขวด = 500 กรัม</small></aside>
+      <aside className="measurement-card">
+        <h2>ผลที่วัดได้</h2>
+        <ResultBox tone="blue" icon="▣" value={`${visibleBottles} ขวด`} />
+        <ResultBox tone="pink" icon="↓" value={`${sag} มม.`} />
+        <ResultBox tone="green" icon="↻" value={released ? `คืน ${material.sag[2] - material.residual} มม.` : "รอดูการคืนตัว"} />
+        <p className={`recovery-note ${released ? "shown" : ""}`}>{released ? `${material.releaseSummary} · เหลือรอยยุบ ${material.residual} มม.` : "ยกขวดออกเพื่อดูว่าวัสดุคืนตัวแค่ไหน"}</p>
+        <small className="simulation-note">ชิ้นทดสอบเริ่มสูงเท่ากัน 20 มม. · 1 ขวด = 500 กรัม · ค่าจำลองเพื่อเปรียบเทียบ</small>
+      </aside>
       <footer className="compression-actions">
         <button className="button button-yellow" disabled={bottles >= 3 || released} onClick={addBottle}>＋ เพิ่มขวด</button>
         <button className="button button-white" onClick={reset}>↶ เริ่มใหม่</button>
@@ -211,12 +402,12 @@ function Recap({ index, onIndex, onDone }: { index: number; onIndex: (n: number)
     setMessage("ถูกต้อง!");
     setTimeout(() => { setMessage("เลือกคำตอบของทีม"); if (index >= RECAP.length - 1) onDone(); else onIndex(index + 1); }, 500);
   };
-  return <div className="screen recap-screen"><div className="quiz-card"><div className="step-pill">ทบทวน {index + 1}/{RECAP.length}</div><h1>{item.question}</h1><div className="quiz-choices">{item.choices.map((choice, i) => <button key={choice} onClick={() => choose(i)}>{choice}</button>)}</div><p>{message}</p></div></div>;
+  return <div className="screen recap-screen"><div className="quiz-card"><div className="step-pill">ขั้นที่ 7/9 · ทบทวน {index + 1}/{RECAP.length}</div><h1>{item.question}</h1><div className="quiz-choices">{item.choices.map((choice, i) => <button key={choice} onClick={() => choose(i)}>{choice}</button>)}</div><p>{message}</p></div></div>;
 }
 
 function Prediction({ values, results, onChange, onDone }: { values: Record<string, string>; results: Record<string, CompressionResult>; onChange: (v: Record<string, string>) => void; onDone: () => void }) {
   const complete = BOX_PARTS.every((part) => values[part]);
-  return <div className="screen prediction-screen"><header><span>ขั้นที่ 6/7</span><div><h1>ทีมเราจะเลือกวัสดุอะไร?</h1><p>ใช้ผลที่วัดได้ช่วยตัดสินใจ ไม่มีคำตอบผิด</p></div></header><div className="prediction-list">{BOX_PARTS.map((part) => {
+  return <div className="screen prediction-screen"><header><span>ขั้นที่ 8/9</span><div><h1>ทีมเราจะเลือกวัสดุอะไร?</h1><p>ใช้ผลที่วัดได้ช่วยตัดสินใจ ไม่มีคำตอบผิด</p></div></header><div className="prediction-list">{BOX_PARTS.map((part) => {
     const selected = MATERIALS.find((m) => m.id === values[part]); const result = selected ? results[selected.id] : undefined;
     return <label key={part}><b>{part}</b><select value={values[part] ?? ""} onChange={(event) => onChange({ ...values, [part]: event.target.value })}><option value="">เลือกวัสดุ</option>{MATERIALS.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select><span>{result ? `ยุบ ${result.measurements[2]} มม. · คืน ${result.recovered} มม.` : "รอเลือกวัสดุ"}</span></label>;
   })}</div><button className="button button-orange prediction-done" disabled={!complete} onClick={onDone}>บันทึกคำตอบทีม</button></div>;
@@ -224,5 +415,5 @@ function Prediction({ values, results, onChange, onDone }: { values: Record<stri
 
 function Summary({ save, onReplay, onReset }: { save: GameSave; onReplay: () => void; onReset: () => void }) {
   const names = save.team.map((m) => m.name).join(" · ");
-  return <div className="screen summary-screen"><div className="summary-card"><div className="medal">★</div><h1>ทีมผ่านภารกิจกล่องแกร่ง!</h1><p>{names}</p><div className="summary-grid">{BOX_PARTS.map((part) => { const material = MATERIALS.find((m) => m.id === save.predictions[part]); return <article key={part}><b>{part}</b><span>{material?.name ?? "-"}</span></article>; })}</div><div className="summary-actions"><button className="button button-yellow" onClick={onReplay}>เล่นเนื้อเรื่องใหม่</button><button className="button button-white" onClick={onReset}>กลับหน้าปก</button></div></div></div>;
+  return <div className="screen summary-screen"><div className="summary-card"><div className="step-pill">ขั้นที่ 9/9</div><div className="medal">★</div><h1>ทีมผ่านภารกิจกล่องแกร่ง!</h1><p>{names}</p><div className="summary-grid">{BOX_PARTS.map((part) => { const material = MATERIALS.find((m) => m.id === save.predictions[part]); return <article key={part}><b>{part}</b><span>{material?.name ?? "-"}</span></article>; })}</div><div className="summary-actions"><button className="button button-yellow" onClick={onReplay}>เล่นเนื้อเรื่องใหม่</button><button className="button button-white" onClick={onReset}>กลับหน้าปก</button></div></div></div>;
 }
