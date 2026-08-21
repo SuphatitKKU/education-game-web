@@ -7,9 +7,10 @@ import {
 } from "./data";
 
 const SAVE_KEY = "parcel-lab-web-save-v1";
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 function asset(path: string) {
-  return `/assets/${path}`;
+  return `${BASE_PATH}/assets/${path}`;
 }
 
 function playSound(name: string, enabled: boolean) {
@@ -82,7 +83,7 @@ function TeamSetup({ initial, onBack, onDone }: { initial: TeamMember[]; onBack:
   const update = (index: number, next: Partial<TeamMember>) => setMembers((current) => current.map((m, i) => i === index ? { ...m, ...next } : m));
   return (
     <div className="screen team-screen">
-      <div className="soft-bg" />
+      <img className="soft-bg" src={asset("menu/cover.png")} alt="" />
       <header className="team-header">
         <button className="button button-yellow compact" onClick={onBack}>กลับหน้าปก</button>
         <div><h1>จัดทีมออกแบบกล่อง</h1><p>ใส่ชื่อเล่น แล้วเลือกนักสำรวจที่ไม่ซ้ำกัน</p></div>
