@@ -9,3 +9,10 @@ out/
 Thumbs.db
 AGENTS.md
 CLAUDE.md
+.codex-dev-server*.log
+blender/*.blend1
+blender/*.log
+public/assets/models/*_preview.png
+public/assets/models/*_verify.png
+public/assets/models/damaged_box_open_*.glb
+public/assets/materials/corrugated_cardboard_front*.png

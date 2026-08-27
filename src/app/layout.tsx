@@ -1,14 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import localFont from "next/font/local";
+import { Itim, Kodchasan } from "next/font/google";
 import "./globals.css";
 
-const prompt = localFont({
-  src: [
-    { path: "../../public/assets/fonts/Prompt-SemiBold.ttf", weight: "600" },
-    { path: "../../public/assets/fonts/Prompt-Bold.ttf", weight: "700" },
-  ],
+const itim = Itim({
+  weight: "400",
+  subsets: ["thai", "latin"],
+  variable: "--font-itim",
   display: "swap",
-  fallback: ["sans-serif"],
+  fallback: ["Tahoma", "Arial", "sans-serif"],
+});
+
+const kodchasan = Kodchasan({
+  weight: "600",
+  subsets: ["thai", "latin"],
+  variable: "--font-kodchasan",
+  display: "swap",
+  fallback: ["Tahoma", "Arial", "sans-serif"],
 });
 
 export const metadata: Metadata = {
@@ -25,7 +32,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="th">
-      <body className={prompt.className}>{children}</body>
+      <body className={`${itim.variable} ${kodchasan.variable}`}>{children}</body>
     </html>
   );
 }

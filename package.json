@@ -5,10 +5,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@google/model-viewer": "^4.3.1",
+    "@supabase/supabase-js": "2.112.4",
     "next": "^16.3.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
@@ -17,6 +19,7 @@
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "4.1.11"
   }
 }

@@ -8,7 +8,9 @@
 
 ดับเบิลคลิก `START_GAME.cmd` แล้วเว็บจะเปิดที่ `http://localhost:4173`
 
-ข้อมูลทีมและความคืบหน้าจะถูกเก็บไว้ในเบราว์เซอร์เครื่องนั้นโดยอัตโนมัติ
+ข้อมูลทีมและความคืบหน้าจะถูกเก็บใน Supabase และมีสำเนาชั่วคราวในเบราว์เซอร์สำหรับกรณีอินเทอร์เน็ตหลุด
+
+Dashboard สำหรับครูอยู่ที่ `/teacher/` ครูเข้าสู่ระบบด้วยบัญชี Supabase Auth ที่มีข้อมูลในตาราง `teacher_profiles`
 
 ## พัฒนาต่อ
 
@@ -16,5 +18,7 @@
 pnpm install
 pnpm dev
 ```
+
+คัดลอก `.env.example` เป็น `.env.local` แล้วใส่ Project URL และ publishable key ของ Supabase ก่อนทดสอบการบันทึกข้อมูล จากนั้นใช้ migration ใน `supabase/migrations` เพื่อตั้งฐานข้อมูล และเพิ่ม GitHub Actions secrets ชื่อเดียวกันก่อน deploy
 
 สร้างไฟล์เว็บพร้อมใช้งานด้วย `pnpm build` ผลลัพธ์จะอยู่ในโฟลเดอร์ `out`
