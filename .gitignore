@@ -10,6 +10,7 @@ Thumbs.db
 AGENTS.md
 CLAUDE.md
 .codex-dev-server*.log
+.codex-devserver*.log
 blender/*.blend1
 blender/*.log
 public/assets/models/*_preview.png

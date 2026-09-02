@@ -5,6 +5,8 @@ export type RunStatus = "in_progress" | "completed";
 export type SaveIndicator = "idle" | "saving" | "saved" | "offline" | "conflict";
 
 export type LearningEventInput = {
+  id?: string;
+  answeredAt?: string;
   eventType: string;
   stage: Stage;
   memberId?: string | null;

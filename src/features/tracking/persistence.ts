@@ -15,7 +15,7 @@ import type {
 const OUTBOX_KEY = "parcel-lab-supabase-outbox-v1";
 const SAVE_CACHE_KEY = "parcel-lab-web-save-v1";
 
-type DbMember = { id: string; name: string; avatar: string; position: number };
+type DbMember = { id: string; name: string; avatar: string; position: number; is_active?: boolean };
 type DbRun = {
   id: string;
   team_id: string;
@@ -71,6 +71,7 @@ function asRun(row: DbRun, members: TrackedTeamMember[] = []): TrackedRun {
 
 function asTeam(row: DbTeam): TeamOverview {
   const members = [...(row.team_members ?? [])]
+    .filter((member) => member.is_active !== false)
     .sort((a, b) => a.position - b.position)
     .map((member) => ({ id: member.id, name: member.name, avatar: member.avatar, position: member.position }));
   const runs = [...(row.game_runs ?? [])]
@@ -113,11 +114,23 @@ function requireClient() {
 
 export async function listTeams(): Promise<TeamOverview[]> {
   const client = requireClient();
-  const { data, error } = await client
+  const current = await client
     .from("teams")
-    .select("id,name,created_at,updated_at,team_members(id,name,avatar,position),game_runs(id,team_id,status,current_stage,save_state,revision,started_at,updated_at,completed_at,legacy_run_id)")
+    .select("id,name,created_at,updated_at,team_members(id,name,avatar,position,is_active),game_runs(id,team_id,status,current_stage,save_state,revision,started_at,updated_at,completed_at,legacy_run_id)")
     .eq("status", "active")
     .order("updated_at", { ascending: false });
+  let data: unknown = current.data;
+  let error = current.error;
+  // Keep existing classrooms readable while the roster migration is being deployed.
+  if (error && /is_active/i.test(error.message)) {
+    const legacy = await client
+      .from("teams")
+      .select("id,name,created_at,updated_at,team_members(id,name,avatar,position),game_runs(id,team_id,status,current_stage,save_state,revision,started_at,updated_at,completed_at,legacy_run_id)")
+      .eq("status", "active")
+      .order("updated_at", { ascending: false });
+    data = legacy.data;
+    error = legacy.error;
+  }
   if (error) throw error;
   return ((data ?? []) as unknown as DbTeam[]).map(asTeam);
 }
@@ -151,6 +164,34 @@ export async function createTeam(name: string, members: TeamMember[]): Promise<T
   };
 }
 
+export async function updateTeamMembers(teamId: string, members: TeamMember[]): Promise<TeamOverview> {
+  const client = requireClient();
+  const { data, error } = await client.rpc("update_team_members", {
+    p_team_id: teamId,
+    p_members: members.map((member, position) => ({
+      id: member.id ?? null,
+      name: member.name,
+      avatar: member.avatar,
+      position,
+    })),
+  });
+  if (error) throw error;
+  const row = data as Record<string, unknown>;
+  const trackedMembers = ((row.members as DbMember[] | undefined) ?? [])
+    .sort((a, b) => a.position - b.position)
+    .map((member) => ({ id: member.id, name: member.name, avatar: member.avatar, position: member.position }));
+  return {
+    id: String(row.id ?? teamId),
+    name: String(row.name ?? "ทีม"),
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+    updatedAt: String(row.updated_at ?? new Date().toISOString()),
+    members: trackedMembers,
+    runs: [],
+    activeRun: null,
+    completedRuns: [],
+  };
+}
+
 export async function startOrResumeRun(team: TeamOverview): Promise<TrackedRun> {
   const client = requireClient();
   const seed: GameSave = { ...EMPTY_SAVE, team: team.members, stage: "mission", runId: crypto.randomUUID() };
@@ -162,94 +203,139 @@ export async function startOrResumeRun(team: TeamOverview): Promise<TrackedRun> 
   return rpcRun(data, team.members);
 }
 
+export function withLegacyExitTicketKeys(save: GameSave): GameSave {
+  const exitTickets = { ...save.exitTickets };
+  save.team.forEach((member, index) => {
+    if (!member.id) return;
+    const stableTicket = exitTickets[`member-${member.id}`];
+    if (stableTicket) exitTickets[`student-${member.position ?? index}`] = stableTicket;
+  });
+  return { ...save, exitTickets };
+}
+
 async function sendCheckpoint(item: OutboxItem): Promise<TrackedRun> {
   const client = requireClient();
   const fn = item.complete ? "complete_run" : "save_run_checkpoint";
+  const serverSave = { ...withLegacyExitTicketKeys(item.save), checkpointId: item.id };
   const { data, error } = await client.rpc(fn, {
     p_run_id: item.run.id,
     p_expected_revision: item.run.revision,
-    p_save_state: item.save,
+    p_save_state: serverSave,
     p_current_stage: item.save.stage,
     p_events: item.events.map((event) => ({
       event_type: event.eventType,
       stage: event.stage,
       member_id: event.memberId ?? null,
-      payload: event.payload ?? {},
+      payload: { ...event.payload, answerEventId: event.id, answeredAt: event.answeredAt },
     })),
   });
-  if (error) throw error;
+  if (error) {
+    // A response can be lost after Postgres commits (including complete_run).
+    const { data: committed } = await client.from("game_runs").select("*").eq("id", item.run.id).maybeSingle();
+    if (committed?.save_state?.checkpointId === item.id) return rpcRun(committed, item.save.team);
+    throw error;
+  }
   const payload = data as Record<string, unknown>;
   const serverRun = rpcRun((payload.run ?? payload) as Record<string, unknown>, item.save.team);
-  if (payload.conflict === true) throw new RevisionConflictError(serverRun);
+  if (payload.conflict === true && serverRun.saveState.checkpointId !== item.id) throw new RevisionConflictError(serverRun);
   return serverRun;
 }
 
-function readOutbox(): OutboxItem[] {
-  if (typeof window === "undefined") return [];
+let memoryOutbox: OutboxItem[] = [];
+let outboxStorageFailed = false;
+const acknowledgedRuns = new Map<string, TrackedRun>();
+let flushing: Promise<TrackedRun | null> | null = null;
+
+export function readOutbox(): OutboxItem[] {
+  if (typeof window === "undefined" || outboxStorageFailed) return memoryOutbox;
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(OUTBOX_KEY) ?? "[]");
-    return Array.isArray(parsed) ? parsed as OutboxItem[] : [];
-  } catch { return []; }
+    return Array.isArray(parsed) ? parsed as OutboxItem[] : memoryOutbox;
+  } catch { return memoryOutbox; }
 }
 
 function writeOutbox(items: OutboxItem[]): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(OUTBOX_KEY, JSON.stringify(items.slice(-20)));
-}
-
-function enqueue(item: OutboxItem): void {
-  writeOutbox(compactOutbox(readOutbox(), item));
-}
-
-export function compactOutbox(items: OutboxItem[], item: OutboxItem): OutboxItem[] {
-  return [...items.filter((queued) => queued.run.id !== item.run.id), item].slice(-20);
-}
-
-export async function saveCheckpoint(
-  run: ActiveRunRef,
-  save: GameSave,
-  events: LearningEventInput[] = [],
-  complete = false,
-): Promise<TrackedRun> {
-  if (typeof window !== "undefined") localStorage.setItem(SAVE_CACHE_KEY, JSON.stringify(save));
-  const item: OutboxItem = {
-    id: crypto.randomUUID(),
-    run,
-    save,
-    events,
-    complete,
-    createdAt: new Date().toISOString(),
-  };
-  if (!isSupabaseConfigured() || (typeof navigator !== "undefined" && !navigator.onLine)) {
-    enqueue(item);
-    throw new Error("offline");
-  }
   try {
-    return await sendCheckpoint(item);
+    localStorage.setItem(OUTBOX_KEY, JSON.stringify(items));
+    outboxStorageFailed = false;
   } catch (error) {
-    if (!(error instanceof RevisionConflictError)) enqueue(item);
+    outboxStorageFailed = true;
     throw error;
   }
 }
 
-export async function flushOutbox(): Promise<TrackedRun | null> {
-  if (!isSupabaseConfigured() || (typeof navigator !== "undefined" && !navigator.onLine)) return null;
-  const items = readOutbox();
+function enqueue(item: OutboxItem): void {
+  memoryOutbox = compactOutbox(readOutbox(), item);
+  writeOutbox(memoryOutbox);
+}
+
+export function compactOutbox(items: OutboxItem[], item: OutboxItem): OutboxItem[] {
+  const previous = items.find((queued) => queued.run.id === item.run.id);
+  const events = [...(previous?.events ?? []), ...item.events];
+  const uniqueEvents = events.filter((event, index) => !event.id || events.findIndex((other) => other.id === event.id) === index);
+  const newest = previous?.complete && !item.complete ? previous : item;
+  return [...items.filter((queued) => queued.run.id !== item.run.id), {
+    ...newest,
+    run: previous && previous.run.revision > item.run.revision ? previous.run : item.run,
+    events: uniqueEvents,
+  }];
+}
+
+export function queueCheckpoint(
+  run: ActiveRunRef,
+  save: GameSave,
+  events: LearningEventInput[] = [],
+  complete = false,
+): void {
+  const acknowledged = acknowledgedRuns.get(run.id);
+  if (acknowledged?.status === "completed") return;
+  const item: OutboxItem = {
+    id: crypto.randomUUID(),
+    run: acknowledged && acknowledged.revision > run.revision ? { id: run.id, teamId: run.teamId, revision: acknowledged.revision } : run,
+    save,
+    events: events.map((event) => ({ ...event, id: event.id ?? crypto.randomUUID(), answeredAt: event.answeredAt ?? new Date().toISOString() })),
+    complete,
+    createdAt: new Date().toISOString(),
+  };
+  // Persist BEFORE debouncing/network I/O so refresh and page changes cannot drop answers.
+  enqueue(item);
+  if (typeof window !== "undefined") localStorage.setItem(SAVE_CACHE_KEY, JSON.stringify(save));
+}
+
+export async function saveCheckpoint(run: ActiveRunRef, save: GameSave, events: LearningEventInput[] = [], complete = false): Promise<TrackedRun> {
+  queueCheckpoint(run, save, events, complete);
+  await flushOutbox(run.id);
+  const persisted = acknowledgedRuns.get(run.id);
+  if (!persisted) throw new Error("ยังมีคำตอบรอส่ง");
+  return persisted;
+}
+
+async function drainOutbox(runId?: string): Promise<TrackedRun | null> {
+  if (!isSupabaseConfigured() || (typeof navigator !== "undefined" && navigator.onLine === false)) throw new Error("offline");
   let latest: TrackedRun | null = null;
-  const remaining: OutboxItem[] = [];
-  for (const item of items) {
-    try {
-      latest = await sendCheckpoint({ ...item, run: latest?.id === item.run.id ? { id: latest.id, teamId: latest.teamId, revision: latest.revision } : item.run });
-    } catch (error) {
-      if (error instanceof RevisionConflictError) {
-        latest = error.serverRun;
-      } else {
-        remaining.push(item);
-      }
-    }
+  while (true) {
+    const item = readOutbox().find((queued) => !runId || queued.run.id === runId);
+    if (!item) break;
+    latest = await sendCheckpoint(item);
+    acknowledgedRuns.set(latest.id, latest);
+    const sentIds = new Set(item.events.map((event) => event.id));
+    // Do not erase answers that arrived while the request was in flight.
+    memoryOutbox = readOutbox().flatMap((queued) => {
+      if (queued.run.id !== item.run.id) return [queued];
+      if (queued.id === item.id) return [];
+      return [{ ...queued, run: { ...queued.run, revision: latest!.revision }, events: queued.events.filter((event) => !sentIds.has(event.id)) }];
+    });
+    writeOutbox(memoryOutbox);
   }
-  writeOutbox(remaining);
   return latest;
+}
+
+export async function flushOutbox(runId?: string): Promise<TrackedRun | null> {
+  // Only one writer in this tab, including reconnects, retries and rapid edits.
+  while (flushing) { try { await flushing; } catch { /* this caller retries its own queue */ } }
+  flushing = drainOutbox(runId);
+  try { return await flushing; } finally { flushing = null; }
 }
 
 export async function importLegacyBundle(teamName: string, bundle: LegacyBundle): Promise<TeamOverview> {

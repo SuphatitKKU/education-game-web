@@ -1,14 +1,24 @@
-export type Stage = "menu" | "team" | "mission" | "story" | "inspection" | "materials" | "studyFocus" | "exitTicket" | "testHub" | "compression" | "absorption" | "elasticity" | "recap" | "prediction" | "summary";
+export type Stage = "menu" | "overview" | "team" | "mission" | "story" | "inspection" | "materials" | "studyFocus" | "exitTicket" | "mission1Complete" | "testHub" | "compression" | "absorption" | "elasticity" | "impact" | "recap" | "prediction" | "summary";
 
 export type DamageCause = "แรงกด" | "แรงกระแทก" | "น้ำ";
 
-export type TeamMember = { name: string; avatar: string; id?: string; position?: number };
+export type TeamMember = { name: string; avatar: string; id?: string; position?: number; present?: boolean };
 
 export type CompressionResult = {
   materialId: string;
   measurements: number[];
-  residual: number;
-  recovered: number;
+  // Legacy release fields remain optional so older checkpoints stay readable.
+  residual?: number;
+  recovered?: number;
+  // Optional so checkpoints from the previous bottle activity remain readable.
+  observation?: "none" | "slight" | "much";
+  modelObservation?: "none" | "slight" | "much";
+  deformationMm?: number;
+  loadedThicknessMm?: number;
+  method?: "equal-load-press-v1" | "fixed-pressure-compression-v2";
+  conditions?:
+    | { load: "standard"; durationMs: number; specimen: "equal-size" }
+    | { forceN: 200; pressureKPa: 20; durationMs: number; specimenWidthCm: 10; specimenLengthCm: 10; initialThicknessMm: 5 };
 };
 
 export type WaterAbsorptionResult = {
@@ -16,6 +26,8 @@ export type WaterAbsorptionResult = {
   drops: number[];
   absorbed: number;
   summary: string;
+  method?: "one-side-water-contact-v1";
+  conditions?: { water: "equal"; contactArea: "equal"; contactTime: "equal"; specimen: "equal-size" };
 };
 
 export type ElasticityResult = {
@@ -24,6 +36,16 @@ export type ElasticityResult = {
   residual: number;
   recovered: number;
   summary: string;
+};
+
+export type ImpactDamage = "none" | "slight" | "much";
+export type ImpactResult = {
+  materialId: string;
+  observation: ImpactDamage;
+  simulatedDamage: ImpactDamage;
+  method: "egg-drop-v1";
+  modelVersion: "illustrative-v1";
+  conditions: { object: "same-model-egg"; height: "fixed"; specimen: "equal-size" };
 };
 
 export type ExitTicket = {
@@ -58,6 +80,7 @@ export type MaterialDefinition = {
 };
 
 export type GameSave = {
+  checkpointId?: string;
   version: 1;
   stage: Stage;
   team: TeamMember[];
@@ -69,13 +92,20 @@ export type GameSave = {
   compressionIndex: number;
   absorptionIndex: number;
   elasticityIndex: number;
+  impactIndex: number;
   compressionResults: Record<string, CompressionResult>;
   absorptionResults: Record<string, WaterAbsorptionResult>;
   elasticityResults: Record<string, ElasticityResult>;
+  impactResults: Record<string, ImpactResult>;
   recapIndex: number;
+  recapAnswers: Record<string, number[]>;
   runId: string;
   studyFocus: Record<string, boolean>;
+  bigQuestionProgress: Record<string, string>;
   exitTickets: Record<string, ExitTicket>;
+  exitTicketConfirmations: Record<string, ExitTicket>;
+  labAnswerDrafts: Record<string, Record<string, string>>;
+  mission1Completed: boolean;
   predictions: Record<string, string>;
   audio: boolean;
 };
@@ -92,13 +122,20 @@ export const EMPTY_SAVE: GameSave = {
   compressionIndex: 0,
   absorptionIndex: 0,
   elasticityIndex: 0,
+  impactIndex: 0,
   compressionResults: {},
   absorptionResults: {},
   elasticityResults: {},
+  impactResults: {},
   recapIndex: 0,
+  recapAnswers: {},
   runId: "",
   studyFocus: {},
+  bigQuestionProgress: {},
   exitTickets: {},
+  exitTicketConfirmations: {},
+  labAnswerDrafts: {},
+  mission1Completed: false,
   predictions: {},
   audio: true,
 };
@@ -111,16 +148,16 @@ export const AVATARS = [
 // Keep the friction/tear scene ready for later, but exclude it from the research flow for now.
 const TORN_DAMAGE_STORY_ENABLED = false;
 const ALL_STORY_SCENES = [
-  ["shot_01_sender_packs.png", "ผู้ส่งเตรียมของและเลือกกล่องสำหรับการเดินทาง"],
-  ["shot_02_sender_seals.png", "กล่องถูกปิดผนึก ก่อนส่งต่อให้ไรเดอร์"],
-  ["shot_03_rider_departure.png", "การเดินทางเริ่มขึ้นบนถนนที่ไม่ราบเรียบ"],
-  ["shot_04_rain_damage.png", "ฝนทำให้กล่องเปียกและอ่อนตัว"],
-  ["shot_05_stack_pressure.png", "กล่องใบอื่นกดทับจนผนังยุบ"],
-  ["shot_06_corner_impact.png", "แรงตกกระแทกทำให้มุมกล่องบุบ"],
-  ["shot_07_friction_tear.png", "การเสียดสีอาจทำให้ผิวกล่องฉีก"],
-  ["shot_08_receiver_gets_box.png", "ผู้รับได้กล่องที่ผ่านเหตุการณ์หลายอย่าง"],
-  ["shot_09_cracked_cup.png", "กล่องที่ดีต้องช่วยปกป้องของด้านใน"],
-  ["shot_10_team_mission.png", "ถึงเวลาที่ทีมของเราจะออกแบบกล่องที่แกร่งกว่าเดิม!"],
+  ["shot_01_sender_packs.png", "พี่เมย์ค่อย ๆ ห่อแก้วอย่างเบามือ แล้ววางลงในกล่องให้เรียบร้อย", "จุดเริ่มต้นของความปลอดภัย คือการเลือกกล่องและวัสดุป้องกันที่เหมาะสม", "attentive", "0% 0%"],
+  ["shot_02_sender_seals.png", "พี่เมย์ปิดฝากล่องให้แน่น แล้วติดเทปรอบกล่องก่อนส่งให้พี่ต้น", "การปิดผนึกช่วยให้กล่องคงรูป และลดโอกาสที่สิ่งของจะหลุดออกมา", "focused", "50% 0%"],
+  ["shot_03_rider_departure.png", "พี่ต้นรับกล่องแล้วออกเดินทาง ถนนขรุขระทำให้กล่องสั่นไปมา", "การสั่นสะเทือนสะสมอาจทำให้สิ่งของภายในเคลื่อนที่หรือชนกับผนังกล่อง", "excited", "100% 0%"],
+  ["shot_04_rain_damage.png", "โอ๊ะ! ฝนตกใส่กล่อง น้ำซึมเข้าไปจนกระดาษเปียกและนิ่มลง", "เหตุการณ์นี้เกี่ยวข้องกับสมบัติการดูดซึมน้ำของวัสดุ", "worried", "0% 50%"],
+  ["shot_05_stack_pressure.png", "กล่องหลายใบวางซ้อนกัน กล่องของเราจึงถูกน้ำหนักด้านบนกดจนยุบ", "เหตุการณ์นี้เกี่ยวข้องกับความสามารถในการรับแรงกดของวัสดุ", "strained", "50% 50%"],
+  ["shot_06_corner_impact.png", "ระหว่างขนย้าย กล่องเผลอตกลงพื้น ตุ้บ! มุมกล่องจึงบุบลง", "เหตุการณ์นี้เกี่ยวข้องกับความสามารถในการดูดซับแรงกระแทก", "shocked", "100% 50%"],
+  ["shot_07_friction_tear.png", "กล่องเสียดสีกับพื้นผิวระหว่างการขนย้าย จนผิวกระดาษเริ่มฉีกขาด", "การเสียดสีซ้ำ ๆ อาจทำให้วัสดุสูญเสียความแข็งแรง", "shocked", "100% 50%"],
+  ["shot_08_receiver_gets_box.png", "พี่ฟ้าได้รับกล่องแล้ว ลองช่วยกันดูสิว่ากล่องเสียหายตรงไหนบ้าง", "ถึงภายนอกดูเสียหายไม่มาก เราต้องตรวจหลักฐานทุกจุด", "relieved", "0% 100%"],
+  ["shot_09_cracked_cup.png", "พี่ฟ้าเปิดกล่องแล้วพบว่าแก้วแตกร้าว น่าเสียดายจัง กล่องอาจกันแรงกระแทกได้ไม่พอ", "นี่คือผลลัพธ์จากเหตุการณ์หลายอย่างรวมกันตลอดเส้นทาง", "sad", "50% 100%"],
+  ["shot_10_team_mission.png", "ถึงตาของพวกเราแล้ว! มาช่วยกันสืบร่องรอยและหาวัสดุที่ปกป้องแก้วได้ดีกว่าเดิมกันเถอะ", "ต่อไปเราจะสำรวจความเสียหาย สำรวจวัสดุ และค้นหาว่าควรศึกษาสมบัติใดบ้าง", "encouraging", "100% 100%"],
 ] as const;
 export const STORY = ALL_STORY_SCENES.filter(([image]) => TORN_DAMAGE_STORY_ENABLED || image !== "shot_07_friction_tear.png");
 
@@ -129,11 +166,11 @@ export const DAMAGE_CAUSES: readonly DamageCause[] = ["แรงกด", "แร
 // Keep the tear hotspot data ready for later, but exclude it from the research flow for now.
 const TORN_DAMAGE_INSPECTION_ENABLED = false;
 const ALL_DAMAGES = [
-  { id: "dent", title: "รอยยุบอยู่จุดไหน?", hint: "ลองดูแอ่งยุบลึกบนฝากล่องด้านหน้า", evidence: "รอยยุบด้านบน", position: "0.28m -0.10m 1.91m", normal: "0 0.96 0.28" },
-  { id: "wet", title: "รอยเปียกอยู่จุดไหน?", hint: "มองหาคราบสีน้ำตาลเข้มเป็นด่างบนผิวกล่อง", evidence: "คราบเปียกน้ำ", position: "-1.05m -0.18m 1.35m", normal: "0 0 1" },
-  { id: "torn", title: "รอยฉีกขาดอยู่จุดไหน?", hint: "ลองหมุนดูรูโหว่ขอบรุ่ยที่ด้านข้าง", evidence: "รอยฉีกขาดเป็นรูโหว่", position: "-1.84m -0.32m -0.02m", normal: "-1 0 0" },
-  { id: "corner", title: "รอยบุบอยู่มุมไหน?", hint: "มองหามุมที่ย่นและเสียรูป", evidence: "มุมกล่องบุบ", position: "1.43m -0.82m 1.05m", normal: "0.22 -0.64 0.74" },
-  { id: "cup", title: "สิ่งของด้านในเสียหายตรงไหน?", hint: "มองหาแก้วที่มีรอยร้าวและขอบบิ่นอยู่กลางกล่อง", evidence: "แก้วด้านในแตกร้าวและขอบบิ่น", position: "0.10m 0.16m 0.52m", normal: "0 0 1" },
+  { id: "dent", label: "รอยยุบ", title: "รอยยุบอยู่จุดไหน?", hint: "ลองดูแอ่งยุบลึกบนฝากล่องด้านหน้า", evidence: "รอยยุบด้านบน", position: "0.28m -0.10m 1.91m", normal: "0 0.96 0.28" },
+  { id: "wet", label: "รอยเปียก", title: "รอยเปียกอยู่จุดไหน?", hint: "มองหาคราบสีน้ำตาลเข้มเป็นด่างบนผิวกล่อง", evidence: "คราบเปียกน้ำ", position: "-1.05m -0.18m 1.35m", normal: "0 0 1" },
+  { id: "torn", label: "รอยฉีกขาด", title: "รอยฉีกขาดอยู่จุดไหน?", hint: "ลองหมุนดูรูโหว่ขอบรุ่ยที่ด้านข้าง", evidence: "รอยฉีกขาดเป็นรูโหว่", position: "-1.84m -0.32m -0.02m", normal: "-1 0 0" },
+  { id: "corner", label: "รอยบุบ", title: "รอยบุบอยู่มุมไหน?", hint: "มองหามุมที่ย่นและเสียรูป", evidence: "มุมกล่องบุบ", position: "1.43m -0.82m 1.05m", normal: "0.22 -0.64 0.74" },
+  { id: "cup", label: "สิ่งของเสียหาย", title: "สิ่งของด้านในเสียหายตรงไหน?", hint: "มองหาแก้วที่มีรอยร้าวและขอบบิ่นอยู่กลางกล่อง", evidence: "แก้วด้านในแตกร้าวและขอบบิ่น", position: "0.10m 0.16m 0.52m", normal: "0 0 1" },
 ] as const;
 export const DAMAGES = ALL_DAMAGES.filter((damage) => TORN_DAMAGE_INSPECTION_ENABLED || damage.id !== "torn");
 
@@ -177,7 +214,7 @@ export const MATERIALS = [
     id: "corrugated_cardboard", name: "กระดาษลูกฟูก", image: "corrugated_cardboard.png", guide: "มีแผ่นผิวเรียบประกบลอนกระดาษอยู่ตรงกลาง",
     testFrames: testFrames("corrugated_cardboard"), sag: [1, 2, 4], residual: 1,
     releaseSummary: "คืนเกือบหมด · ลอนยังบุบเล็กน้อย",
-    waterDrops: [1, 2, 4], waterSummary: "ซึมตามผิวกระดาษและร่องลอนเล็กน้อย",
+    waterDrops: [1, 2, 4], waterSummary: "ในแบบจำลอง น้ำซึมเข้าเนื้อกระดาษและเห็นรอยเปียก",
     elasticityStretch: [1, 2, 3], elasticityResidual: 1, elasticitySummary: "งอได้บ้าง แต่คืนตัวไม่เหมือนยาง",
     motion: { loadMs: 220, releaseMs: 320, easing: "cubic-bezier(.2,.8,.2,1)", releaseEffect: "settle" },
   },
@@ -185,7 +222,7 @@ export const MATERIALS = [
     id: "closed_cell_pe_foam", name: "แผ่นโฟม EPE", image: "closed_cell_pe_foam.png", guide: "แผ่นสีขาว เนื้อนุ่ม มีผิวเซลล์ละเอียด",
     testFrames: testFrames("closed_cell_pe_foam"), sag: [2, 4, 7], residual: 0,
     releaseSummary: "เด้งกลับเต็มที่",
-    waterDrops: [0, 0, 1], waterSummary: "ผิวกันน้ำได้ดี น้ำแทบไม่ซึมเข้าเซลล์ปิด",
+    waterDrops: [0, 0, 1], waterSummary: "ในแบบจำลอง วัสดุดูดซับน้ำเล็กน้อย น้ำส่วนใหญ่อยู่บนผิว",
     elasticityStretch: [4, 8, 12], elasticityResidual: 1, elasticitySummary: "ยืดและคืนตัวนุ่ม เหลือรอยน้อยมาก",
     motion: { loadMs: 300, releaseMs: 650, easing: "cubic-bezier(.22,.8,.3,1)", releaseEffect: "soft" },
   },
@@ -193,7 +230,7 @@ export const MATERIALS = [
     id: "bubble_wrap", name: "แผ่นพลาสติกกันกระแทกชนิดฟองอากาศ", image: "bubble_wrap.png", guide: "แผ่นพลาสติกใส มีฟองอากาศเรียงต่อกัน",
     testFrames: testFrames("bubble_wrap"), sag: [3, 6, 10], residual: 1,
     releaseSummary: "ฟองอากาศเด้งกลับเกือบหมด",
-    waterDrops: [0, 0, 0], waterSummary: "น้ำไม่ซึมผ่านฟิล์มพลาสติก แต่ไหลไปตามช่องว่างได้",
+    waterDrops: [0, 0, 0], waterSummary: "ในแบบจำลอง น้ำอยู่บนผิว ไม่แสดงการดูดซับเข้าเนื้อวัสดุ",
     elasticityStretch: [5, 10, 16], elasticityResidual: 2, elasticitySummary: "ฟิล์มยืดได้และเด้งกลับเร็ว",
     motion: { loadMs: 180, releaseMs: 420, easing: "cubic-bezier(.2,.9,.25,1)", releaseEffect: "spring" },
   },
@@ -201,7 +238,7 @@ export const MATERIALS = [
     id: "cardboard", name: "กระดาษหน้าขาวหลังเทา 400 แกรม", image: "cardboard.png", guide: "แผ่นกระดาษเนื้อแน่น ด้านหน้าสีขาวและด้านหลังสีเทา",
     testFrames: testFrames("cardboard"), sag: [3, 6, 9], residual: 3,
     releaseSummary: "คืนบางส่วน · มีรอยพับ",
-    waterDrops: [2, 5, 8], waterSummary: "ดูดน้ำมากกว่าลูกฟูก ผิวเริ่มอ่อนตัวเมื่อเปียก",
+    waterDrops: [2, 5, 8], waterSummary: "ในแบบจำลอง น้ำซึมเข้าเนื้อกระดาษและรอยเปียกขยายขึ้น",
     elasticityStretch: [1, 2, 4], elasticityResidual: 2, elasticitySummary: "แข็งและโก่ง ก่อนเหลือรอยพับ",
     motion: { loadMs: 240, releaseMs: 320, easing: "cubic-bezier(.25,.7,.25,1)", releaseEffect: "settle" },
   },
@@ -209,7 +246,7 @@ export const MATERIALS = [
     id: "pe_sheet", name: "แผ่นพลาสติก PE", image: "pe_sheet.png", guide: "เป็นแผ่นฟิล์มบาง ผิวเรียบ ลื่น และโค้งงอได้",
     testFrames: testFrames("pe_sheet"), sag: [4, 8, 12], residual: 2,
     releaseSummary: "เด้งกลับมาก · เหลือรอยพับเล็กน้อย",
-    waterDrops: [0, 0, 0], waterSummary: "น้ำเกาะบนผิวและไหลออก ไม่ซึมเข้าแผ่น",
+    waterDrops: [0, 0, 0], waterSummary: "ในแบบจำลอง น้ำเกาะบนผิว ไม่แสดงการดูดซับเข้าเนื้อวัสดุ",
     elasticityStretch: [7, 14, 22], elasticityResidual: 3, elasticitySummary: "ยืดได้มากและคืนตัวเร็ว แต่ถ้าดึงแรงจะเหลือรูปยืด",
     motion: { loadMs: 220, releaseMs: 380, easing: "cubic-bezier(.15,.9,.2,1)", releaseEffect: "spring" },
   },
@@ -239,9 +276,9 @@ export const DESIGN_QUESTIONS = [
 ] as const;
 
 export const RECAP = [
-  { question: "ผู้ส่งต้องการอะไรจากกล่องพัสดุ?", choices: ["ปกป้องของระหว่างทาง", "มีสีเข้มที่สุด", "มีขนาดใหญ่ที่สุด"], answer: 0 },
-  { question: "เมื่อฝนตก กล่องกระดาษอาจเกิดอะไรขึ้น?", choices: ["เปียกและอ่อนตัว", "แข็งขึ้นทันที", "ลอยขึ้นฟ้า"], answer: 0 },
-  { question: "เหตุใดเราจึงทดลองด้วยน้ำหนักเท่ากัน?", choices: ["เพื่อเปรียบเทียบวัสดุอย่างยุติธรรม", "เพื่อให้ขวดสวย", "เพื่อให้เกมเร็วขึ้น"], answer: 0 },
+  { question: "เมื่อรับแรงกดเท่ากัน เราควรเปรียบเทียบอะไร?", choices: ["การยุบหรือบุบของวัสดุ", "สีของขวดน้ำ", "ชื่อของทีม"], answer: 0 },
+  { question: "ถ้าจะทดสอบการลดความเสียหายจากแรงกระแทก ควรดูอะไร?", choices: ["ดูว่าวัสดุยืดได้ยาวที่สุดหรือไม่", "ดูความเสียหายของสิ่งของเมื่อรับแรงกระแทกเท่ากัน", "ดูว่าวัสดุสีสวยหรือไม่"], answer: 1 },
+  { question: "เมื่อได้รับน้ำเท่ากัน เราศึกษาการดูดซับน้ำจากอะไร?", choices: ["ความยาวของวัสดุ", "สีของโต๊ะ", "ปริมาณน้ำที่ซึมเข้าเนื้อวัสดุ"], answer: 2 },
 ] as const;
 
 export const BOX_PARTS = ["โครงกล่อง", "ชั้นป้องกันน้ำ", "วัสดุเติมช่องว่าง", "วัสดุกันกระแทก"] as const;

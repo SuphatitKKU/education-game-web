@@ -14,6 +14,17 @@ describe("tracking progress", () => {
     expect(formatDuration("2026-08-25T01:00:00Z", "2026-08-25T02:30:00Z")).toBe("1 ชม. 30 นาที");
   });
 
+  it("includes enabled laboratory stages in teacher progress", () => {
+    for (const stage of ["testHub", "compression", "impact", "absorption", "recap"] as const) {
+      expect(stageProgress(stage)).toBeGreaterThan(stageProgress("exitTicket"));
+      expect(stageProgress(stage)).toBeLessThan(100);
+    }
+  });
+
+  it("marks the mission-one celebration as a completed mission", () => {
+    expect(stageProgress("mission1Complete")).toBe(100);
+  });
+
   it("recognizes completions from today", () => {
     expect(isToday("2026-08-25T08:00:00+07:00", new Date("2026-08-25T20:00:00+07:00"))).toBe(true);
     expect(isToday("2026-08-24T08:00:00+07:00", new Date("2026-08-25T20:00:00+07:00"))).toBe(false);

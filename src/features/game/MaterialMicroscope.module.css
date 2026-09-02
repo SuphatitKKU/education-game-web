@@ -1,0 +1,97 @@
+.microscope { position: relative; width: 100%; height: 100%; overflow: hidden; background: #102d47; color: #fff; animation: zoomLayerIn .24s ease-out; }
+.continuousZoom { position: relative; z-index: 3; width: 100%; height: 100%; overflow: hidden; background: transparent; color: #fff; pointer-events: auto; }
+.continuousZoom[data-level="normal"] { pointer-events: none; }
+.continuousScene { display: block; width: 100%; height: 100%; }
+.continuousPart { transition: opacity .2s ease, filter .2s ease; }
+.continuousZoom[data-selected="top-liner"] [data-part="top-liner"],
+.continuousZoom[data-selected="flute"] [data-part="flute"],
+.continuousZoom[data-selected="bottom-liner"] [data-part="bottom-liner"],
+.continuousZoom[data-selected="paper-fibers"] [data-part="paper-fibers"],
+.continuousZoom[data-selected="fiber-pores"] [data-part="fiber-pores"],
+.continuousZoom[data-selected="starch-glue"] [data-part="starch-glue"],
+.continuousZoom[data-selected="cellulose-chain"] [data-part="cellulose-chain"],
+.continuousZoom[data-selected="water-loving-oh"] [data-part="water-loving-oh"],
+.continuousZoom[data-selected="hydrogen-bonds"] [data-part="hydrogen-bonds"] { filter: drop-shadow(0 0 .5cqw #fff9a6); }
+.photoLayer { position: absolute; inset: -8%; transform-origin: 55% 48%; will-change: transform,opacity; }
+.photoLayer::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 5cqw #071b2b99; pointer-events: none; }
+.photoLayer img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.microPhoto { filter: contrast(1.08); }
+.nanoPhoto { transform-origin: 47% 52%; }
+.cardboardMicroPhoto { inset: -8%; transform-origin: 50% 17%; filter: contrast(1.1); background: #dce7ea; }
+.cardboardMicroPhoto img { object-fit: contain; }
+.cardboardNanoPhoto { inset: -8%; transform-origin: 44% 50%; background: #f5f7f6; }
+.cardboardNanoPhoto img { object-fit: cover; }
+.bubbleMicroPhoto { inset: -8%; transform-origin: 50% 48%; filter: contrast(1.1); background: #333; }
+.bubbleMicroPhoto img { object-fit: contain; }
+.bubbleNanoPhoto { inset: -8%; transform-origin: 50% 48%; background: #fff; }
+.bubbleNanoPhoto img { object-fit: contain; }
+.foamMicroPhoto { inset: -8%; transform-origin: 50% 49%; filter: contrast(1.08); background: #171b1f; }
+.foamMicroPhoto img { object-fit: contain; }
+.foamNanoPhoto { inset: -8%; transform-origin: 50% 50%; filter: contrast(1.08); background: #050505; }
+.foamNanoPhoto img { object-fit: contain; }
+.peSheetMicroPhoto { inset: -8%; transform-origin: 50% 48%; filter: contrast(1.08); background: #171b1f; }
+.peSheetMicroPhoto img { object-fit: contain; }
+.peSheetNanoPhoto { inset: -8%; transform-origin: 50% 50%; filter: contrast(1.04); background: #fff; }
+.peSheetNanoPhoto img { object-fit: contain; }
+.continuousPath { position: absolute; z-index: 4; right: 1cqw; bottom: 1cqw; display: flex; align-items: center; gap: .35cqw; padding: .42cqw .65cqw; border-radius: 999px; background: #071b2be8; color: #a8cadb; font-size: .66cqw; font-weight: 800; }
+.continuousPath i { color: #ffcc55; font-style: normal; }
+.continuousPath .pathActive { padding: .18cqw .42cqw; border-radius: 999px; background: #ffcc55; color: #50310a; }
+.panLayer { position: absolute; z-index: 1; inset: 0; cursor: grab; touch-action: none; user-select: none; will-change: transform; transition: transform .16s ease-out; }
+.panLayer.dragging { cursor: grabbing; transition: none; }
+.art { position: absolute; inset: 0; transition: transform .28s ease-out, opacity .2s ease; pointer-events: none; }
+.art img, .art svg { display: block; width: 100%; height: 100%; object-fit: cover; }
+.contain img { object-fit: contain; background: #071b2b; }
+.panelA { overflow: hidden; }
+.panelA img { width: 200%; height: 200%; max-width: none; object-fit: cover; object-position: left top; }
+.readout { position: absolute; z-index: 4; left: 1.2cqw; top: 1.15cqw; display: grid; gap: .15cqw; max-width: 29cqw; padding: .65cqw .9cqw; border: .12cqw solid #8bddff; border-radius: .9cqw; background: #071b2bd9; box-shadow: 0 .25cqw .6cqw #0005; }
+.readout span { color: #9ee5ff; font-size: .75cqw; }
+.readout b { font-size: 1cqw; }
+.panControls { position: absolute; z-index: 6; top: 1.15cqw; right: 1.2cqw; display: flex; align-items: center; gap: .4cqw; padding: .35cqw; border: .12cqw solid #8bddff; border-radius: 999px; background: #071b2bd9; box-shadow: 0 .25cqw .6cqw #0005; }
+.panControls span { padding: 0 .2cqw; color: #d9f3ff; font-size: .66cqw; font-weight: 850; white-space: nowrap; }
+.panControls button { display: grid; place-items: center; width: 2cqw; height: 2cqw; border: .1cqw solid #fff8; border-radius: 50%; background: #1672e8; color: #fff; font: 900 1.35cqw/1 inherit; cursor: pointer; box-shadow: 0 .15cqw .35cqw #0018; }
+.panControls button:hover { background: #ff762e; transform: scale(1.06); }
+.panControls button:focus-visible { outline: .18cqw solid #fff3a6; outline-offset: .12cqw; }
+.hotspot { position: absolute; z-index: 5; display: flex; align-items: center; gap: .4cqw; transform: translate(-50%,calc(-100% - 1.75cqw)); min-width: max-content; padding: .34cqw .72cqw .34cqw .35cqw; border: .14cqw solid #fff; border-radius: 999px; background:#1672e8e8; color: #fff; box-shadow: 0 .25cqw .7cqw #001a; font: inherit; cursor: pointer; pointer-events:auto; }
+.hotspot b { display: grid; place-items: center; width: 1.65cqw; height: 1.65cqw; border-radius: 50%; background: #fff; color: #1672e8; font-size: .9cqw; }
+.hotspot span { font-size: .82cqw; font-weight: 800; }
+.hotspot::after { content: ""; position: absolute; left: 50%; top: 100%; width: .16cqw; height: 1.55cqw; transform: translateX(-50%); background: #fff; box-shadow: 0 0 .2cqw #168cff; }
+.hotspot::before { content: ""; position: absolute; left: 50%; top: calc(100% + 1.38cqw); width: .72cqw; height: .72cqw; transform: translateX(-50%) rotate(45deg); border-right: .18cqw solid #fff; border-bottom: .18cqw solid #fff; filter: drop-shadow(0 0 .16cqw #168cff); }
+.active { border-color: #fff3a6; background: #ff762e; box-shadow: 0 0 0 .25cqw #ffe57199, 0 .3cqw .8cqw #001a; }
+.active b { color: #e85d24; }
+.part { transition: opacity .2s ease, filter .2s ease; }
+.microscope[data-selected]:has(.active) .part { opacity: .3; }
+.microscope[data-selected="paper-fibers"] [data-part="paper-fibers"],
+.microscope[data-selected="fiber-pores"] [data-part="fiber-pores"],
+.microscope[data-selected="starch-glue"] [data-part="starch-glue"],
+.microscope[data-selected="white-coating"] [data-part="white-coating"],
+.microscope[data-selected="pressed-fibers"] [data-part="pressed-fibers"],
+.microscope[data-selected="gray-recycled-fibers"] [data-part="gray-recycled-fibers"],
+.microscope[data-selected="bubble-cap"] [data-part="bubble-cap"],
+.microscope[data-selected="air-pocket"] [data-part="air-pocket"],
+.microscope[data-selected="flat-base-film"] [data-part="flat-base-film"],
+.microscope[data-selected="closed-cells"] [data-part="closed-cells"],
+.microscope[data-selected="cell-wall"] [data-part="cell-wall"],
+.microscope[data-selected="trapped-gas"] [data-part="trapped-gas"],
+.microscope[data-selected="smooth-film"] [data-part="smooth-film"],
+.microscope[data-selected="crystal-lamellae"] [data-part="crystal-lamellae"],
+.microscope[data-selected="amorphous-region"] [data-part="amorphous-region"],
+.microscope[data-selected="cellulose-chain"] [data-part="cellulose-chain"],
+.microscope[data-selected="water-loving-oh"] [data-part="water-loving-oh"],
+.microscope[data-selected="hydrogen-bonds"] [data-part="hydrogen-bonds"],
+.microscope[data-selected="pe-chain"] [data-part="pe-chain"],
+.microscope[data-selected="ordered-chains"] [data-part="ordered-chains"],
+.microscope[data-selected="tangled-chains"] [data-part="tangled-chains"] { opacity: 1; filter: drop-shadow(0 0 .45cqw #fff66); }
+.note { position: absolute; z-index: 4; left: 50%; bottom: 1cqw; transform: translateX(-50%); padding: .5cqw .9cqw; border-radius: 999px; background: #071b2be8; color: #d9f3ff; font-size: .67cqw; white-space: nowrap; pointer-events:auto; }
+.note a { color: #9ee5ff; text-decoration: underline; text-underline-offset: .12cqw; }
+.continuousZoom[data-material="closed-cell-pe-foam"] .note,
+.continuousZoom[data-material="pe-sheet"] .note { left: 1cqw; max-width: calc(100% - 22cqw); transform: none; white-space: normal; line-height: 1.25; }
+
+@keyframes zoomLayerIn {
+  from { opacity: .25; transform: scale(1.06); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .microscope { animation: none; }
+  .part, .art, .continuousPart, .panLayer { transition: none; }
+}

@@ -4,6 +4,9 @@ import { DAMAGE_CAUSES, DAMAGES, EMPTY_SAVE, MATERIALS, STORY } from "./data";
 describe("active lesson-plan content", () => {
   it("starts new saves without prefilled inspection evidence", () => {
     expect(EMPTY_SAVE.inspectionFindings).toEqual({});
+    expect(EMPTY_SAVE.bigQuestionProgress).toEqual({});
+    expect(EMPTY_SAVE.recapAnswers).toEqual({});
+    expect(EMPTY_SAVE.mission1Completed).toBe(false);
   });
 
   it("offers neutral evidence prompts and includes the damaged cup", () => {
@@ -15,6 +18,11 @@ describe("active lesson-plan content", () => {
   it("keeps the friction and tear scene out of the active research story", () => {
     expect(STORY).toHaveLength(9);
     expect(STORY.some(([image]) => image === "shot_07_friction_tear.png")).toBe(false);
+    expect(STORY.every(([, narration, insight, mood, spritePosition]) =>
+      narration.length > 20 && insight.length > 20 && mood.length > 0 && spritePosition.includes("%")
+    )).toBe(true);
+    expect(STORY.at(-1)?.[2]).toContain("ค้นหาว่าควรศึกษาสมบัติใดบ้าง");
+    expect(STORY.at(-1)?.[2]).not.toContain("ทดลองสมบัติ");
   });
 
   it("uses the five formal material names from lesson plan 1", () => {

@@ -151,16 +151,20 @@ class GlbScene {
         normals.push(nx / magnitude, ny / magnitude, nz / magnitude);
       }
     }
+    const pushTriangle = (a, b, c) => {
+      if (direction > 0) indices.push(a, b, c);
+      else indices.push(a, c, b);
+    };
     for (let segment = 0; segment < radialSegments; segment += 1) {
-      indices.push(0, 1 + segment, 1 + ((segment + 1) % radialSegments));
+      pushTriangle(0, 1 + segment, 1 + ((segment + 1) % radialSegments));
     }
     for (let ring = 1; ring < rings; ring += 1) {
       const first = 1 + (ring - 1) * radialSegments;
       const next = first + radialSegments;
       for (let segment = 0; segment < radialSegments; segment += 1) {
         const following = (segment + 1) % radialSegments;
-        indices.push(first + segment, next + segment, next + following);
-        indices.push(first + segment, next + following, first + following);
+        pushTriangle(first + segment, next + segment, next + following);
+        pushTriangle(first + segment, next + following, first + following);
       }
     }
     this.addPrimitive(name, positions, normals, indices, material);
@@ -185,7 +189,8 @@ class GlbScene {
       const outer = inner + 1;
       const nextInner = inner + 2;
       const nextOuter = inner + 3;
-      indices.push(inner, outer, nextOuter, inner, nextOuter, nextInner);
+      if (normalY > 0) indices.push(inner, outer, nextOuter, inner, nextOuter, nextInner);
+      else indices.push(inner, nextOuter, outer, inner, nextInner, nextOuter);
     }
     this.addPrimitive(name, positions, normals, indices, material);
   }
@@ -446,15 +451,12 @@ for (let row = 0; row < rows; row += 1) {
     const radius = 0.135;
     const height = 0.125;
     const topCenter = [x, sheetY + 0.006, z];
-    const bottomCenter = [x, sheetY - 0.006, z];
     bubbleScene.addFlatRing(`MESH_Seal_Ring_${row + 1}_${column + 1}`, [x, sheetY + 0.008, z], radius * 0.86, radius * 1.13, 18, 2);
     bubbleScene.addDome(`MESH_Air_Bubble_${row + 1}_${column + 1}`, topCenter, radius, height, 6, 18, 1);
-    bubbleScene.addFlatRing(`MESH_Bottom_Seal_Ring_${row + 1}_${column + 1}`, [x, sheetY - 0.008, z], radius * 0.86, radius * 1.13, 18, 2, -1);
-    bubbleScene.addDome(`MESH_Bottom_Air_Bubble_${row + 1}_${column + 1}`, bottomCenter, radius, height, 6, 18, 1, -1);
   }
 }
-mergePrimitivesByPrefix(bubbleScene, "MESH_All_Air_Bubbles_Both_Sides", ["MESH_Air_Bubble_", "MESH_Bottom_Air_Bubble_"], 1);
-mergePrimitivesByPrefix(bubbleScene, "MESH_All_Seal_Rings_Both_Sides", ["MESH_Seal_Ring_", "MESH_Bottom_Seal_Ring_"], 2);
+mergePrimitivesByPrefix(bubbleScene, "MESH_All_Top_Air_Bubbles", ["MESH_Air_Bubble_"], 1);
+mergePrimitivesByPrefix(bubbleScene, "MESH_All_Top_Seal_Rings", ["MESH_Seal_Ring_"], 2);
 await bubbleScene.write(resolve("public/assets/models/bubble_wrap.glb"));
 
 const foamBody = {

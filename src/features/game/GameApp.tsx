@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { readValueAnswer, writeValueAnswer } from "./exit-ticket-values";
+
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import {
-  AVATARS, BOX_PARTS, COMPRESSION_FRAME_KEYS, DAMAGE_CAUSES, DAMAGES, EMPTY_SAVE, MATERIALS, RECAP, STORY,
-  type CompressionFrameKey, type CompressionResult, type DamageCause, type ElasticityResult, type ExitTicket, type GameSave, type Stage, type TeamMember, type WaterAbsorptionResult,
+  AVATARS, BOX_PARTS, DAMAGE_CAUSES, DAMAGES, EMPTY_SAVE, MATERIALS, RECAP, STORY,
+  type CompressionResult, type DamageCause, type ElasticityResult, type ExitTicket, type GameSave, type Stage, type TeamMember, type WaterAbsorptionResult,
 } from "./data";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { hasLegacyData, markLegacyImported, markSupabaseCacheBound, readLegacyBundle, wasLegacyImported } from "@/features/tracking/legacy";
@@ -13,19 +15,53 @@ import {
   importLegacyBundle,
   listTeams,
   RevisionConflictError,
-  saveCheckpoint,
+  queueCheckpoint,
+  readOutbox,
   startOrResumeRun,
+  updateTeamMembers,
 } from "@/features/tracking/persistence";
 import { STAGE_LABELS, stageProgress } from "@/features/tracking/progress";
-import type { ActiveRunRef, LearningEventInput, LegacyBundle, SaveIndicator, TeamOverview } from "@/features/tracking/types";
+import type { ActiveRunRef, LegacyBundle, SaveIndicator, TeamOverview } from "@/features/tracking/types";
+import { answerEvents } from "@/features/tracking/answer-events";
 import { validateTeamDraft } from "@/features/tracking/validation";
+import { allLabsComplete, LAB_MATERIALS, LAB_ROOMS, LAB_ROOMS_ENABLED, LAB_STAGES, labResultCount, openLabPatch, type LabRoom } from "./labs";
+import { STUDY_TOPICS, studyTopicLabel } from "./learning-topics";
+import { CompressionLab } from "./CompressionLab";
+import { ImpactLab } from "./ImpactLab";
+import { AbsorptionLab } from "./AbsorptionLab";
+import { resumeLabStage } from "./impact";
+import { MissionOverview, type MissionNumber } from "./MissionOverview";
+import { attendingMembers, exitTicketKey, reconcileExitTickets } from "./team-attendance";
+import {
+  BubbleWrapContinuousZoom,
+  CardboardContinuousZoom,
+  CorrugatedContinuousZoom,
+  FoamContinuousZoom,
+  MATERIAL_MICROSCOPES,
+  MaterialMicroscope,
+  materialScaleForZoom,
+  PeSheetContinuousZoom,
+  type MaterialMicroscopeId,
+  type MaterialScale,
+  type MicroscopeFeature,
+} from "./MaterialMicroscope";
 
 const SAVE_KEY = "parcel-lab-web-save-v1";
 const STATS_KEY = "parcel-lab-group-design-statistics-v1";
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-const LAB_ROOMS_ENABLED = false;
 const PREDICTION_ENABLED = false;
-const DISABLED_LAB_STAGES = new Set<Stage>(["testHub", "compression", "absorption", "elasticity", "recap"]);
+const DISABLED_LAB_STAGES = new Set<Stage>(LAB_STAGES);
+const MISSION_ONE_BIG_QUESTION_PROGRESS = "เราทราบแล้วว่าต้องศึกษาสมบัติ 3 ด้าน แต่ยังไม่ทราบว่าวัสดุชนิดใดเหมาะกับแต่ละหน้าที่";
+
+const MISSION_ONE_PHASES: Partial<Record<Stage, { step: number; label: string; icon: string }>> = {
+  mission: { step: 1, label: "เกริ่นภารกิจ", icon: "🗺️" },
+  story: { step: 2, label: "ติดตามสถานการณ์ 9 ฉาก", icon: "🎬" },
+  inspection: { step: 3, label: "สำรวจร่องรอย", icon: "🔎" },
+  materials: { step: 4, label: "สำรวจวัสดุ", icon: "🧱" },
+  studyFocus: { step: 5, label: "เลือกสมบัติที่ต้องศึกษา", icon: "⭐" },
+  exitTicket: { step: 6, label: "คำถามรายบุคคล", icon: "✏️" },
+  mission1Complete: { step: 7, label: "ทำภารกิจสำเร็จ", icon: "🎉" },
+};
 
 function createRunId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -36,7 +72,7 @@ function asset(path: string) {
 }
 
 function resumableStage(stage: Stage): Stage {
-  return stage === "menu" || stage === "team" ? "mission" : stage;
+  return stage === "menu" || stage === "overview" || stage === "team" ? "mission" : resumeLabStage(stage);
 }
 
 function userFacingError(error: unknown, fallback: string) {
@@ -65,19 +101,85 @@ function playSound(name: string, enabled: boolean) {
   void audio.play().catch(() => undefined);
 }
 
+const STORY_SOUND_BY_IMAGE: Record<string, string> = {
+  "shot_01_sender_packs.png": "01_paper_wrap.ogg",
+  "shot_02_sender_seals.png": "02_tape_seal.ogg",
+  "shot_03_rider_departure.png": "03_scooter_move.ogg",
+  "shot_04_rain_damage.png": "04_rain.ogg",
+  "shot_05_stack_pressure.png": "05_conveyor_pressure.ogg",
+  "shot_06_corner_impact.png": "06_box_impact.ogg",
+  "shot_07_friction_tear.png": "07_paper_friction.ogg",
+  "shot_08_receiver_gets_box.png": "08_handoff.ogg",
+  "shot_09_cracked_cup.png": "09_unpack.ogg",
+  "shot_10_team_mission.png": "10_idea_chime.ogg",
+};
+
+const storyAudioCache = new Map<string, HTMLAudioElement>();
+let activeStoryAudio: HTMLAudioElement | null = null;
+let activeStorySoundName = "";
+
+function getStoryAudio(name: string) {
+  const cached = storyAudioCache.get(name);
+  if (cached) return cached;
+  const clip = new Audio(asset(`audio/${name}`));
+  clip.preload = "auto";
+  clip.volume = 0.55;
+  clip.load();
+  storyAudioCache.set(name, clip);
+  return clip;
+}
+
+function preloadStorySounds() {
+  Object.values(STORY_SOUND_BY_IMAGE).forEach((name) => getStoryAudio(name));
+}
+
+function stopStorySound() {
+  if (activeStoryAudio) {
+    activeStoryAudio.pause();
+    activeStoryAudio.currentTime = 0;
+  }
+  activeStoryAudio = null;
+  activeStorySoundName = "";
+}
+
+async function playStorySound(name: string, enabled: boolean) {
+  stopStorySound();
+  if (!enabled) return;
+  const clip = getStoryAudio(name);
+  activeStoryAudio = clip;
+  activeStorySoundName = name;
+  clip.currentTime = 0;
+  try {
+    await clip.play();
+  } catch {
+    if (activeStoryAudio === clip) stopStorySound();
+  }
+}
+
 export function GameApp() {
   const [save, setSave] = useState<GameSave>(EMPTY_SAVE);
   const [loaded, setLoaded] = useState(false);
+  const [labPreview, setLabPreview] = useState(false);
+  const [selectedMission, setSelectedMission] = useState<MissionNumber>(1);
+  const [animateMission2Unlock, setAnimateMission2Unlock] = useState(false);
   const [activeRun, setActiveRun] = useState<ActiveRunRef | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<TeamOverview | null>(null);
   const [saveIndicator, setSaveIndicator] = useState<SaveIndicator>("idle");
   const [legacyBundle, setLegacyBundle] = useState<LegacyBundle>({ save: null, statistics: [] });
   const bgmRef = useRef<HTMLAudioElement>(null);
-  const pendingEventsRef = useRef<LearningEventInput[]>([]);
-  const lastPersistedJsonRef = useRef("");
+  const activeRunIdRef = useRef<string | null>(null);
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  const syncTimerRef = useRef<number | undefined>(undefined);
+  const completedRunRef = useRef<string | null>(null);
   const configured = isSupabaseConfigured();
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("preview") === "mission1-complete") {
+      setSave({ ...EMPTY_SAVE, stage: "mission1Complete", mission1Completed: true, bigQuestionProgress: { mission1: MISSION_ONE_BIG_QUESTION_PROGRESS } });
+      setLoaded(true);
+      return;
+    }
     const legacy = readLegacyBundle();
     setLegacyBundle(legacy);
     const raw = localStorage.getItem(SAVE_KEY);
@@ -89,7 +191,7 @@ export function GameApp() {
         setSave({
           ...EMPTY_SAVE,
           ...parsed,
-          stage: !PREDICTION_ENABLED && restoredStage === "prediction" ? "summary" : restoredStage,
+          stage: !PREDICTION_ENABLED && restoredStage === "prediction" ? "summary" : resumeLabStage(restoredStage),
           studyFocus: parsed.studyFocus ?? { compression: true, water: true, elasticity: true },
         });
       } catch { /* keep fresh save */ }
@@ -98,78 +200,53 @@ export function GameApp() {
   }, []);
 
   useEffect(() => {
-    if (loaded) localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+    const isPreview = new URLSearchParams(window.location.search).get("preview") === "mission1-complete";
+    if (loaded && !isPreview) localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   }, [loaded, save]);
 
-  useEffect(() => {
-    if (!loaded || !configured || !activeRun) return;
-    const serialized = JSON.stringify(save);
-    if (serialized === lastPersistedJsonRef.current) return;
-    const timer = window.setTimeout(async () => {
-      const events = pendingEventsRef.current.splice(0);
-      setSaveIndicator("saving");
-      try {
-        const persisted = await saveCheckpoint(activeRun, save, events, save.stage === "summary");
-        lastPersistedJsonRef.current = JSON.stringify(persisted.saveState);
-        setActiveRun({ id: persisted.id, teamId: persisted.teamId, revision: persisted.revision });
-        setSaveIndicator("saved");
-      } catch (error) {
-        if (error instanceof RevisionConflictError) {
-          lastPersistedJsonRef.current = JSON.stringify(error.serverRun.saveState);
-          setSave(error.serverRun.saveState);
-          setActiveRun({ id: error.serverRun.id, teamId: error.serverRun.teamId, revision: error.serverRun.revision });
-          setSaveIndicator("conflict");
-        } else {
-          pendingEventsRef.current.unshift(...events);
-          setSaveIndicator("offline");
-        }
-      }
-    }, save.stage === "summary" ? 50 : 800);
-    return () => window.clearTimeout(timer);
-  }, [activeRun, configured, loaded, save]);
+  const syncAnswers = async (runId?: string) => {
+    try {
+      const persisted = await flushOutbox(runId);
+      if (!persisted || activeRunIdRef.current !== persisted.id) return;
+      setActiveRun({ id: persisted.id, teamId: persisted.teamId, revision: persisted.revision });
+      if (persisted.status === "completed") completedRunRef.current = persisted.id;
+      setSaveIndicator(readOutbox().some((item) => item.run.id === persisted.id) ? "saving" : "saved");
+    } catch (error) {
+      if (!runId || activeRunIdRef.current === runId) setSaveIndicator(error instanceof RevisionConflictError ? "conflict" : "offline");
+    }
+  };
 
   useEffect(() => {
     if (!configured) return;
-    const onOnline = async () => {
-      const persisted = await flushOutbox();
-      if (!persisted) return;
-      lastPersistedJsonRef.current = JSON.stringify(persisted.saveState);
-      setActiveRun({ id: persisted.id, teamId: persisted.teamId, revision: persisted.revision });
-      setSaveIndicator("saved");
+    const retry = () => { void syncAnswers(activeRunIdRef.current ?? undefined); };
+    const timer = window.setInterval(retry, 10000);
+    window.addEventListener("online", retry);
+    window.addEventListener("pagehide", retry);
+    retry();
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("online", retry);
+      window.removeEventListener("pagehide", retry);
     };
-    window.addEventListener("online", onOnline);
-    void onOnline();
-    return () => window.removeEventListener("online", onOnline);
   }, [configured]);
 
-  const patch = (next: Partial<GameSave>) => setSave((current) => {
-    if (next.stage && next.stage !== current.stage && activeRun) {
-      pendingEventsRef.current.push({ eventType: "stage_changed", stage: next.stage, payload: { from: current.stage, to: next.stage } });
+  const patch = (next: Partial<GameSave>) => {
+    const current = saveRef.current;
+    const merged = { ...current, ...next };
+    saveRef.current = merged;
+    setSave(merged);
+    if (!activeRun || completedRunRef.current === activeRun.id || ["menu", "overview", "team"].includes(merged.stage)) return;
+    const events = answerEvents(current, next);
+    try {
+      queueCheckpoint(activeRun, merged, events, merged.stage === "mission1Complete" || merged.stage === "summary");
+      setSaveIndicator("saving");
+    } catch {
+      setSaveIndicator("offline");
     }
-    if (next.studyFocus && next.studyFocus !== current.studyFocus) {
-      pendingEventsRef.current.push({ eventType: "study_focus_changed", stage: next.stage ?? current.stage, payload: { selected: Object.keys(next.studyFocus).filter((key) => next.studyFocus?.[key]) } });
-    }
-    if (next.inspectionFindings && next.inspectionFindings !== current.inspectionFindings) {
-      const latest = Object.entries(next.inspectionFindings).find(([damageId, cause]) => current.inspectionFindings[damageId] !== cause);
-      if (latest) pendingEventsRef.current.push({ eventType: "damage_finding_saved", stage: "inspection", payload: { damageId: latest[0], cause: latest[1] } });
-    }
-    if (next.routeEvents && next.routeEvents !== current.routeEvents) {
-      pendingEventsRef.current.push({ eventType: "route_event_tracked", stage: "mission", payload: { selected: Object.keys(next.routeEvents).filter((key) => next.routeEvents?.[key]) } });
-    }
-    if (next.compressionResults && next.compressionResults !== current.compressionResults) {
-      pendingEventsRef.current.push({ eventType: "compression_result_saved", stage: next.stage ?? current.stage, payload: { materials: Object.keys(next.compressionResults) } });
-    }
-    if (next.absorptionResults && next.absorptionResults !== current.absorptionResults) {
-      pendingEventsRef.current.push({ eventType: "absorption_result_saved", stage: next.stage ?? current.stage, payload: { materials: Object.keys(next.absorptionResults) } });
-    }
-    if (next.elasticityResults && next.elasticityResults !== current.elasticityResults) {
-      pendingEventsRef.current.push({ eventType: "elasticity_result_saved", stage: next.stage ?? current.stage, payload: { materials: Object.keys(next.elasticityResults) } });
-    }
-    if (next.predictions && next.predictions !== current.predictions) {
-      pendingEventsRef.current.push({ eventType: "material_prediction_changed", stage: next.stage ?? current.stage, payload: { selected: next.predictions } });
-    }
-    return { ...current, ...next };
-  });
+    // Durable queue is written synchronously above. Debounce only the network.
+    window.clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = window.setTimeout(() => { void syncAnswers(activeRun.id); }, 350);
+  };
   const go = (stage: Stage) => patch({ stage });
   const toggleAudio = () => {
     const nextAudio = !save.audio;
@@ -178,32 +255,43 @@ export function GameApp() {
   };
   const reset = () => {
     if (!configured) localStorage.removeItem(SAVE_KEY);
+    activeRunIdRef.current = null;
     setActiveRun(null);
     setSelectedTeam(null);
-    lastPersistedJsonRef.current = "";
     setSave(EMPTY_SAVE);
   };
   const leaveRunToTeams = () => {
+    activeRunIdRef.current = null;
     setActiveRun(null);
     setSelectedTeam(null);
-    lastPersistedJsonRef.current = "";
     setSave((current) => ({ ...current, stage: "team" }));
   };
   const openTeam = async (team: TeamOverview) => {
-    const run = await startOrResumeRun(team);
-    const serverState = { ...EMPTY_SAVE, ...run.saveState, team: team.members, stage: run.currentStage };
-    const restored = { ...serverState, stage: resumableStage(run.currentStage) };
+    // Finish/recover this team's durable queue before loading server state.
+    for (const queued of readOutbox().filter((item) => item.run.teamId === team.id)) await flushOutbox(queued.run.id);
+    const sessionMembers = attendingMembers(team.members);
+    if (!sessionMembers.length) throw new Error("เลือกสมาชิกที่มาเรียนอย่างน้อย 1 คน");
+    const attendingTeam = { ...team, members: sessionMembers };
+    const run = await startOrResumeRun(attendingTeam);
+    const exitTickets = reconcileExitTickets(run.saveState.team ?? [], sessionMembers, run.saveState.exitTickets ?? {});
+    const serverState = { ...EMPTY_SAVE, ...run.saveState, team: sessionMembers, exitTickets, stage: run.currentStage };
+    const restored = { ...serverState, stage: selectedMission === 2 ? "testHub" as const : resumableStage(run.currentStage) };
     setSelectedTeam(team);
+    activeRunIdRef.current = run.id;
     setActiveRun({ id: run.id, teamId: run.teamId, revision: run.revision });
-    lastPersistedJsonRef.current = JSON.stringify(serverState);
+    completedRunRef.current = null;
     markSupabaseCacheBound();
     setSave(restored);
-    setSaveIndicator("saved");
+    saveRef.current = restored;
+    queueCheckpoint({ id: run.id, teamId: run.teamId, revision: run.revision }, restored);
+    setSaveIndicator("saving");
+    void syncAnswers(run.id);
   };
   const createAndOpenTeam = async (name: string, members: TeamMember[]) => {
     const team = await createTeam(name, members);
     await openTeam(team);
   };
+  const updateExistingTeam = async (teamId: string, members: TeamMember[]) => updateTeamMembers(teamId, members);
   const importAndOpenTeam = async (name: string) => {
     const team = await importLegacyBundle(name, legacyBundle);
     markLegacyImported();
@@ -212,34 +300,34 @@ export function GameApp() {
   };
   const startNewAttempt = async () => {
     if (!configured || !selectedTeam) {
-      patch({ stage: "mission", runId: createRunId(), missionStudent: "", routeEvents: {}, inspectionFindings: {}, studyFocus: {}, exitTickets: {}, storyIndex: 0, inspectionIndex: 0, compressionIndex: 0, absorptionIndex: 0, elasticityIndex: 0, recapIndex: 0 });
+      patch({ ...EMPTY_SAVE, team: save.team, audio: save.audio, stage: "mission", runId: createRunId() });
       return;
     }
     const refreshed = (await listTeams()).find((team) => team.id === selectedTeam.id) ?? selectedTeam;
     await openTeam(refreshed);
   };
+  const openMission = (mission: MissionNumber) => {
+    setSelectedMission(mission);
+    go("team");
+  };
   const goBack = () => {
     if (labRoomsPaused) { go("exitTicket"); return; }
-    if (save.stage === "team") { go("menu"); return; }
+    if (save.stage === "overview") { go("menu"); return; }
+    if (save.stage === "team") { go("overview"); return; }
     if (save.stage === "mission") { leaveRunToTeams(); return; }
     if (save.stage === "story") {
       if (save.storyIndex > 0) patch({ storyIndex: save.storyIndex - 1 });
       else go("mission");
       return;
     }
-    if (save.stage === "inspection") {
-      if (save.inspectionIndex > 0) patch({ inspectionIndex: save.inspectionIndex - 1 });
-      else patch({ stage: "story", storyIndex: STORY.length - 1 });
-      return;
-    }
-    if (save.stage === "materials") { patch({ stage: "inspection", inspectionIndex: DAMAGES.length - 1 }); return; }
+    if (save.stage === "inspection") { patch({ stage: "story", storyIndex: STORY.length - 1 }); return; }
+    if (save.stage === "materials") { go("inspection"); return; }
     if (save.stage === "studyFocus") { go("materials"); return; }
     if (save.stage === "exitTicket") { go("studyFocus"); return; }
     if (save.stage === "testHub") { go("exitTicket"); return; }
     if (save.stage === "compression") { go("testHub"); return; }
-    if (save.stage === "absorption") { go("compression"); return; }
-    if (save.stage === "elasticity") { go("absorption"); return; }
-    if (save.stage === "recap") { go("elasticity"); return; }
+    if (save.stage === "absorption" || save.stage === "impact" || save.stage === "elasticity") { go("testHub"); return; }
+    if (save.stage === "recap") { go("testHub"); return; }
     if (save.stage === "prediction") { go(LAB_ROOMS_ENABLED ? "recap" : "exitTicket"); return; }
     if (save.stage === "summary") { go(PREDICTION_ENABLED ? "prediction" : "exitTicket"); }
   };
@@ -254,39 +342,44 @@ export function GameApp() {
         localStorage.setItem(STATS_KEY, JSON.stringify(records));
       }
     } catch { /* keep the game playable if browser storage is unavailable */ }
-    pendingEventsRef.current.push({ eventType: "exit_tickets_completed", stage: "exitTicket", payload: { completed: save.team.length } });
-    patch({ runId, exitTickets, stage: LAB_ROOMS_ENABLED ? "testHub" : PREDICTION_ENABLED ? "prediction" : "summary" });
+    playSound("10_idea_chime.ogg", save.audio);
+    patch({ runId, exitTickets, mission1Completed: true, stage: "mission1Complete" });
   };
-  const saveExitTicketDraft = (exitTickets: Record<string, ExitTicket>) => {
-    const completed = Object.values(exitTickets).filter(isStructuredExitTicketComplete).length;
-    pendingEventsRef.current.push({ eventType: "exit_ticket_saved", stage: "exitTicket", payload: { completed } });
+  const saveExitTicketDraft = (exitTickets: Record<string, ExitTicket>, exitTicketConfirmations: Record<string, ExitTicket>) => {
+    patch({ runId: save.runId || createRunId(), exitTickets, exitTicketConfirmations });
+  };
+  const persistExitTicketAnswers = (exitTickets: Record<string, ExitTicket>) => {
     patch({ runId: save.runId || createRunId(), exitTickets });
   };
   const labRoomsPaused = !LAB_ROOMS_ENABLED && DISABLED_LAB_STAGES.has(save.stage);
 
   if (!loaded) return <main className="loading-screen">กำลังเตรียมห้องทดลอง…</main>;
+  if (labPreview) return <LabPreview audio={save.audio} onClose={() => setLabPreview(false)} />;
 
   return (
     <main className="app-shell">
       <audio ref={bgmRef} className="game-bgm" src={asset("audio/happy_clappy_loop.ogg")} autoPlay loop muted={!save.audio} />
       <section className="game-frame" aria-live="polite">
-        {save.stage === "menu" && <MainMenu onStart={() => go("team")} />}
+        {save.stage === "menu" && <MainMenu onStart={() => go("overview")} onLabs={() => setLabPreview(true)} />}
+        {save.stage === "overview" && <MissionOverview mission2Unlocked={save.mission1Completed} mission1Answer={save.bigQuestionProgress.mission1} animateMission2Unlock={animateMission2Unlock} onUnlockAnimationDone={() => setAnimateMission2Unlock(false)} onBack={() => go("menu")} onSelect={openMission} />}
         {labRoomsPaused && <LabRoomsPaused onContinue={() => go(PREDICTION_ENABLED ? "prediction" : "summary")} />}
-        {!labRoomsPaused && save.stage === "team" && <TeamSetup initial={save.team} legacyBundle={legacyBundle} legacyAlreadyImported={wasLegacyImported()} onBack={() => go("menu")} onChoose={openTeam} onCreate={createAndOpenTeam} onImport={importAndOpenTeam} onLocalDone={(team) => patch({ team, runId: createRunId(), missionStudent: "", routeEvents: {}, inspectionFindings: {}, studyFocus: {}, exitTickets: {}, compressionResults: {}, absorptionResults: {}, elasticityResults: {}, stage: "mission", storyIndex: 0, inspectionIndex: 0 })} />}
-        {!labRoomsPaused && save.stage === "mission" && <MissionRoute onBack={reset} onDone={() => go("story")} />}
+        {!labRoomsPaused && save.stage === "team" && <TeamSetup initial={save.team} legacyBundle={legacyBundle} legacyAlreadyImported={wasLegacyImported()} onBack={() => go("overview")} onChoose={openTeam} onCreate={createAndOpenTeam} onUpdate={updateExistingTeam} onImport={importAndOpenTeam} onLocalDone={(team) => patch({ ...EMPTY_SAVE, team, audio: save.audio, runId: createRunId(), stage: selectedMission === 2 ? "testHub" : "mission" })} />}
+        {!labRoomsPaused && save.stage === "mission" && <MissionRoute onBack={reset} onDone={() => {
+          const firstScene = STORY[save.storyIndex] ?? STORY[0];
+          void playStorySound(STORY_SOUND_BY_IMAGE[firstScene[0]], save.audio).then(() => go("story"));
+        }} />}
         {!labRoomsPaused && save.stage === "story" && <ComicStory index={save.storyIndex} audio={save.audio} onIndex={(storyIndex) => patch({ storyIndex })} onDone={() => go("inspection")} />}
-        {!labRoomsPaused && save.stage === "inspection" && <DamageInspection index={save.inspectionIndex} findings={save.inspectionFindings} audio={save.audio} onFinding={(inspectionFindings) => patch({ inspectionFindings })} onIndex={(inspectionIndex) => patch({ inspectionIndex })} onDone={() => go("materials")} />}
-        {!labRoomsPaused && save.stage === "materials" && <MaterialGuide onBack={() => patch({ stage: "inspection", inspectionIndex: DAMAGES.length - 1 })} onDone={() => go("studyFocus")} />}
-        {!labRoomsPaused && save.stage === "studyFocus" && <StudyFocusScreen values={save.studyFocus} onBack={() => go("materials")} onChange={(studyFocus) => patch({ studyFocus })} onDone={() => go("exitTicket")} />}
-        {!labRoomsPaused && save.stage === "exitTicket" && <ExitTicketScreen team={save.team} initial={save.exitTickets} onBack={() => go("studyFocus")} onSaveDraft={saveExitTicketDraft} onDone={saveExitTickets} />}
-        {!labRoomsPaused && save.stage === "testHub" && <TestHub onStart={() => go("compression")} />}
-        {!labRoomsPaused && save.stage === "compression" && <CompressionLab save={save} onSave={(compressionResults, compressionIndex) => patch({ compressionResults, compressionIndex })} onDone={() => go("absorption")} />}
-        {!labRoomsPaused && save.stage === "absorption" && <AbsorptionLab save={save} onSave={(absorptionResults, absorptionIndex) => patch({ absorptionResults, absorptionIndex })} onDone={() => go("elasticity")} />}
-        {!labRoomsPaused && save.stage === "elasticity" && <ElasticityLab save={save} onSave={(elasticityResults, elasticityIndex) => patch({ elasticityResults, elasticityIndex })} onDone={() => go("recap")} />}
-        {!labRoomsPaused && save.stage === "recap" && <Recap index={save.recapIndex} onIndex={(recapIndex) => patch({ recapIndex })} onDone={() => go(PREDICTION_ENABLED ? "prediction" : "summary")} />}
+        {!labRoomsPaused && save.stage === "inspection" && <DamageInspection findings={save.inspectionFindings} audio={save.audio} onFinding={(inspectionFindings) => patch({ inspectionFindings })} onReset={() => patch({ inspectionFindings: {}, inspectionIndex: 0 })} onDone={() => go("materials")} />}
+        {!labRoomsPaused && save.stage === "materials" && <MaterialGuide onBack={() => go("inspection")} onDone={() => go("studyFocus")} />}
+        {!labRoomsPaused && save.stage === "studyFocus" && <StudyFocusScreen values={save.studyFocus} onBack={() => go("materials")} onChange={(studyFocus) => patch({ studyFocus })} onDone={() => patch({ stage: "exitTicket", bigQuestionProgress: { ...save.bigQuestionProgress, mission1: MISSION_ONE_BIG_QUESTION_PROGRESS } })} />}
+        {!labRoomsPaused && save.stage === "exitTicket" && <ExitTicketScreen key={save.runId} team={save.team} initial={save.exitTickets} confirmations={save.exitTicketConfirmations} onBack={() => go("studyFocus")} onAnswerChange={persistExitTicketAnswers} onSaveDraft={saveExitTicketDraft} onDone={saveExitTickets} />}
+        {!labRoomsPaused && save.stage === "mission1Complete" && <MissionOneComplete onHome={() => { setAnimateMission2Unlock(true); go("overview"); }} />}
+        {!labRoomsPaused && <LabScreens save={save} onPatch={patch} onBack={leaveRunToTeams} onComplete={() => patch({ stage: "recap", recapIndex: 0 })} />}
+        {!labRoomsPaused && save.stage === "recap" && <Recap index={save.recapIndex} answers={save.recapAnswers} onAnswer={(recapAnswers) => patch({ recapAnswers })} onIndex={(recapIndex) => patch({ recapIndex })} onDone={() => go(PREDICTION_ENABLED ? "prediction" : "summary")} />}
         {!labRoomsPaused && PREDICTION_ENABLED && save.stage === "prediction" && <Prediction labsEnabled={LAB_ROOMS_ENABLED} values={save.predictions} compressionResults={save.compressionResults} absorptionResults={save.absorptionResults} elasticityResults={save.elasticityResults} onChange={(predictions) => patch({ predictions })} onDone={() => go("summary")} />}
         {!labRoomsPaused && save.stage === "summary" && <Summary save={save} onReplay={() => void startNewAttempt()} onReset={reset} />}
         {(save.stage === "story" || save.stage === "inspection") && <button className="back-nav-button" onClick={(event) => { event.stopPropagation(); goBack(); }}>‹ ย้อนกลับ</button>}
+        {MISSION_ONE_PHASES[save.stage] && <MissionOneProgress stage={save.stage} />}
         <button className="global-audio-button" aria-label={save.audio ? "ปิดเสียงเพลง" : "เปิดเสียงเพลง"} aria-pressed={save.audio} onClick={(event) => { event.stopPropagation(); toggleAudio(); }}>{save.audio ? "🔊" : "🔇"}</button>
         {configured && activeRun && <SaveStatusBadge status={saveIndicator} />}
       </section>
@@ -294,20 +387,76 @@ export function GameApp() {
   );
 }
 
-function MainMenu({ onStart }: { onStart: () => void }) {
+function MissionOneProgress({ stage }: { stage: Stage }) {
+  const phase = MISSION_ONE_PHASES[stage];
+  const [expanded, setExpanded] = useState(true);
+  useEffect(() => {
+    if (!expanded) return;
+    const timer = window.setTimeout(() => setExpanded(false), 3800);
+    return () => window.clearTimeout(timer);
+  }, [expanded, stage]);
+
+  if (!phase) return null;
+  const percent = Math.round((phase.step / 7) * 100);
+  return (
+    <aside className={`mission-one-progress mission-one-progress-${stage} ${expanded ? "is-expanded" : "is-collapsed"}`} role="status" aria-label={`ภารกิจที่ 1 ช่วงที่ ${phase.step} จาก 7 ${phase.label}`}>
+      {expanded ? <div className="mission-one-progress-details">
+        <div className="mission-one-progress-heading"><span>ภารกิจที่ 1</span><b>ช่วงที่ {phase.step}/7</b></div>
+        <strong><span aria-hidden="true">{phase.icon}</span>{phase.label}</strong>
+        <div className="mission-one-progress-track" role="progressbar" aria-label="ความคืบหน้าภารกิจที่ 1" aria-valuemin={1} aria-valuemax={7} aria-valuenow={phase.step}>
+          <i style={{ width: `${percent}%` }} />
+        </div>
+      </div> : <button className="mission-one-progress-toggle" type="button" aria-label={`เปิดดูความคืบหน้า ช่วงที่ ${phase.step} จาก 7`} onClick={() => setExpanded(true)}>
+        <span aria-hidden="true">•••</span>
+      </button>}
+    </aside>
+  );
+}
+
+function MainMenu({ onStart, onLabs }: { onStart: () => void; onLabs: () => void }) {
   return (
     <div className="screen menu-screen">
-      <img className="menu-cover" src={asset("menu/cover.png")} alt="เด็ก ๆ กำลังออกแบบกล่องในห้องประดิษฐ์" />
+      <img className="menu-cover" src={asset("menu/cover-labs.png")} alt="เด็ก ๆ กำลังออกแบบกล่องในห้องประดิษฐ์" />
       <div className="menu-glass">
         <p className="menu-kicker">ภารกิจนักออกแบบ</p>
         <h1>กล่องแกร่ง</h1>
-        <p>คิด · ทดลอง · สร้างให้แกร่ง!</p>
+        <p>คิด ทดลอง สร้างให้แกร่ง!</p>
         <button className="button button-orange menu-play" onClick={onStart}><span>▶</span> เริ่มภารกิจ</button>
         <a className="teacher-entry-link" href={`${BASE_PATH}/teacher/`}>▣ Dashboard สำหรับครู</a>
       </div>
     </div>
   );
 }
+
+function MissionOneComplete({ onHome }: { onHome: () => void }) {
+  return (
+    <div className="screen mission-complete-screen">
+      <div className="mission-complete-rays" aria-hidden="true" />
+      <div className="mission-complete-confetti" aria-hidden="true">
+        {Array.from({ length: 18 }, (_, index) => <i key={index} />)}
+      </div>
+      <section className="mission-complete-card" aria-labelledby="mission-complete-title">
+        <span className="mission-complete-pill">✓ ภารกิจที่ 1 สำเร็จ</span>
+        <div className="mission-complete-mascot-wrap" aria-hidden="true">
+          <span>★</span><span>✦</span>
+          <div className="mission-complete-mascot" style={{ backgroundImage: `url(${asset("mascot/parcel-guide-sprite.png")})` }} />
+        </div>
+        <p className="mission-complete-kicker">เก่งมาก นักสืบกล่องพัสดุ!</p>
+        <h1 id="mission-complete-title">ทำภารกิจที่ 1 เสร็จแล้ว</h1>
+        <p className="mission-complete-copy">ทุกคนสืบร่องรอยความเสียหาย สำรวจวัสดุ และตอบคำถามครบแล้ว</p>
+        <div className="mission-complete-reward">
+          <span aria-hidden="true">🔓</span>
+          <div><b>รางวัลใหม่กำลังรออยู่</b><small>กลับไปที่หน้าภารกิจเพื่อปลดล็อกภารกิจที่ 2</small></div>
+        </div>
+        <button className="button button-orange mission-complete-home" type="button" onClick={onHome}>
+          กลับหน้าภารกิจ <span aria-hidden="true">›</span>
+        </button>
+      </section>
+    </div>
+  );
+}
+
+type RosterDraftMember = TeamMember & { draftKey: string; present: boolean };
 
 function TeamSetup({
   initial,
@@ -316,6 +465,7 @@ function TeamSetup({
   onBack,
   onChoose,
   onCreate,
+  onUpdate,
   onImport,
   onLocalDone,
 }: {
@@ -325,6 +475,7 @@ function TeamSetup({
   onBack: () => void;
   onChoose: (team: TeamOverview) => Promise<void>;
   onCreate: (name: string, team: TeamMember[]) => Promise<void>;
+  onUpdate: (teamId: string, team: TeamMember[]) => Promise<TeamOverview>;
   onImport: (name: string) => Promise<void>;
   onLocalDone: (team: TeamMember[]) => void;
 }) {
@@ -335,6 +486,9 @@ function TeamSetup({
   const [mode, setMode] = useState<"existing" | "create">(isSupabaseConfigured() ? "existing" : "create");
   const [teams, setTeams] = useState<TeamOverview[]>([]);
   const [historyTeam, setHistoryTeam] = useState<TeamOverview | null>(null);
+  const [editingTeam, setEditingTeam] = useState<TeamOverview | null>(null);
+  const [rosterDraft, setRosterDraft] = useState<RosterDraftMember[]>([]);
+  const [attendance, setAttendance] = useState<Record<string, Record<string, boolean>>>({});
   const [loading, setLoading] = useState(isSupabaseConfigured());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -342,6 +496,47 @@ function TeamSetup({
   const validation = validateTeamDraft(teamName, members, configured);
   const valid = validation.valid;
   const update = (index: number, next: Partial<TeamMember>) => setMembers((current) => current.map((m, i) => i === index ? { ...m, ...next } : m));
+  const attendanceKey = (member: TeamMember) => member.id ?? `${member.name}|${member.avatar}`;
+  const isPresent = (teamId: string, member: TeamMember) => attendance[teamId]?.[attendanceKey(member)] !== false;
+  const openRosterEditor = (team: TeamOverview) => {
+    setError("");
+    setEditingTeam(team);
+    setRosterDraft(team.members.map((member, index) => ({
+      ...member,
+      draftKey: member.id ?? `member-${index}-${Date.now()}`,
+      present: isPresent(team.id, member),
+    })));
+  };
+  const updateRosterDraft = (draftKey: string, next: Partial<RosterDraftMember>) => setRosterDraft((current) => current.map((member) => member.draftKey === draftKey ? { ...member, ...next } : member));
+  const rosterMembers = rosterDraft.map(({ draftKey: _draftKey, present: _present, ...member }, position) => ({ ...member, position }));
+  const rosterValidation = validateTeamDraft(editingTeam?.name ?? "", rosterMembers, true);
+  const rosterChanged = Boolean(editingTeam) && JSON.stringify(rosterMembers.map(({ id, name, avatar }) => ({ id, name: name.trim(), avatar }))) !== JSON.stringify(editingTeam?.members.map(({ id, name, avatar }) => ({ id, name, avatar })));
+  const addRosterMember = () => {
+    const avatar = AVATARS.find((item) => !rosterDraft.some((member) => member.avatar === item));
+    if (!avatar || rosterDraft.length >= 7) return;
+    setRosterDraft((current) => [...current, { draftKey: `new-${Date.now()}`, name: "", avatar, present: true }]);
+  };
+  const saveRosterEditor = async () => {
+    if (!editingTeam || !rosterValidation.valid || !rosterDraft.some((member) => member.present)) return;
+    setBusy(true);
+    setError("");
+    try {
+      const savedTeam = rosterChanged ? await onUpdate(editingTeam.id, rosterMembers) : editingTeam;
+      const nextAttendance: Record<string, boolean> = {};
+      savedTeam.members.forEach((member) => {
+        const draft = rosterDraft.find((item) => item.id === member.id)
+          ?? rosterDraft.find((item) => item.name.trim() === member.name && item.avatar === member.avatar);
+        nextAttendance[attendanceKey(member)] = draft?.present !== false;
+      });
+      setAttendance((current) => ({ ...current, [editingTeam.id]: nextAttendance }));
+      if (rosterChanged) await refresh();
+      setEditingTeam(null);
+    } catch (nextError) {
+      setError(userFacingError(nextError, "บันทึกรายชื่อสมาชิกไม่สำเร็จ"));
+    } finally {
+      setBusy(false);
+    }
+  };
   const refresh = async () => {
     if (!configured) return;
     setLoading(true);
@@ -364,7 +559,7 @@ function TeamSetup({
     <div className={`screen team-screen${configured && mode === "create" ? " team-create-screen" : ""}`}>
       <img className="soft-bg" src={asset("menu/cover.png")} alt="" />
       <header className="team-header">
-        <button className="button button-yellow compact" onClick={onBack}>กลับหน้าปก</button>
+        <button className="button button-yellow compact" disabled={busy} onClick={onBack}>‹ กลับหน้าภารกิจ</button>
         <div><h1>เลือกทีมออกแบบกล่อง</h1><p>ทำภารกิจต่อจากเดิม หรือสร้างทีมใหม่ด้วยชื่อเล่นเท่านั้น</p></div>
         <div className="count-badge">{configured ? `${teams.length} ทีม` : "Local"}</div>
       </header>
@@ -385,15 +580,21 @@ function TeamSetup({
           {teams.map((team) => {
             const active = team.activeRun;
             const run = active ?? team.completedRuns[0];
+            const findingCount = Object.keys(run?.saveState.inspectionFindings ?? {}).length;
+            const presentCount = team.members.filter((member) => isPresent(team.id, member)).length;
+            const sessionTeam = { ...team, members: team.members.map((member) => ({ ...member, present: isPresent(team.id, member) })) };
             return <article className="existing-team-card" key={team.id}>
-              <header><div className="team-avatar-stack">{team.members.slice(0, 4).map((member) => <img key={member.id ?? member.name} src={asset(`profiles/${member.avatar}.png`)} alt="" />)}</div><span className={active ? "status-active" : "status-ready"}>{active ? "กำลังทำ" : "พร้อมเริ่ม"}</span></header>
+              <header><div className="team-avatar-stack">{team.members.slice(0, 4).map((member) => <img className={isPresent(team.id, member) ? "" : "is-absent"} key={member.id ?? member.name} src={asset(`profiles/${member.avatar}.png`)} alt="" />)}</div><span className={active ? "status-active" : "status-ready"}>{active ? "กำลังทำ" : "พร้อมเริ่ม"}</span></header>
               <h2>{team.name}</h2>
               <p>{team.members.map((member) => member.name).join(" · ")}</p>
+              <div className="team-attendance-summary"><b>มาเรียน {presentCount}/{team.members.length} คน</b><span>{presentCount === team.members.length ? "มาครบ" : `ขาด ${team.members.length - presentCount} คน`}</span></div>
               <div className="team-card-progress"><i style={{ width: `${run ? stageProgress(run.currentStage) : 0}%` }} /></div>
               <small>{run ? `${STAGE_LABELS[run.currentStage]} · อัปเดต ${new Date(run.updatedAt).toLocaleString("th-TH")}` : "ยังไม่เคยทำภารกิจ"}</small>
+              {run && <small className="team-card-answer-summary">คำตอบจากกล่อง 3 มิติ {findingCount}/{DAMAGES.length} ร่องรอย</small>}
               <footer>
-                <button className="history-button" disabled={!team.completedRuns.length} onClick={() => setHistoryTeam(team)}>ดูประวัติ ({team.completedRuns.length})</button>
-                <button className="resume-button" disabled={busy} onClick={() => void runAction(() => onChoose(team))}>{active ? "▶ ทำภารกิจต่อ" : "เริ่มภารกิจใหม่"}</button>
+                <button className="manage-team-button" disabled={busy} onClick={() => openRosterEditor(team)}>⚙ จัดการสมาชิก</button>
+                <button className="history-button" disabled={!team.runs.length} onClick={() => setHistoryTeam(team)}>ดูคำตอบ ({team.runs.length})</button>
+                <button className="resume-button" disabled={busy || presentCount === 0} onClick={() => void runAction(() => onChoose(sessionTeam))}>{active ? "▶ ทำภารกิจต่อ" : "เริ่มภารกิจใหม่"}</button>
               </footer>
             </article>;
           })}
@@ -419,22 +620,62 @@ function TeamSetup({
           <button className="button button-orange" disabled={!valid || busy || (configured && !teamName.trim())} onClick={() => configured ? void runAction(() => onCreate(teamName.trim(), members)) : onLocalDone(members)}>ทีมพร้อมแล้ว</button>
         </footer>
       </>}
+
+      {editingTeam && (
+        <div className="team-editor-backdrop" role="presentation" onClick={() => !busy && setEditingTeam(null)}>
+          <section className="team-editor-modal" role="dialog" aria-modal="true" aria-labelledby="team-editor-title" onClick={(event) => event.stopPropagation()}>
+            <header>
+              <div><span>👥 ทีมเดิม</span><h2 id="team-editor-title">จัดการสมาชิก · {editingTeam.name}</h2><p>แก้ไขสมาชิก 6–7 คน และเลือกผู้ที่มาเรียนวันนี้</p></div>
+              <button type="button" aria-label="ปิดหน้าจัดการสมาชิก" disabled={busy} onClick={() => setEditingTeam(null)}>×</button>
+            </header>
+            {editingTeam.activeRun && <div className="team-editor-notice">แก้ไขรายชื่อได้เลย คำตอบที่บันทึกไว้ของสมาชิกเดิมจะยังอยู่</div>}
+            {error && <div className="team-editor-error" role="alert">{error}</div>}
+            <div className="team-editor-list">
+              {rosterDraft.map((member, index) => (
+                <article className={member.present ? "is-present" : "is-absent"} key={member.draftKey}>
+                  <strong>{index + 1}</strong>
+                  <label className="team-editor-avatar">
+                    <img src={asset(`profiles/${member.avatar}.png`)} alt="" />
+                    <select aria-label={`ตัวละครของ ${member.name || `สมาชิก ${index + 1}`}`} value={member.avatar} disabled={busy} onChange={(event) => updateRosterDraft(member.draftKey, { avatar: event.target.value })}>
+                      {AVATARS.map((avatar) => <option key={avatar} value={avatar} disabled={rosterDraft.some((item) => item.draftKey !== member.draftKey && item.avatar === avatar)}>{avatar.replace("inventor_", "นักประดิษฐ์ ")}</option>)}
+                    </select>
+                  </label>
+                  <label className="team-editor-name"><span>ชื่อเล่น</span><input maxLength={20} value={member.name} disabled={busy} onChange={(event) => updateRosterDraft(member.draftKey, { name: event.target.value })} /></label>
+                  <button type="button" className={`attendance-toggle ${member.present ? "present" : "absent"}`} aria-pressed={member.present} disabled={busy} onClick={() => updateRosterDraft(member.draftKey, { present: !member.present })}><i>{member.present ? "✓" : "×"}</i><span>{member.present ? "มาเรียน" : "ไม่มา"}</span></button>
+                  <button type="button" className="remove-roster-member" aria-label={`ลบ ${member.name || `สมาชิก ${index + 1}`}`} disabled={busy || rosterDraft.length <= 6} onClick={() => setRosterDraft((current) => current.filter((item) => item.draftKey !== member.draftKey))}>🗑 ลบ</button>
+                </article>
+              ))}
+            </div>
+            <footer>
+              <div>
+                <button type="button" className="add-roster-member" disabled={busy || rosterDraft.length >= 7} onClick={addRosterMember}>＋ เพิ่มสมาชิก</button>
+                <small>ทีมต้องมี 6–7 คน ผู้ที่เลือก “ไม่มา” จะไม่แสดงในหน้าคำถาม</small>
+              </div>
+              <span className={rosterValidation.valid && rosterDraft.some((member) => member.present) ? "valid" : "invalid"}>{!rosterDraft.some((member) => member.present) ? "เลือกคนที่มาอย่างน้อย 1 คน" : rosterValidation.message}</span>
+              <button type="button" className="button button-orange" disabled={busy || !rosterValidation.valid || !rosterDraft.some((member) => member.present)} onClick={() => void saveRosterEditor()}>{busy ? "กำลังบันทึก…" : "บันทึกและใช้รายชื่อนี้"}</button>
+            </footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
 
 function TeamHistory({ team, onBack }: { team: TeamOverview; onBack: () => void }) {
-  const [selectedRunId, setSelectedRunId] = useState(team.completedRuns[0]?.id ?? "");
-  const run = team.completedRuns.find((item) => item.id === selectedRunId) ?? team.completedRuns[0];
+  const [selectedRunId, setSelectedRunId] = useState(team.runs[0]?.id ?? "");
+  const run = team.runs.find((item) => item.id === selectedRunId) ?? team.runs[0];
+  const runMembers = run?.saveState.team?.length ? run.saveState.team : team.members;
   return <div className="screen team-history-screen">
-    <header><button className="button button-yellow compact" onClick={onBack}>‹ กลับไปเลือกทีม</button><div><span>ประวัติย้อนหลัง</span><h1>{team.name}</h1></div></header>
+    <header><button className="button button-yellow compact" onClick={onBack}>‹ กลับไปเลือกทีม</button><div><span>คำตอบและประวัติทีม</span><h1>{team.name}</h1></div></header>
     <div className="team-history-layout">
-      <aside>{team.completedRuns.map((item, index) => <button className={item.id === run?.id ? "active" : ""} key={item.id} onClick={() => setSelectedRunId(item.id)}><b>ภารกิจครั้งที่ {team.completedRuns.length - index}</b><span>{new Date(item.completedAt ?? item.updatedAt).toLocaleString("th-TH")}</span></button>)}</aside>
+      <aside>{team.runs.map((item, index) => <button className={item.id === run?.id ? "active" : ""} key={item.id} onClick={() => setSelectedRunId(item.id)}><b>{item.status === "in_progress" ? "รอบที่กำลังทำ" : `ภารกิจครั้งที่ ${team.runs.length - index}`}</b><span>{new Date(item.completedAt ?? item.updatedAt).toLocaleString("th-TH")}</span></button>)}</aside>
       <section>{run ? <>
-        <div className="history-summary"><div><span>สถานะ</span><b>ทำภารกิจสำเร็จ</b></div><div><span>ขั้นสุดท้าย</span><b>{STAGE_LABELS[run.currentStage]}</b></div><div><span>สมาชิก</span><b>{team.members.length} คน</b></div></div>
-        <h2>สิ่งที่ทีมเลือกศึกษา</h2><div className="history-chip-list">{Object.entries(run.saveState.studyFocus ?? {}).filter(([, value]) => value).map(([key]) => <span key={key}>{key}</span>)}</div>
-        <h2>คำตอบรายบุคคล</h2><div className="history-response-grid">{team.members.map((member, index) => { const ticket = run.saveState.exitTickets?.[`student-${index}`] ?? run.saveState.exitTickets?.[member.name]; return <article key={member.id ?? member.name}><b>{member.name}</b>{ticket ? <><p><i>K</i>{ticket.k || "-"}</p><p><i>P</i>{ticket.p || "-"}</p><p><i>V</i>{ticket.v || "-"}</p></> : <span>ไม่มีคำตอบที่บันทึกไว้</span>}</article>; })}</div>
-      </> : <div className="team-list-state">ยังไม่มีประวัติที่ทำเสร็จ</div>}</section>
+        <div className="history-summary"><div><span>สถานะ</span><b>{run.status === "in_progress" ? "กำลังทำภารกิจ" : "ทำภารกิจสำเร็จ"}</b></div><div><span>ขั้นล่าสุด</span><b>{STAGE_LABELS[run.currentStage]}</b></div><div><span>สมาชิก</span><b>{runMembers.length} คน</b></div></div>
+        <h2>คำตอบจากหน้าหมุนกล่อง 3 มิติ</h2><div className="history-chip-list history-inspection-list">{Object.entries(run.saveState.inspectionFindings ?? {}).map(([damageId, cause]) => <span key={damageId}>{DAMAGES.find((damage) => damage.id === damageId)?.label ?? damageId} → {cause}</span>)}{!Object.keys(run.saveState.inspectionFindings ?? {}).length && <em>ยังไม่มีคำตอบ</em>}</div>
+        <h2>สิ่งที่ทีมเลือกศึกษา</h2><div className="history-chip-list">{Object.entries(run.saveState.studyFocus ?? {}).filter(([, value]) => value).map(([key]) => <span key={key}>{studyTopicLabel(key)}</span>)}{!Object.values(run.saveState.studyFocus ?? {}).some(Boolean) && <em>ยังไม่ได้เลือก</em>}</div>
+        <h2>คำตอบรายบุคคล</h2><div className="history-response-grid">{runMembers.map((member, index) => { const legacyKey = `student-${member.position ?? index}`; const ticket = run.saveState.exitTickets?.[exitTicketKey(member, index)] ?? run.saveState.exitTickets?.[legacyKey] ?? run.saveState.exitTickets?.[member.name]; return <article key={member.id ?? member.name}><b>{member.name}</b>{ticket ? <><p><i>K</i>{ticket.k || "-"}</p><p><i>P</i>{ticket.p || "-"}</p><p><i>V</i>{ticket.v || "-"}</p></> : <span>ไม่มีคำตอบที่บันทึกไว้</span>}</article>; })}</div>
+        {Object.keys(run.saveState.recapAnswers ?? {}).length > 0 && <><h2>คำตอบแบบทบทวนหลังการทดลอง</h2><div className="history-recap-list">{Object.entries(run.saveState.recapAnswers).map(([questionIndex, choices]) => { const item = RECAP[Number(questionIndex)]; return <article key={questionIndex}><b>{item?.question ?? `คำถามที่ ${Number(questionIndex) + 1}`}</b><span>{choices.map((choice) => item?.choices[choice] ?? `ตัวเลือก ${choice + 1}`).join(" → ")}</span></article>; })}</div></>}
+      </> : <div className="team-list-state">ยังไม่มีรอบภารกิจ</div>}</section>
     </div>
   </div>;
 }
@@ -443,24 +684,25 @@ function SaveStatusBadge({ status }: { status: SaveIndicator }) {
   const labels: Record<SaveIndicator, string> = {
     idle: "พร้อมบันทึก",
     saving: "กำลังบันทึก…",
-    saved: "✓ บันทึกแล้ว",
-    offline: "รอเชื่อมต่อ",
-    conflict: "โหลดข้อมูลล่าสุดแล้ว",
+    saved: "✓ บันทึกในฐานข้อมูลแล้ว",
+    offline: "ยังส่งไม่สำเร็จ · รอลองใหม่",
+    conflict: "ข้อมูลชนกับอีกเครื่อง · เก็บคำตอบรอไว้",
   };
   return <div className={`save-status-badge ${status}`} role="status">{labels[status]}</div>;
 }
 
 function MissionRoute({ onBack, onDone }: { onBack: () => void; onDone: () => void }) {
+  useEffect(() => preloadStorySounds(), []);
   return (
     <div className="screen mission-route-screen mission-briefing-screen">
       <img className="mission-route-bg" src={asset("menu/cover.png")} alt="" />
       <button className="mission-briefing-back" type="button" onClick={onBack}>‹ กลับหน้าปก</button>
       <main className="mission-briefing-card">
         <div className="mission-briefing-illustration" aria-hidden="true">
-          <span className="mission-briefing-box">📦</span>
+          <img className="mission-briefing-box" src={asset("menu/mission-briefing-box.png")} alt="" />
           <span className="mission-briefing-search">🔎</span>
         </div>
-        <h1>ภารกิจนักสืบพัสดุ</h1>
+        <h1>ภารกิจนักสืบกล่องพัสดุ</h1>
         <p className="mission-briefing-copy">ติดตามเส้นทางของกล่อง แล้วค้นหาว่าเกิดความเสียหายอะไรขึ้นบ้าง</p>
         <button className="button button-orange mission-briefing-start" type="button" onClick={onDone}>
           เริ่มติดตามพัสดุ
@@ -471,28 +713,119 @@ function MissionRoute({ onBack, onDone }: { onBack: () => void; onDone: () => vo
   );
 }
 
+const TALKING_FACE_POSITIONS: Record<string, string> = {
+  attentive: "50% 0%",
+  focused: "0% 0%",
+  excited: "100% 100%",
+  worried: "50% 100%",
+  strained: "0% 50%",
+  shocked: "0% 50%",
+  relieved: "0% 0%",
+  sad: "0% 50%",
+  encouraging: "100% 0%",
+};
+
 function ComicStory({ index, audio, onIndex, onDone }: { index: number; audio: boolean; onIndex: (n: number) => void; onDone: () => void }) {
   const scene = STORY[index];
-  const effects: Record<string, string> = {
-    "shot_01_sender_packs.png": "01_paper_wrap.ogg",
-    "shot_02_sender_seals.png": "02_tape_seal.ogg",
-    "shot_03_rider_departure.png": "03_scooter_move.ogg",
-    "shot_04_rain_damage.png": "04_rain.ogg",
-    "shot_05_stack_pressure.png": "05_conveyor_pressure.ogg",
-    "shot_06_corner_impact.png": "06_box_impact.ogg",
-    "shot_07_friction_tear.png": "07_paper_friction.ogg",
-    "shot_08_receiver_gets_box.png": "08_handoff.ogg",
-    "shot_09_cracked_cup.png": "09_unpack.ogg",
-    "shot_10_team_mission.png": "10_idea_chime.ogg",
-  };
+  const [typedNarration, setTypedNarration] = useState("");
+  const [talking, setTalking] = useState(false);
+  const [alternateFace, setAlternateFace] = useState(false);
+  const typingTimerRef = useRef<number | null>(null);
+  const typingRunRef = useRef(0);
+  const advancingRef = useRef(false);
+
+  useEffect(() => {
+    const soundName = STORY_SOUND_BY_IMAGE[scene[0]];
+    if (!audio) stopStorySound();
+    else if (activeStorySoundName !== soundName) void playStorySound(soundName, true);
+  }, [audio, scene]);
+
+  useEffect(() => () => stopStorySound(), []);
+
+  useEffect(() => {
+    advancingRef.current = false;
+  }, [index]);
+
+  useEffect(() => {
+    const runId = typingRunRef.current + 1;
+    typingRunRef.current = runId;
+    const narrationGlyphs = Array.from(scene[1]);
+    let narrationIndex = 0;
+    let cancelled = false;
+    let timer = 0;
+    const schedule = (callback: () => void, delay: number) => {
+      timer = window.setTimeout(callback, delay);
+      typingTimerRef.current = timer;
+    };
+
+    setTypedNarration("");
+    setTalking(true);
+
+    const typeNarration = () => {
+      if (cancelled || typingRunRef.current !== runId) return;
+      narrationIndex += 1;
+      setTypedNarration(narrationGlyphs.slice(0, narrationIndex).join(""));
+      if (narrationIndex < narrationGlyphs.length) schedule(typeNarration, 30);
+      else {
+        typingTimerRef.current = null;
+        setTalking(false);
+      }
+    };
+
+    schedule(typeNarration, 420);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      if (typingTimerRef.current === timer) typingTimerRef.current = null;
+    };
+  }, [index, scene]);
+
+  useEffect(() => {
+    if (!talking) {
+      setAlternateFace(false);
+      return;
+    }
+    const timer = window.setInterval(() => setAlternateFace((current) => !current), 260);
+    return () => window.clearInterval(timer);
+  }, [talking]);
+
+  const textComplete = typedNarration === scene[1];
+  const mascotPosition = alternateFace ? TALKING_FACE_POSITIONS[scene[3]] ?? scene[4] : scene[4];
   const next = () => {
-    playSound(effects[scene[0]], audio);
-    if (index >= STORY.length - 1) onDone(); else onIndex(index + 1);
+    if (advancingRef.current) return;
+    if (!textComplete) {
+      typingRunRef.current += 1;
+      if (typingTimerRef.current !== null) window.clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+      setTypedNarration(scene[1]);
+      setTalking(false);
+      return;
+    }
+    if (index >= STORY.length - 1) {
+      stopStorySound();
+      onDone();
+      return;
+    }
+    advancingRef.current = true;
+    const nextIndex = index + 1;
+    const nextScene = STORY[nextIndex];
+    void playStorySound(STORY_SOUND_BY_IMAGE[nextScene[0]], audio).then(() => onIndex(nextIndex));
   };
   return (
     <div className="screen comic-screen" onClick={next} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") next(); }}>
       <img className="comic-image" src={asset(`cutscene/${scene[0]}`)} alt={scene[1]} />
       <div className="comic-progress">{index + 1} / {STORY.length}</div>
+      <section key={scene[0]} className={`comic-narrator comic-narrator-${scene[3]} ${talking ? "is-talking" : "is-finished"}`} aria-label={`คำอธิบายสถานการณ์ที่ ${index + 1}: ${scene[1]}`}>
+        <div
+          className="comic-mascot-sprite"
+          style={{ backgroundImage: `url(${asset("mascot/parcel-guide-sprite.png")})`, backgroundPosition: mascotPosition }}
+          aria-hidden="true"
+        />
+        <div className="comic-speech-bubble" aria-hidden="true">
+          <span className="comic-speaker"><b aria-hidden="true">●</b> สถานการณ์ {index + 1}</span>
+          <p className={talking && typedNarration !== scene[1] ? "is-typing" : ""}>{typedNarration}</p>
+        </div>
+      </section>
       <button className="comic-next-button" onClick={(event) => { event.stopPropagation(); next(); }} aria-label="ไปฉากถัดไป">
         <span>{index >= STORY.length - 1 ? "เริ่มสำรวจ" : "ถัดไป"}</span>
         <b aria-hidden="true">
@@ -503,16 +836,17 @@ function ComicStory({ index, audio, onIndex, onDone }: { index: number; audio: b
   );
 }
 
-function DamageInspection({ index, findings, audio, onFinding, onIndex, onDone }: { index: number; findings: Record<string, DamageCause>; audio: boolean; onFinding: (findings: Record<string, DamageCause>) => void; onIndex: (n: number) => void; onDone: () => void }) {
+function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { findings: Record<string, DamageCause>; audio: boolean; onFinding: (findings: Record<string, DamageCause>) => void; onReset: () => void; onDone: () => void }) {
   type ViewerMaterial = { name: string; pbrMetallicRoughness: { setBaseColorFactor: (color: string | number[]) => void } };
   type ViewerElement = HTMLElement & { model?: { materials: ViewerMaterial[] } };
 
-  const defaultHint = "ลากเพื่อหมุนกล่อง แล้วแตะบริเวณที่คิดว่าถูก";
-  const [hint, setHint] = useState(defaultHint);
   const [ready, setReady] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
-  const [located, setLocated] = useState(false);
+  const [discoveredIds, setDiscoveredIds] = useState<string[]>(() => DAMAGES.filter((damage) => Boolean(findings[damage.id])).map((damage) => damage.id));
+  const [activeDamageId, setActiveDamageId] = useState<string | null>(null);
+  const [celebrating, setCelebrating] = useState(false);
   const viewerRef = useRef<ViewerElement | null>(null);
+  const celebrationTimerRef = useRef<number | null>(null);
   useEffect(() => { void import("@google/model-viewer").then(() => setReady(true)); }, []);
   useEffect(() => {
     if (!ready || !viewerRef.current) return;
@@ -532,33 +866,61 @@ function DamageInspection({ index, findings, audio, onFinding, onIndex, onDone }
     return () => viewer.removeEventListener("load", finishLoading);
   }, [ready]);
   useEffect(() => {
-    const saved = Boolean(findings[DAMAGES[index].id]);
-    setHint(saved ? "บันทึกข้อสังเกตจุดนี้แล้ว สามารถเปลี่ยนคำตอบหรือไปจุดถัดไปได้" : defaultHint);
-    setLocated(saved);
-  }, [findings, index]);
-  const locateDamage = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setDiscoveredIds((current) => {
+      const savedIds = DAMAGES.filter((damage) => Boolean(findings[damage.id])).map((damage) => damage.id);
+      const missingIds = savedIds.filter((id) => !current.includes(id));
+      return missingIds.length ? [...current, ...missingIds] : current;
+    });
+  }, [findings]);
+  useEffect(() => () => {
+    if (celebrationTimerRef.current !== null) window.clearTimeout(celebrationTimerRef.current);
+  }, []);
+  const celebrate = () => {
+    setCelebrating(false);
+    if (celebrationTimerRef.current !== null) window.clearTimeout(celebrationTimerRef.current);
+    window.requestAnimationFrame(() => setCelebrating(true));
+    celebrationTimerRef.current = window.setTimeout(() => setCelebrating(false), 1350);
+  };
+  const activeDamage = DAMAGES.find((damage) => damage.id === activeDamageId) ?? null;
+  const selectedCause = activeDamage ? findings[activeDamage.id] : undefined;
+  const answerRequired = Boolean(activeDamage && !selectedCause);
+  const locateDamage = (damageId: string, event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    setLocated(true);
-    setHint(`พบ${DAMAGES[index].evidence}แล้ว เลือกสาเหตุที่คาดว่าเกี่ยวข้อง`);
-    playSound("10_idea_chime.ogg", audio);
+    if (answerRequired && damageId !== activeDamageId) return;
+    const isNew = !discoveredIds.includes(damageId);
+    setActiveDamageId(damageId);
+    if (isNew) {
+      setDiscoveredIds((current) => [...current, damageId]);
+      celebrate();
+      playSound("10_idea_chime.ogg", audio);
+    }
   };
-  const damage = DAMAGES[index];
-  const selectedCause = findings[damage.id];
+  const completedCount = DAMAGES.filter((damage) => Boolean(findings[damage.id])).length;
   const saveCause = (cause: DamageCause) => {
-    onFinding({ ...findings, [damage.id]: cause });
-    setHint(`บันทึกแล้ว: ${damage.evidence} คาดว่าเกี่ยวข้องกับ${cause}`);
+    if (!activeDamage) return;
+    onFinding({ ...findings, [activeDamage.id]: cause });
+    celebrate();
     playSound("10_idea_chime.ogg", audio);
   };
-  const next = () => {
-    if (!selectedCause) return;
-    if (index >= DAMAGES.length - 1) onDone();
-    else onIndex(index + 1);
+  const resetInspection = () => {
+    setDiscoveredIds([]);
+    setActiveDamageId(null);
+    setCelebrating(false);
+    onReset();
   };
   return (
     <div className="screen inspection-screen">
       <img className="inspection-bg" src={asset("inspection/background.png")} alt="โต๊ะตรวจสอบกล่อง" />
-      <div className="floating-question">{damage.title}</div>
-      <div className="inspection-counter">{index + 1} / {DAMAGES.length}</div>
+      <div className="floating-question">หมุนกล่องแล้วหาความเสียหายที่เกิดขึ้นกับกล่องพัสดุ!</div>
+      <aside className="inspection-discovery-panel" aria-label={`ค้นพบความเสียหายแล้ว ${discoveredIds.length} จาก ${DAMAGES.length} จุด`}>
+        <div><span>ค้นพบแล้ว</span><strong>{discoveredIds.length}/{DAMAGES.length}</strong></div>
+        <ol>{DAMAGES.map((damage) => {
+          const discovered = discoveredIds.includes(damage.id);
+          const locked = answerRequired && activeDamageId !== damage.id;
+          return <li key={damage.id}><button type="button" data-damage={damage.id} disabled={!discovered || locked} className={`${discovered ? "is-discovered" : "is-undiscovered"} ${activeDamageId === damage.id ? "is-active" : ""}`} aria-label={discovered ? `เปิดคำตอบของ${damage.label}` : "ความเสียหายที่ยังไม่ค้นพบ"} onClick={() => setActiveDamageId(damage.id)}><b aria-hidden="true" /><span>{discovered ? damage.label : "ยังไม่ค้นพบ"}</span></button></li>;
+        })}</ol>
+        {discoveredIds.length > 0 && <button type="button" className="inspection-reset-button" disabled={answerRequired} onClick={resetInspection}>↻ เริ่มสำรวจใหม่</button>}
+      </aside>
       <div className="model-stage">
         {ready && (
           <model-viewer
@@ -574,40 +936,43 @@ function DamageInspection({ index, findings, audio, onFinding, onIndex, onDone }
             field-of-view="35deg"
             exposure="1.05"
             shadow-intensity="1"
-            onClick={() => { if (!located) setHint(damage.hint); }}
           >
             {DAMAGES.map((spot) => {
-              const active = spot.id === damage.id;
+              const discovered = discoveredIds.includes(spot.id);
+              const active = spot.id === activeDamageId;
+              const locked = answerRequired && !active;
               return (
                 <button
                   key={spot.id}
                   slot={`hotspot-${spot.id}`}
-                  className={`damage-target ${active && located ? "is-located" : ""}`}
+                  className={`damage-target ${discovered ? "is-solved" : ""} ${active ? "is-active" : ""}`}
+                  data-damage={spot.id}
                   data-position={spot.position}
                   data-normal={spot.normal}
-                  aria-label={active ? "เลือกบริเวณความเสียหายนี้" : undefined}
-                  aria-hidden={!active}
-                  tabIndex={active ? 0 : -1}
-                  onClick={active ? locateDamage : (event) => { event.stopPropagation(); if (!located) setHint(damage.hint); }}
+                  aria-label={discovered ? `ตรวจสอบ${spot.label}อีกครั้ง` : "ตรวจสอบบริเวณนี้"}
+                  disabled={locked}
+                  tabIndex={discovered ? -1 : 0}
+                  onClick={(event) => locateDamage(spot.id, event)}
                 >
-                  {active && located ? "✓" : null}
+                  {discovered && <span className="damage-marker-label">{spot.label}</span>}
                 </button>
               );
             })}
           </model-viewer>
         )}
         {!modelLoaded && <div className="model-loading" role="status"><span className="loading-box" /><b>กำลังเตรียมกล่อง 3 มิติ…</b></div>}
-        {located && <div className="inspection-success" role="status"><span>✓</span><div><b>พบร่องรอยแล้ว</b><small>{damage.evidence}</small></div></div>}
       </div>
-      {located && (
-        <aside className="inspection-cause-panel" aria-label={`เลือกสาเหตุที่คาดว่าเกี่ยวข้องกับ${damage.evidence}`}>
+      {activeDamage && (
+        <aside data-damage={activeDamage.id} className={`inspection-cause-panel ${answerRequired ? "is-required" : "is-answered"}`} aria-label={`เลือกสาเหตุที่คาดว่าเกี่ยวข้องกับ${activeDamage.evidence}`}>
           <b>ร่องรอยนี้คาดว่าเกี่ยวข้องกับอะไร?</b>
-          <span>เลือกจากหลักฐานที่สังเกตได้</span>
           <div>{DAMAGE_CAUSES.map((cause) => <button type="button" key={cause} aria-pressed={selectedCause === cause} onClick={() => saveCause(cause)}>{selectedCause === cause ? "✓ " : ""}{cause}</button>)}</div>
+          <small role="status">{answerRequired ? "ต้องตอบคำถามนี้ก่อนค้นหาจุดถัดไป" : "บันทึกคำตอบแล้ว สำรวจจุดต่อไปได้"}</small>
         </aside>
       )}
-      <div className={`inspection-hint ${selectedCause ? "is-success" : ""}`}>{hint}</div>
-      {selectedCause && <button className="inspection-next-button" onClick={next}>{index >= DAMAGES.length - 1 ? "สำรวจวัสดุ ›" : "จุดถัดไป ›"}</button>}
+      <div className={`inspection-mascot-guide ${celebrating ? "is-celebrating" : ""}`} aria-hidden="true">
+        <div className="inspection-mascot-sprite" style={{ backgroundImage: `url(${asset("mascot/parcel-guide-sprite.png")})`, backgroundPosition: celebrating ? "100% 100%" : "0% 0%" }} />
+      </div>
+      {completedCount === DAMAGES.length && <button className="inspection-next-button" onClick={onDone}>สำรวจวัสดุ ›</button>}
     </div>
   );
 }
@@ -618,75 +983,19 @@ function LabRoomsPaused({ onContinue }: { onContinue: () => void }) {
       <img className="group-design-bg" src={asset("compression/lab_background.png")} alt="" />
       <div className="lab-paused-card">
         <span>ปิดชั่วคราว</span>
-        <h1>ห้องทดลองถูกข้ามเพื่อให้เทสง่ายขึ้น</h1>
-        <p>ตอนนี้ระบบจะให้ทำตอนที่ 1 แล้วไปหน้าเลือกวัสดุได้ทันที โดยไม่ต้องเล่นห้องแรงกด น้ำ และความยืดหยุ่น</p>
-        <button className="button button-orange" onClick={onContinue}>ไปหน้าเลือกวัสดุ</button>
+        <h1>ห้องทดลองพักใช้งานชั่วคราว</h1>
+        <p>บันทึกสิ่งที่ได้สำรวจ แล้วไปสรุปภารกิจได้เลย</p>
+        <button className="button button-orange" onClick={onContinue}>ไปสรุปภารกิจ</button>
       </div>
     </div>
   );
 }
 
-const STUDY_TOPICS = [
-  {
-    id: "compression",
-    title: "ความต้านทานแรงกดทับ",
-    observation: "ดูการยุบหรือบุบเมื่อรับแรงกดเท่ากัน",
-    purpose: "เพื่อเลือกวัสดุทำโครงกล่องที่ไม่ยุบง่าย",
-  },
-  {
-    id: "elasticity",
-    title: "ความสามารถในการลดความเสียหายจากแรงกระแทก",
-    observation: "ดูความเสียหายของสิ่งของเมื่อรับแรงกระแทกเท่ากัน",
-    purpose: "เพื่อเลือกวัสดุบุหรือวัสดุกันกระแทก",
-  },
-  {
-    id: "water",
-    title: "การดูดซับน้ำของวัสดุ",
-    observation: "ดูปริมาณน้ำที่ซึมเข้าเนื้อวัสดุ เมื่อได้รับน้ำเท่ากัน",
-    purpose: "เพื่อเลือกวัสดุที่ช่วยลดการเปียก",
-  },
-] as const;
 type StudyTopicId = (typeof STUDY_TOPICS)[number]["id"];
 
 function StudyTopicIllustration({ id }: { id: StudyTopicId }) {
-  if (id === "compression") {
-    return (
-      <svg className="study-topic-illustration" viewBox="0 0 180 120" aria-hidden="true">
-        <ellipse cx="90" cy="104" rx="58" ry="10" fill="#b8c9dd" opacity=".45" />
-        <path d="M47 54 89 35l45 18-43 22Z" fill="#f4b35f" stroke="#9f5d2d" strokeWidth="3" strokeLinejoin="round" />
-        <path d="m47 54 44 21v33L47 86Z" fill="#d78b3e" stroke="#9f5d2d" strokeWidth="3" strokeLinejoin="round" />
-        <path d="m91 75 43-22v33l-43 22Z" fill="#eca750" stroke="#9f5d2d" strokeWidth="3" strokeLinejoin="round" />
-        <path d="m71 45 43 20" stroke="#c97835" strokeWidth="3" opacity=".65" />
-        <path d="M90 8v42" stroke="#075ba8" strokeWidth="15" strokeLinecap="round" />
-        <path d="M90 8v42" stroke="#1d98f2" strokeWidth="9" strokeLinecap="round" />
-        <path d="m72 41 18 21 18-21Z" fill="#1d98f2" stroke="#075ba8" strokeWidth="3" strokeLinejoin="round" />
-        <path d="M34 37h11M39.5 31.5v11M139 27h9M143.5 22.5v9" stroke="#ffd94f" strokeWidth="4" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (id === "elasticity") {
-    return (
-      <svg className="study-topic-illustration" viewBox="0 0 180 120" aria-hidden="true">
-        <ellipse cx="91" cy="104" rx="55" ry="9" fill="#b8c9dd" opacity=".35" />
-        <path d="M58 27c18 5 43-8 64 2l-6 66c-20-8-39 6-59-2Z" fill="#d9a260" stroke="#925c31" strokeWidth="3" strokeLinejoin="round" />
-        <path d="M65 35c14 4 31-5 46 0M64 48c17 6 29-5 46 1M62 63c16-5 34 8 48 0M60 78c18 4 31-7 48-1" fill="none" stroke="#b7793c" strokeWidth="3" strokeLinecap="round" opacity=".7" />
-        <path d="M51 58H14m0 0 13-12M14 58l13 12M128 58h38m0 0-13-12m13 12-13 12" fill="none" stroke="#147b45" strokeWidth="11" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M51 58H14m0 0 13-12M14 58l13 12M128 58h38m0 0-13-12m13 12-13 12" fill="none" stroke="#35bd72" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="m58 30 7 12-8 10 8 13-7 12 6 15M121 31l-7 12 7 11-8 13 6 12-4 15" fill="none" stroke="#efc080" strokeWidth="4" />
-      </svg>
-    );
-  }
-  return (
-    <svg className="study-topic-illustration" viewBox="0 0 180 120" aria-hidden="true">
-      <ellipse cx="91" cy="106" rx="57" ry="8" fill="#b8c9dd" opacity=".45" />
-      <path d="M44 92 90 82l51 10-47 14Z" fill="#dcecff" stroke="#6f9fc7" strokeWidth="3" strokeLinejoin="round" />
-      <path d="M94 106v7l47-14v-7M44 92v7l50 14" fill="#bdd8ef" stroke="#6f9fc7" strokeWidth="3" strokeLinejoin="round" />
-      <path d="M48 43c0-12 10-21 23-20 5-15 28-20 40-7 14-3 27 7 27 20 0 14-12 23-27 23H70c-13 0-22-6-22-16Z" fill="#7598b7" stroke="#486e91" strokeWidth="4" strokeLinejoin="round" />
-      <path d="M59 66c0 8-12 8-12 0 0-4 6-12 6-12s6 8 6 12ZM91 72c0 9-13 9-13 0 0-4 6.5-13 6.5-13S91 68 91 72ZM124 65c0 8-12 8-12 0 0-4 6-12 6-12s6 8 6 12Z" fill="#36a9f7" />
-      <path d="M65 79c0 6-9 6-9 0 0-3 4.5-9 4.5-9S65 76 65 79ZM112 82c0 6-9 6-9 0 0-3 4.5-9 4.5-9s4.5 6 4.5 9Z" fill="#67c7ff" />
-      <path d="M69 28c8-9 23-12 35-4" fill="none" stroke="#a9c2d5" strokeWidth="5" strokeLinecap="round" opacity=".7" />
-    </svg>
-  );
+  const labIcon = id === "compression" ? "compression" : id === "elasticity" ? "impact" : "absorption";
+  return <img className="study-topic-illustration" src={asset(`menu/lab-room-${labIcon}.png`)} alt="" aria-hidden="true" />;
 }
 const MATERIAL_GUIDE_ORDER = ["corrugated_cardboard", "cardboard", "bubble_wrap", "closed_cell_pe_foam", "pe_sheet"] as const;
 const STUDY_FOCUS_WARNING = "ลองพิจารณาอีกครั้งว่า กล่องยุบ สิ่งของเสียหาย และกล่องเปียก ต้องศึกษาสมบัติใดบ้าง";
@@ -727,7 +1036,7 @@ const CORRUGATED_FEATURES = [
 const CORRUGATED_OVERVIEW = {
   label: "กระดาษลูกฟูกลอน E 3 ชั้น",
   icon: "📦",
-  detail: "กระดาษลูกฟูกแบบ Single Wall ประกอบด้วยแผ่นผิวเรียบ 2 ชั้นและลอน E ขนาดเล็กอยู่ตรงกลาง ลากโมเดลเพื่อหมุน ใช้ล้อเมาส์หรือสองนิ้วเพื่อซูม แล้วกดป้ายเพื่อสำรวจแต่ละส่วน",
+  detail: "กระดาษลูกฟูกมีแผ่นเรียบ 2 แผ่นประกบลอนกระดาษไว้ตรงกลาง ช่องอากาศในลอนช่วยรับแรงกดและลดแรงกระแทก จึงทำให้กล่องแข็งแรงแต่มีน้ำหนักเบา",
 };
 
 type MaterialExplorerFeature = {
@@ -942,6 +1251,7 @@ const WAX_PAPER_FEATURES = [
 const MATERIAL_EXPLORERS = {
   corrugated_cardboard: {
     title: "กระดาษลูกฟูก",
+    description: "ทำจากกระดาษเรียบ 2 ชั้น มีลอนกระดาษและช่องอากาศอยู่ตรงกลาง ลอนช่วยรับแรงกดและลดแรงกระแทก จึงแข็งแรงแต่น้ำหนักเบา",
     model: "models/corrugated_cardboard.glb",
     alt: "โมเดลกระดาษลูกฟูกสามมิติ แสดงแผ่นผิวบน ลอน E และแผ่นผิวล่าง",
     loading: "กำลังประกอบลอนกระดาษ 3 มิติ…",
@@ -954,6 +1264,7 @@ const MATERIAL_EXPLORERS = {
   },
   pe_sheet: {
     title: "แผ่นพลาสติก PE",
+    description: "เป็นพลาสติกแผ่นบาง ผิวเรียบและโค้งงอได้ น้ำซึมผ่านได้ยาก จึงช่วยห่อสิ่งของและป้องกันความชื้น",
     model: "models/pe_sheet.glb",
     alt: "โมเดลแผ่นพลาสติก PE ใสขุ่นสีขาวน้ำนมแบบแผ่นเดี่ยว ผิวเรียบ บาง และโค้งงอได้",
     loading: "กำลังเตรียมแผ่นฟิล์ม PE 3 มิติ…",
@@ -966,8 +1277,9 @@ const MATERIAL_EXPLORERS = {
   },
   bubble_wrap: {
     title: "แผ่นพลาสติกกันกระแทกชนิดฟองอากาศ",
-    model: "models/bubble_wrap.glb",
-    alt: "โมเดลแผ่นพลาสติกกันกระแทกชนิดฟองอากาศแบบแผ่นเดี่ยว มีฟองอากาศเรียงเป็นแถวทั้งสองด้าน",
+    description: "ฟองอากาศเล็ก ๆ ทำหน้าที่เหมือนเบาะ เมื่อถูกกระแทก อากาศในฟองจะช่วยกระจายแรงและป้องกันสิ่งของ",
+    model: "models/bubble_wrap.glb?v=3",
+    alt: "โมเดลแผ่นพลาสติกกันกระแทกชนิดฟองอากาศแบบแผ่นเดี่ยว มีฟองอากาศเรียงเป็นแถวเฉพาะด้านบนและด้านล่างเรียบ",
     loading: "กำลังเติมอากาศในฟอง 3 มิติ…",
     overview: { label: "แผ่นพลาสติกที่มีฟองอากาศ", icon: "🫧", detail: "แผ่นฟิล์มเดี่ยวมีฟองอากาศขนาดใกล้เคียงกันเรียงต่อกันทั่วทั้งแผ่น" },
     features: BUBBLE_WRAP_FEATURES,
@@ -978,6 +1290,7 @@ const MATERIAL_EXPLORERS = {
   },
   closed_cell_pe_foam: {
     title: "แผ่นโฟม EPE",
+    description: "มีช่องอากาศเล็ก ๆ จำนวนมาก จึงมีน้ำหนักเบา นุ่ม และช่วยลดแรงกระแทกโดยดูดซับน้ำได้น้อย",
     model: "models/pe_foam_sheet.glb",
     alt: "โมเดลแผ่นโฟม EPE สีขาวแบบหนึ่งแผ่น มีความหนาเล็กน้อย ขอบมน และผิวเซลล์ละเอียด",
     loading: "กำลังสร้างเซลล์โฟม EPE 3 มิติ…",
@@ -990,6 +1303,7 @@ const MATERIAL_EXPLORERS = {
   },
   cardboard: {
     title: "กระดาษหน้าขาวหลังเทา 400 แกรม",
+    description: "มีเนื้อกระดาษแน่น ด้านหน้าสีขาวและด้านหลังสีเทา คำว่า 400 แกรม หมายถึงกระดาษ 1 ตารางเมตรหนัก 400 กรัม",
     model: "models/cardboard_gray_white_400gsm.glb",
     alt: "โมเดลกระดาษหน้าขาวหลังเทา 400 แกรมแบบหนึ่งแผ่น ด้านหน้าสีขาว ด้านหลังสีเทา และมีขอบบางทึบแสง",
     loading: "กำลังเตรียมกระดาษหน้าขาวหลังเทา 400 แกรมแบบ 3 มิติ…",
@@ -1002,6 +1316,7 @@ const MATERIAL_EXPLORERS = {
   },
   kraft_paper: {
     title: "กระดาษคราฟต์",
+    description: "ทำจากเส้นใยกระดาษที่ยึดเกาะกัน มีสีน้ำตาล น้ำหนักเบา และโค้งงอได้ จึงใช้ห่อหรือทำถุงได้",
     model: "models/kraft_paper_single_sheet.glb",
     alt: "โมเดลกระดาษคราฟต์สีน้ำตาลแบบหนึ่งแผ่น บาง มีผิวเส้นใยละเอียด และโค้งเป็นคลื่นเล็กน้อย",
     loading: "กำลังเตรียมเส้นใยกระดาษคราฟต์ 3 มิติ…",
@@ -1014,6 +1329,7 @@ const MATERIAL_EXPLORERS = {
   },
   waxed_paper: {
     title: "กระดาษเคลือบไข",
+    description: "เป็นกระดาษบางที่เคลือบไขบนผิว ชั้นไขทำให้น้ำซึมผ่านได้ยากและช่วยป้องกันความชื้น",
     model: "models/wax_paper_single_sheet.glb",
     alt: "โมเดลกระดาษไขสีขาวนวลโปร่งแสงแบบหนึ่งแผ่น บางมาก มีผิวเคลือบไขละเอียด และโค้งเป็นคลื่น",
     loading: "กำลังเคลือบผิวกระดาษไข 3 มิติ…",
@@ -1042,12 +1358,26 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
   const [modelLoaded, setModelLoaded] = useState(false);
   const [modelError, setModelError] = useState("");
   const [modelAttempt, setModelAttempt] = useState(0);
+  const [viewScale, setViewScale] = useState<MaterialScale>("normal");
+  const [zoomDepth, setZoomDepth] = useState(0);
   const [selectedFeature, setSelectedFeature] = useState<string>("overview");
+  const [expandedFeature, setExpandedFeature] = useState<string | null>(null);
   const materialViewerRef = useRef<MaterialViewerElement | null>(null);
   const exploring = exploringMaterial !== null;
   const explorer = MATERIAL_EXPLORERS[exploringMaterial ?? "corrugated_cardboard"];
   const explorerFeatures = explorer.features as readonly MaterialExplorerFeature[];
-  const selected = explorerFeatures.find((feature) => feature.id === selectedFeature) ?? explorer.overview;
+  const microscopeMaterialId = (exploringMaterial ?? "corrugated_cardboard") as MaterialMicroscopeId;
+  const isCorrugatedContinuousZoom = microscopeMaterialId === "corrugated_cardboard";
+  const isCardboardContinuousZoom = microscopeMaterialId === "cardboard";
+  const isBubbleWrapContinuousZoom = microscopeMaterialId === "bubble_wrap";
+  const isFoamContinuousZoom = microscopeMaterialId === "closed_cell_pe_foam";
+  const isPeSheetContinuousZoom = microscopeMaterialId === "pe_sheet";
+  const isContinuousZoomMaterial = isCorrugatedContinuousZoom || isCardboardContinuousZoom || isBubbleWrapContinuousZoom || isFoamContinuousZoom || isPeSheetContinuousZoom;
+  const continuousModelOpacity = isContinuousZoomMaterial ? Math.max(0, Math.min(1, (54 - zoomDepth) / 16)) : 1;
+  const microscopeDefinition = viewScale === "normal" ? null : MATERIAL_MICROSCOPES[microscopeMaterialId][viewScale];
+  const currentFeatures: readonly (MaterialExplorerFeature | MicroscopeFeature)[] = viewScale === "normal" ? explorerFeatures : microscopeDefinition!.features;
+  const selected = currentFeatures.find((feature) => feature.id === selectedFeature)
+    ?? (viewScale === "normal" ? explorer.overview : currentFeatures[0]);
 
   useEffect(() => {
     if (!exploring) return;
@@ -1077,10 +1407,13 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
       viewer.removeEventListener("load", finishLoading);
       viewer.removeEventListener("error", failLoading);
     };
-  }, [exploring, viewerReady, modelAttempt]);
+  }, [exploring, viewerReady, modelAttempt, viewScale]);
 
   const openExplorer = (materialId: MaterialExplorerId) => {
+    setViewScale("normal");
+    setZoomDepth(0);
     setSelectedFeature("overview");
+    setExpandedFeature(null);
     setModelLoaded(false);
     setModelError("");
     setModelAttempt((current) => current + 1);
@@ -1093,6 +1426,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
   };
   const focusFeature = (feature: MaterialExplorerFeature) => {
     setSelectedFeature(feature.id);
+    setExpandedFeature(feature.id);
     const viewer = materialViewerRef.current;
     if (!viewer) return;
     viewer.cameraOrbit = feature.orbit;
@@ -1101,11 +1435,53 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
   };
   const resetExplorer = () => {
     setSelectedFeature("overview");
+    setExpandedFeature(null);
     const viewer = materialViewerRef.current;
     if (!viewer) return;
     viewer.cameraOrbit = explorer.orbit;
     viewer.cameraTarget = explorer.target;
     viewer.jumpCameraToGoal?.();
+  };
+  const selectScale = (scale: MaterialScale) => {
+    setZoomDepth(scale === "normal" ? 0 : scale === "micro" ? 50 : 100);
+    setViewScale(scale);
+    setExpandedFeature(null);
+    if (scale === "normal") {
+      resetExplorer();
+      return;
+    }
+    setSelectedFeature(MATERIAL_MICROSCOPES[microscopeMaterialId][scale].features[0].id);
+  };
+  const changeZoomDepth = (depth: number) => {
+    const nextDepth = Math.max(0, Math.min(100, depth));
+    const nextScale = materialScaleForZoom(nextDepth);
+    setZoomDepth(nextDepth);
+    if (nextScale === viewScale) return;
+    setViewScale(nextScale);
+    setExpandedFeature(null);
+    if (nextScale === "normal") {
+      resetExplorer();
+      return;
+    }
+    setSelectedFeature(MATERIAL_MICROSCOPES[microscopeMaterialId][nextScale].features[0].id);
+  };
+  const focusMicroscopeFeature = (feature: MicroscopeFeature) => {
+    setSelectedFeature(feature.id);
+    setExpandedFeature(feature.id);
+  };
+  const focusCorrugatedZoomFeature = (featureId: string) => {
+    const feature = currentFeatures.find((item) => item.id === featureId);
+    if (!feature) return;
+    setSelectedFeature(feature.id);
+    setExpandedFeature(feature.id);
+  };
+  const toggleFeatureDetails = (feature: MaterialExplorerFeature | MicroscopeFeature) => {
+    if (expandedFeature === feature.id) {
+      setExpandedFeature(null);
+      return;
+    }
+    if (viewScale === "normal") focusFeature(feature as MaterialExplorerFeature);
+    else focusMicroscopeFeature(feature as MicroscopeFeature);
   };
 
   return (
@@ -1114,17 +1490,20 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
       <button className="material-guide-back-button" onClick={onBack}>‹ ย้อนกลับ</button>
       <header className="material-guide-header">
         <div>
+          <span className="material-guide-kicker">🔎 ห้องส่องวัสดุแสนสนุก</span>
           <h1>สำรวจวัสดุ</h1>
+          <p className="material-guide-intro">เลือกวัสดุ แล้วหมุนดูให้รอบก่อนซูมเข้าไปค้นหาความลับข้างใน!</p>
         </div>
       </header>
       <section className="material-guide-grid showing-five-materials" aria-label="ข้อมูลวัสดุ 5 ชนิดตามแผนการสอน">
-        {orderedMaterials.map((material) => {
+        {orderedMaterials.map((material, index) => {
           const materialId = material.id as MaterialExplorerId;
           const hasExplorer = materialId in MATERIAL_EXPLORERS;
           return (
           <article key={material.id} className={hasExplorer ? "is-explorable" : undefined}>
             {hasExplorer ? (
               <button type="button" className="material-card-button" onClick={() => openExplorer(materialId)} aria-label={`เปิดสำรวจ${material.name}แบบ 3 มิติ`}>
+                <b className="material-card-number" aria-hidden="true">{index + 1}</b>
                 <img src={asset(`materials/${material.image}`)} alt="" />
                 <div><h2>{material.name}</h2><span>หมุนดู 3D</span></div>
               </button>
@@ -1139,20 +1518,41 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
         })}
       </section>
       <footer className="material-guide-footer">
-        <button className="button button-orange" onClick={onDone}>ถัดไป</button>
+        <div className="material-guide-helper"><span aria-hidden="true">🔬</span><p><b>เลือกวัสดุที่อยากรู้จักได้เลย!</b><small>แตะการ์ดเพื่อหมุน ซูม และดูโครงสร้างใกล้ ๆ</small></p></div>
+        <button className="button button-orange" onClick={onDone}>ไปช่วงถัดไป ›</button>
       </footer>
       {exploring && (
         <section className="material-3d-overlay" role="dialog" aria-modal="true" aria-labelledby="material-3d-title">
           <header className="material-3d-header">
             <button type="button" className="material-3d-close" onClick={() => setExploringMaterial(null)}>‹ กลับไปดูวัสดุทั้งหมด</button>
             <div>
-              <span>สำรวจแบบ 3 มิติ</span>
+              <span>{viewScale === "normal" ? "สำรวจแบบ 3 มิติ" : isContinuousZoomMaterial ? "ซูมเข้าไปดูโครงสร้างด้านใน" : microscopeDefinition?.eyebrow}</span>
               <h1 id="material-3d-title">{explorer.title}</h1>
             </div>
           </header>
           <div className="material-3d-layout">
-            <div className="material-3d-stage is-dark-material-stage">
-              {viewerReady && (
+            <div className={`material-3d-stage is-dark-material-stage ${viewScale !== "normal" ? "is-microscope-stage" : ""} ${isContinuousZoomMaterial ? "is-continuous-zoom-stage" : ""}`}>
+              <div className="material-zoom-control">
+                <div><span aria-hidden="true">🔎</span><b>ลากเพื่อซูมลึกเข้าไปในวัสดุ</b><output>{zoomDepth}%</output></div>
+                <div className="material-zoom-slider-row">
+                  <button type="button" aria-label="ซูมออก" disabled={zoomDepth === 0} onClick={() => changeZoomDepth(zoomDepth - 10)}><span aria-hidden="true">−</span></button>
+                  <input type="range" min="0" max="100" step="1" value={zoomDepth} aria-label="ระดับการซูมเข้าไปในวัสดุ" onChange={(event) => changeZoomDepth(Number(event.currentTarget.value))} />
+                  <button type="button" aria-label="ซูมเข้า" disabled={zoomDepth === 100} onClick={() => changeZoomDepth(zoomDepth + 10)}><span aria-hidden="true">+</span></button>
+                </div>
+                <nav aria-label="จุดสำคัญของระดับการขยาย">
+                  {(["normal", "micro", "nano"] as const).map((scale) => <button type="button" key={scale} className={viewScale === scale ? "is-active" : ""} aria-pressed={viewScale === scale} onClick={() => selectScale(scale)}>
+                    <span>{scale === "normal" ? "ปกติ" : scale === "micro" ? "ไมโคร" : "นาโน"}</span><small>{scale === "normal" ? "ชิ้นวัสดุ" : scale === "micro" ? "เส้นใย/เซลล์" : isContinuousZoomMaterial ? "ผิวระดับนาโน" : "โมเลกุล"}</small>
+                  </button>)}
+                </nav>
+              </div>
+              {isContinuousZoomMaterial && <div className="material-continuous-zoom-host">
+                {isCorrugatedContinuousZoom && <CorrugatedContinuousZoom depth={zoomDepth} level={viewScale} selectedId={selectedFeature} onSelect={focusCorrugatedZoomFeature} />}
+                {isCardboardContinuousZoom && <CardboardContinuousZoom depth={zoomDepth} level={viewScale} selectedId={selectedFeature} onSelect={focusCorrugatedZoomFeature} />}
+                {isBubbleWrapContinuousZoom && <BubbleWrapContinuousZoom depth={zoomDepth} level={viewScale} selectedId={selectedFeature} onSelect={focusCorrugatedZoomFeature} />}
+                {isFoamContinuousZoom && <FoamContinuousZoom depth={zoomDepth} level={viewScale} selectedId={selectedFeature} onSelect={focusCorrugatedZoomFeature} />}
+                {isPeSheetContinuousZoom && <PeSheetContinuousZoom depth={zoomDepth} level={viewScale} selectedId={selectedFeature} onSelect={focusCorrugatedZoomFeature} />}
+              </div>}
+              {(viewScale === "normal" || isContinuousZoomMaterial) && viewerReady && (
                 <model-viewer
                   key={modelAttempt}
                   ref={materialViewerRef}
@@ -1164,12 +1564,13 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
                   camera-target={explorer.target}
                   min-camera-orbit={explorer.minOrbit}
                   max-camera-orbit={explorer.maxOrbit}
-                  field-of-view="32deg"
+                  field-of-view={`${32 - (zoomDepth / 33) * 7}deg`}
                   min-field-of-view="24deg"
                   max-field-of-view="48deg"
                   interpolation-decay="120"
                   exposure={exploringMaterial === "pe_sheet" || exploringMaterial === "bubble_wrap" || exploringMaterial === "waxed_paper" ? "1.22" : "1.08"}
                   shadow-intensity={exploringMaterial === "pe_sheet" || exploringMaterial === "bubble_wrap" || exploringMaterial === "waxed_paper" ? "0.08" : "1.15"}
+                  style={{ opacity: continuousModelOpacity, transform: `scale(${1 + Math.min(zoomDepth, 42) * .006})`, transition: "opacity .65s ease, transform .65s ease", pointerEvents: viewScale === "normal" ? "auto" : "none" }}
                 >
                   {explorerFeatures.map((feature, featureIndex) => (
                     <button
@@ -1189,22 +1590,28 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
                   ))}
                 </model-viewer>
               )}
-              {!modelLoaded && !modelError && <div className="material-3d-loading" role="status"><span className="loading-box" /><b>{explorer.loading}</b></div>}
-              {modelError && <div className="material-3d-error" role="alert"><span>⚠</span><b>{modelError}</b><button type="button" onClick={retryModel}>โหลดโมเดลอีกครั้ง</button></div>}
-              <div className="material-3d-gesture-hint">ลากขึ้น–ลงเพื่อดูด้านบนและด้านล่าง · เลื่อนหรือหนีบเพื่อซูม</div>
+              {viewScale === "normal" && !modelLoaded && !modelError && <div className="material-3d-loading" role="status"><span className="loading-box" /><b>{explorer.loading}</b></div>}
+              {viewScale === "normal" && modelError && <div className="material-3d-error" role="alert"><span>⚠</span><b>{modelError}</b><button type="button" onClick={retryModel}>โหลดโมเดลอีกครั้ง</button></div>}
+              {viewScale === "normal" && <div className="material-3d-gesture-hint">ลากเพื่อหมุน เลื่อนหรือหนีบเพื่อซูม และกดป้ายเพื่อดูส่วนนั้น</div>}
+              {!isContinuousZoomMaterial && viewScale !== "normal" && <MaterialMicroscope key={`${microscopeMaterialId}-${viewScale}`} materialId={microscopeMaterialId} level={viewScale} selectedId={selectedFeature} zoomProgress={viewScale === "micro" ? (zoomDepth - 34) / 33 : (zoomDepth - 68) / 32} onSelect={focusMicroscopeFeature} />}
             </div>
             <aside className="material-3d-info" aria-live="polite">
               <div className="material-3d-info-icon">{selected.icon}</div>
-              <p>ส่วนที่กำลังสำรวจ</p>
               <h2>{selected.label}</h2>
+              <p className="material-3d-material-summary">{explorer.description}</p>
               <div className="material-3d-part-buttons" aria-label={`เลือกส่วนของ${explorer.title}`}>
-                {explorerFeatures.map((feature) => (
-                  <button type="button" key={feature.id} className={selectedFeature === feature.id ? "is-active" : ""} aria-pressed={selectedFeature === feature.id} onClick={() => focusFeature(feature)}>
-                    <span>{feature.icon}</span>{feature.label}
-                  </button>
-                ))}
+                {currentFeatures.map((feature) => {
+                  const expanded = expandedFeature === feature.id;
+                  const panelId = `material-detail-${feature.id}`;
+                  return <div key={feature.id} className={`material-3d-accordion-item ${expanded ? "is-open" : ""}`}>
+                    <button type="button" className={selectedFeature === feature.id ? "is-active" : ""} aria-expanded={expanded} aria-controls={panelId} onClick={() => toggleFeatureDetails(feature)}>
+                      <span>{feature.icon}</span><b>{feature.label}</b><i aria-hidden="true">⌄</i>
+                    </button>
+                    {expanded && <div id={panelId} className="material-3d-accordion-panel">{feature.detail}</div>}
+                  </div>;
+                })}
               </div>
-              <button type="button" className="material-3d-reset" onClick={resetExplorer}>↻ กลับไปดูทั้งแผ่น</button>
+              {viewScale === "normal" ? <button type="button" className="material-3d-reset" onClick={resetExplorer}>↻ กลับไปดูทั้งแผ่น</button> : <p className="material-scale-reading-note">กดชื่อส่วนประกอบ แล้วภาพจะใช้สีสว่างบอกตำแหน่งนั้น</p>}
             </aside>
           </div>
         </section>
@@ -1215,6 +1622,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
 
 function StudyFocusScreen({ values, onBack, onChange, onDone }: { values: Record<string, boolean>; onBack: () => void; onChange: (values: Record<string, boolean>) => void; onDone: () => void }) {
   const [warning, setWarning] = useState("");
+  const [showStudySummary, setShowStudySummary] = useState(false);
   const selectedCount = STUDY_TOPICS.filter((topic) => values[topic.id]).length;
   const complete = selectedCount === STUDY_TOPICS.length;
   const toggle = (id: string) => {
@@ -1227,7 +1635,7 @@ function StudyFocusScreen({ values, onBack, onChange, onDone }: { values: Record
       return;
     }
     setWarning("");
-    onDone();
+    setShowStudySummary(true);
   };
   return (
     <div className="screen study-focus-screen">
@@ -1235,16 +1643,14 @@ function StudyFocusScreen({ values, onBack, onChange, onDone }: { values: Record
       <button className="material-guide-back-button" onClick={onBack}>‹ ย้อนกลับ</button>
       <header className="study-focus-header">
         <div className="study-focus-question">
-          <span>🔎 ภารกิจนักสืบวัสดุ</span>
-          <h1>กล่องของเราต้องเจอทั้งแรงกด การตกหรือกระแทก และฝนระหว่างขนส่ง</h1>
-          <p>เราควรศึกษาสมบัติอะไรบ้างนะ?</p>
+          <span>🔎 คำถามนำภารกิจที่ 1</span>
+          <h1>เมื่อกล่องพัสดุต้องเจอแรงกด แรงกระแทก และฝน เราควรศึกษาสมบัติใดของวัสดุบ้าง เพราะเหตุใด?</h1>
         </div>
       </header>
       <div className="study-topic-title study-focus-title"><span>★</span> เลือกสมบัติที่จำเป็นต้องศึกษา</div>
       <section className="study-topic-panel study-focus-panel" aria-label="เลือกสมบัติที่ต้องศึกษา">
         {STUDY_TOPICS.map((topic) => (
           <button key={topic.id} className={`study-topic-card study-topic-${topic.id}${values[topic.id] ? " selected" : ""}`} aria-pressed={Boolean(values[topic.id])} onClick={() => toggle(topic.id)}>
-            <span className="study-topic-check" aria-hidden="true">{values[topic.id] ? "✓" : "☆"}</span>
             <StudyTopicIllustration id={topic.id} />
             <b className="study-topic-name">{topic.title}</b>
             <span className="study-topic-observation">{topic.observation}</span>
@@ -1253,14 +1659,30 @@ function StudyFocusScreen({ values, onBack, onChange, onDone }: { values: Record
           </button>
         ))}
       </section>
-      {warning && <div className="study-focus-warning" role="alert">{warning}</div>}
+      {warning && <div className="study-focus-warning" role="alert">
+        <div className="study-warning-mascot" aria-hidden="true" style={{ backgroundImage: `url(${asset("mascot/parcel-guide-sprite.png")})` }} />
+        <div className="study-warning-bubble">{warning}</div>
+      </div>}
       <footer className="study-focus-footer">
-        <div className="study-focus-progress" aria-live="polite">
-          <span>เลือกแล้ว {selectedCount}/{STUDY_TOPICS.length} สมบัติ</span>
-          <div aria-hidden="true">{STUDY_TOPICS.map((topic) => <i key={topic.id} className={values[topic.id] ? "filled" : ""}>★</i>)}</div>
-        </div>
         <button className="button button-orange study-focus-save" onClick={saveFocus}>{complete ? "ครบแล้ว ไปต่อเลย! ›" : "เลือกให้ครบก่อนนะ"}</button>
       </footer>
+      {showStudySummary && <div className="study-focus-summary-overlay" role="dialog" aria-modal="true" aria-labelledby="study-focus-summary-title">
+        <section className="study-focus-summary-card">
+          <div className="study-focus-summary-mascot" aria-hidden="true" style={{ backgroundImage: `url(${asset("mascot/parcel-guide-sprite.png")})` }} />
+          <span>🎉 วันนี้เราค้นพบแล้ว!</span>
+          <h2 id="study-focus-summary-title">กล่องพัสดุต้องศึกษาสมบัติของวัสดุ 3 ด้าน</h2>
+          <div className="study-focus-summary-findings" aria-label="สมบัติของวัสดุที่ค้นพบ">
+            <b><i aria-hidden="true">✓</i> ความต้านทานแรงกดทับ</b>
+            <b><i aria-hidden="true">✓</i> การลดความเสียหายจากแรงกระแทก</b>
+            <b><i aria-hidden="true">✓</i> การดูดซับน้ำของวัสดุ</b>
+          </div>
+          <p className="study-focus-summary-next"><strong>คำตอบที่สะสมได้</strong> {MISSION_ONE_BIG_QUESTION_PROGRESS}<br /><strong>ภารกิจต่อไป</strong> เราจะทดลองเพื่อหาหลักฐานว่า วัสดุชนิดใดเหมาะกับแต่ละหน้าที่</p>
+          <div className="study-focus-summary-actions">
+            <button type="button" className="button button-white" onClick={() => setShowStudySummary(false)}>กลับไปดูสมบัติ</button>
+            <button type="button" className="button button-orange" onClick={onDone}>พร้อมแล้ว ไปตอบคำถาม ›</button>
+          </div>
+        </section>
+      </div>}
     </div>
   );
 }
@@ -1271,9 +1693,9 @@ type MatchField = "k" | "p";
 type MatchItem = { id: string; prompt: string; answer: string };
 
 const KNOWLEDGE_MATCHES: MatchItem[] = [
-  { id: "collapsed-box", prompt: "กล่องยุบ สัมพันธ์กับสมบัติ", answer: "ความต้านทานแรงกดทับ" },
-  { id: "impact-damage", prompt: "สิ่งของภายในเสียหายจากแรงกระแทก สัมพันธ์กับสมบัติ", answer: "ความสามารถในการลดความเสียหายจากแรงกระแทก" },
-  { id: "wet-box", prompt: "กล่องเปียก สัมพันธ์กับสมบัติ", answer: "การดูดซับน้ำของวัสดุ" },
+  { id: "collapsed-box", prompt: "กล่องยุบ สัมพันธ์กับสมบัติ", answer: STUDY_TOPICS[0].title },
+  { id: "impact-damage", prompt: "สิ่งของภายในเสียหายจากแรงกระแทก สัมพันธ์กับสมบัติ", answer: STUDY_TOPICS[1].title },
+  { id: "wet-box", prompt: "กล่องเปียก สัมพันธ์กับสมบัติ", answer: STUDY_TOPICS[2].title },
 ];
 
 const EXIT_ANSWER_ALIASES: Record<string, string> = {
@@ -1303,16 +1725,6 @@ function writeMatches(items: MatchItem[], matches: Record<string, string>) {
   return items.map((item, index) => `${index + 1}. ${item.prompt} → ${matches[item.id] ?? "_____"}`).join("\n");
 }
 
-function readValueAnswer(value: string) {
-  const choice = value.startsWith("ไม่เหมาะสม") ? "ไม่เหมาะสม" : value.startsWith("เหมาะสม") ? "เหมาะสม" : "";
-  const reason = value.includes("เหตุผล:") ? value.slice(value.indexOf("เหตุผล:") + "เหตุผล:".length).trim() : "";
-  return { choice, reason };
-}
-
-function writeValueAnswer(choice: string, reason: string) {
-  return `${choice}\nเหตุผล: ${reason}`.trim();
-}
-
 function isStructuredExitTicketComplete(ticket?: ExitTicket) {
   if (!ticket) return false;
   const kMatches = readMatches(ticket.k, KNOWLEDGE_MATCHES);
@@ -1320,7 +1732,7 @@ function isStructuredExitTicketComplete(ticket?: ExitTicket) {
   const valueAnswer = readValueAnswer(ticket.v);
   return Object.keys(kMatches).length === KNOWLEDGE_MATCHES.length
     && Object.keys(pMatches).length === PROCESS_MATCHES.length
-    && Boolean(valueAnswer.choice && valueAnswer.reason);
+    && Boolean(valueAnswer.choice && valueAnswer.reason.trim());
 }
 
 function exitTicketsAreEqual(first?: ExitTicket, second?: ExitTicket) {
@@ -1408,14 +1820,10 @@ function MatchingQuestion({ field, questionNumber, instruction, items, value, se
   );
 }
 
-function exitTicketKey(index: number) {
-  return `student-${index}`;
-}
-
 function normalizeExitTickets(initial: Record<string, ExitTicket>, team: TeamMember[]) {
   const normalized: Record<string, ExitTicket> = {};
   team.forEach((member, index) => {
-    const key = exitTicketKey(index);
+    const key = exitTicketKey(member, index);
     const legacyTicket = initial[member.name];
     const ticket = initial[key] ?? legacyTicket;
     if (ticket) normalized[key] = ticket;
@@ -1423,45 +1831,44 @@ function normalizeExitTickets(initial: Record<string, ExitTicket>, team: TeamMem
   return normalized;
 }
 
-function ExitTicketScreen({ team, initial, onBack, onSaveDraft, onDone }: { team: TeamMember[]; initial: Record<string, ExitTicket>; onBack: () => void; onSaveDraft: (values: Record<string, ExitTicket>) => void; onDone: (values: Record<string, ExitTicket>) => void }) {
+function ExitTicketScreen({ team, initial, confirmations, onBack, onAnswerChange, onSaveDraft, onDone }: { team: TeamMember[]; initial: Record<string, ExitTicket>; confirmations: Record<string, ExitTicket>; onBack: () => void; onAnswerChange: (values: Record<string, ExitTicket>) => void; onSaveDraft: (values: Record<string, ExitTicket>, confirmed: Record<string, ExitTicket>) => void; onDone: (values: Record<string, ExitTicket>) => void }) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [values, setValues] = useState<Record<string, ExitTicket>>(() => normalizeExitTickets(initial, team));
-  const [savedValues, setSavedValues] = useState<Record<string, ExitTicket>>(() => normalizeExitTickets(initial, team));
+  const values = { ...initial, ...normalizeExitTickets(initial, team) };
+  const savedValues = confirmations;
   const [selectedAnswers, setSelectedAnswers] = useState<Record<MatchField, string>>({ k: "", p: "" });
-  const activeKey = exitTicketKey(activeIndex);
+  const activeKey = exitTicketKey(team[activeIndex] ?? { name: "", avatar: "" }, activeIndex);
   const activeName = team[activeIndex]?.name ?? "นักเรียน";
   const current = values[activeKey] ?? EMPTY_EXIT_TICKET;
   const isTicketComplete = isStructuredExitTicketComplete;
-  const complete = team.length > 0 && team.every((_, index) => {
-    const key = exitTicketKey(index);
+  const complete = team.length > 0 && team.every((member, index) => {
+    const key = exitTicketKey(member, index);
     return isTicketComplete(savedValues[key]) && exitTicketsAreEqual(values[key], savedValues[key]);
   });
   const currentReady = isTicketComplete(current);
   const savedCurrent = isTicketComplete(savedValues[activeKey]) && exitTicketsAreEqual(current, savedValues[activeKey]);
-  const completedCount = team.filter((_, index) => isTicketComplete(savedValues[exitTicketKey(index)])).length;
+  const completedCount = team.filter((member, index) => {
+    const key = exitTicketKey(member, index);
+    return isTicketComplete(savedValues[key]) && exitTicketsAreEqual(values[key], savedValues[key]);
+  }).length;
   const update = (field: keyof ExitTicket, value: string) => {
-    setValues((all) => ({ ...all, [activeKey]: { ...current, [field]: value } }));
+    const nextValues = { ...values, [activeKey]: { ...current, [field]: value } };
+    onAnswerChange(nextValues);
   };
   const valueAnswer = readValueAnswer(current.v);
   const saveCurrent = () => {
     if (!currentReady) return;
     const nextDraftValues = { ...values, [activeKey]: current };
     const nextSavedValues = { ...savedValues, [activeKey]: current };
-    setValues(nextDraftValues);
-    setSavedValues(nextSavedValues);
-    onSaveDraft(nextSavedValues);
-    const nextStudentIndex = team.findIndex((_, index) => index !== activeIndex && !isTicketComplete(nextSavedValues[exitTicketKey(index)]));
+    onSaveDraft(nextDraftValues, nextSavedValues);
+    const nextStudentIndex = team.findIndex((member, index) => {
+      const key = exitTicketKey(member, index);
+      return index !== activeIndex && (!isTicketComplete(nextSavedValues[key]) || !exitTicketsAreEqual(nextDraftValues[key], nextSavedValues[key]));
+    });
     if (nextStudentIndex >= 0) setActiveIndex(nextStudentIndex);
   };
   const finish = () => {
-    if (complete) onDone(savedValues);
+    if (complete) onDone(values);
   };
-  useEffect(() => {
-    const normalized = normalizeExitTickets(initial, team);
-    setValues((currentValues) => ({ ...normalized, ...currentValues }));
-    setSavedValues(normalized);
-    setActiveIndex((index) => Math.min(index, Math.max(team.length - 1, 0)));
-  }, [initial, team]);
   return (
     <div className="screen exit-ticket-screen">
       <img className="group-design-bg" src={asset("compression/lab_background.png")} alt="" />
@@ -1473,13 +1880,13 @@ function ExitTicketScreen({ team, initial, onBack, onSaveDraft, onDone }: { team
         <aside className="student-tabs" aria-label="รายชื่อนักเรียน">
           <h2>👥 เลือกชื่อนักเรียน</h2>
           {team.map((member, index) => {
-            const key = exitTicketKey(index);
+            const key = exitTicketKey(member, index);
             const done = isTicketComplete(savedValues[key]) && exitTicketsAreEqual(values[key], savedValues[key]);
             return <button key={`${index}-${member.name}`} className={activeIndex === index ? "active" : ""} onClick={() => { setActiveIndex(index); setSelectedAnswers({ k: "", p: "" }); }}><strong>{index + 1}</strong><img src={asset(`profiles/${member.avatar}.png`)} alt="" /><span>{member.name}</span><i>{done ? "✓" : ""}</i></button>;
           })}
           <div className="system-record-card">
-            <b>▣ บันทึกของระบบ</b>
-            <p>{complete ? "บันทึกครบทุกคนแล้ว ไปต่อได้เลย" : `บันทึกแล้ว ${completedCount}/${team.length} คน`}</p>
+            <b>▣ การยืนยันคำตอบ</b>
+            <p>{complete ? "ยืนยันครบทุกคนแล้ว ไปต่อได้เลย" : `ยืนยันแล้ว ${completedCount}/${team.length} คน`}</p>
             <span>{complete ? "✓" : `${completedCount}/${team.length}`}</span>
           </div>
         </aside>
@@ -1496,8 +1903,8 @@ function ExitTicketScreen({ team, initial, onBack, onSaveDraft, onDone }: { team
             </div>
           </section>
           <div className="kpv-actions">
-            <span>{activeName} · {savedCurrent ? "บันทึกแล้ว" : currentReady ? "พร้อมบันทึก" : "ตอบให้ครบทั้ง 3 ข้อก่อนบันทึก"}</span>
-            <button className="button button-orange" disabled={!currentReady} onClick={saveCurrent}>บันทึกคำตอบคนนี้</button>
+            <span>{activeName} · {savedCurrent ? "ยืนยันแล้ว" : currentReady ? "ครบแล้ว · พร้อมยืนยัน" : "ทยอยบันทึกอัตโนมัติ · ตอบให้ครบทั้ง 3 ข้อ"}</span>
+            <button className="button button-orange" disabled={!currentReady} onClick={saveCurrent}>ยืนยันและไปคนถัดไป</button>
             {complete && <button className="button button-orange system-continue-button" onClick={finish}>ไปต่อ</button>}
           </div>
         </div>
@@ -1506,219 +1913,73 @@ function ExitTicketScreen({ team, initial, onBack, onSaveDraft, onDone }: { team
   );
 }
 
-function TestHub({ onStart }: { onStart: () => void }) {
+function LabPreview({ audio, onClose }: { audio: boolean; onClose: () => void }) {
+  // A separate state tree: the shortcut never overwrites a team checkpoint or sends learning events.
+  const [previewSave, setPreviewSave] = useState<GameSave>({ ...EMPTY_SAVE, stage: "testHub", audio });
+  const patchPreview = (next: Partial<GameSave>) => setPreviewSave((current) => ({ ...current, ...next }));
+  return <main className="app-shell"><section className="game-frame" aria-live="polite">
+    <LabScreens save={previewSave} onPatch={patchPreview} onBack={onClose} preview />
+    <button className="global-audio-button" aria-label={previewSave.audio ? "ปิดเสียงเพลง" : "เปิดเสียงเพลง"} aria-pressed={previewSave.audio} onClick={() => patchPreview({ audio: !previewSave.audio })}>{previewSave.audio ? "🔊" : "🔇"}</button>
+  </section></main>;
+}
+
+function LabScreens({ save, onPatch, onBack, onComplete, preview = false }: {
+  save: GameSave; onPatch: (next: Partial<GameSave>) => void; onBack: () => void; onComplete?: () => void; preview?: boolean;
+}) {
+  if (save.stage === "testHub") return <TestHub save={save} onStart={(room) => onPatch(openLabPatch(save, room))} onBack={onBack} onComplete={onComplete} preview={preview} />;
+  if (!LAB_ROOMS.some((room) => room.id === save.stage) && save.stage !== "elasticity") return null;
+  const returnToHub = () => onPatch({ stage: "testHub" });
+  const draftAnswer = (room: string, materialId: string, answer: string) => onPatch({ labAnswerDrafts: { ...save.labAnswerDrafts, [room]: { ...save.labAnswerDrafts?.[room], [materialId]: answer } } });
+  if (save.stage === "compression") return <CompressionLab save={save} onAnswer={(id, answer) => draftAnswer("compression", id, answer)} onSave={(compressionResults, compressionIndex) => onPatch({ compressionResults, compressionIndex })} onDone={returnToHub} preview={preview} />;
+  if (save.stage === "impact" || save.stage === "elasticity") return <ImpactLab save={save} onAnswer={(id, answer) => draftAnswer("impact", id, answer)} onSave={(impactResults, impactIndex) => onPatch({ impactResults, impactIndex, stage: "impact" })} onDone={returnToHub} preview={preview} />;
+  if (save.stage === "absorption") return <AbsorptionLab save={save} onSave={(absorptionResults, absorptionIndex) => onPatch({ absorptionResults, absorptionIndex })} onDone={returnToHub} preview={preview} />;
+  return null;
+}
+
+function TestHub({ save, onStart, onBack, onComplete, preview }: {
+  save: GameSave; onStart: (room: LabRoom) => void; onBack: () => void; onComplete?: () => void; preview: boolean;
+}) {
+  const complete = allLabsComplete(save);
   return (
     <div className="screen test-hub-screen">
       <img className="group-design-bg" src={asset("compression/lab_background.png")} alt="" />
+      <button className="button button-white lab-back-button" onClick={onBack}>{preview ? "‹ กลับหน้าปก" : "‹ กลับไปเลือกทีม"}</button>
       <header className="test-hub-header">
-        <span>ตอนที่ 2</span>
-        <div><h1>ห้องทดสอบวัสดุ</h1><p>ทดลองทั้ง 3 ห้องก่อนตัดสินใจเลือกวัสดุสำหรับกล่อง</p></div>
+        <div><h1>เลือกห้องทดลอง</h1><p>สมบัติที่เราเลือกศึกษา · วัสดุ {LAB_MATERIALS.length} ชนิด</p></div>
       </header>
       <section className="test-room-grid" aria-label="ห้องทดสอบทั้งหมด">
-        <article><span>01</span><h2>ห้องทดสอบแรงกด</h2><p>เพิ่มน้ำหนัก 1-3 ขวด แล้วดูการยุบและคืนตัว</p></article>
-        <article><span>02</span><h2>ห้องทดสอบการดูดซับน้ำ</h2><p>หยดน้ำทีละระดับ แล้วดูว่าน้ำซึมเข้าเนื้อวัสดุหรือไม่</p></article>
-        <article><span>03</span><h2>ห้องทดสอบความยืดหยุ่น</h2><p>ดึงวัสดุเท่า ๆ กัน แล้วดูว่าคืนรูปเดิมได้มากแค่ไหน</p></article>
+        {LAB_ROOMS.map((room) => {
+          const count = labResultCount(save, room.id);
+          return <article key={room.id} className={`test-room-card test-room-${room.id}`}>
+            <span className="test-room-icon" aria-hidden="true"><img src={asset(`menu/lab-room-${room.id}.png`)} alt="" /></span>
+            <small>ห้องที่ {room.number}</small><h2>{room.title}</h2>
+            <div className="test-room-description"><p>{room.observation}</p><p>{room.purpose}</p></div>
+            <div className="test-room-progress">{count === LAB_MATERIALS.length ? (room.notice ? "✓ บันทึกกิจกรรมเดิมครบแล้ว" : "✓ ทดลองครบแล้ว") : `บันทึกแล้ว ${count}/${LAB_MATERIALS.length} วัสดุ`}</div>
+            <button className="button button-orange" onClick={() => onStart(room.id)} aria-label={`เข้าห้องทดสอบ${room.title}`}>{room.notice ? "เปิดกิจกรรมเดิม" : count === LAB_MATERIALS.length ? "ทดลองอีกครั้ง" : count ? "ทดลองต่อ" : "เข้าห้องทดลอง"}</button>
+          </article>;
+        })}
       </section>
-      <button className="button button-orange test-hub-start" onClick={onStart}>เริ่มทดสอบห้องที่ 1</button>
-    </div>
-  );
-}
-
-function CompressionLab({ save, onSave, onDone }: { save: GameSave; onSave: (r: Record<string, CompressionResult>, index: number) => void; onDone: () => void }) {
-  const material = MATERIALS[Math.min(save.compressionIndex, MATERIALS.length - 1)];
-  const [bottles, setBottles] = useState(0);
-  const [released, setReleased] = useState(false);
-  const sag = released ? material.residual : bottles ? material.sag[bottles - 1] : 0;
-  const frameKey: CompressionFrameKey = released ? "released" : bottles === 0 ? "idle" : `load${bottles}` as CompressionFrameKey;
-  const plateDrop = sag * .9375;
-  const visibleBottles = released ? 0 : bottles;
-  const selector = MATERIALS.slice(save.compressionIndex, save.compressionIndex + 3);
-  const motionStyle = {
-    "--material-motion-duration": `${released ? material.motion.releaseMs : material.motion.loadMs}ms`,
-    "--material-motion-easing": material.motion.easing,
-  } as CSSProperties;
-
-  useEffect(() => {
-    const nextMaterial = MATERIALS[save.compressionIndex + 1];
-    [material, nextMaterial].filter((item): item is typeof material => Boolean(item)).forEach((item) => {
-      COMPRESSION_FRAME_KEYS.forEach((key) => {
-        const image = new Image();
-        image.src = asset(`compression/materials/${item.testFrames[key]}`);
-      });
-    });
-  }, [material, save.compressionIndex]);
-
-  const addBottle = () => { if (bottles < 3 && !released) { setBottles((n) => n + 1); playSound("06_box_impact.ogg", save.audio); } };
-  const reset = () => { setBottles(0); setReleased(false); };
-  const action = () => {
-    if (bottles < 3) return;
-    if (!released) { setReleased(true); playSound("08_handoff.ogg", save.audio); return; }
-    const result: CompressionResult = { materialId: material.id, measurements: [...material.sag], residual: material.residual, recovered: material.sag[2] - material.residual };
-    const all = { ...save.compressionResults, [material.id]: result };
-    const next = save.compressionIndex + 1;
-    onSave(all, next);
-    reset();
-    if (next >= MATERIALS.length) onDone();
-  };
-  return (
-    <div className="screen compression-screen">
-      <img className="compression-bg" src={asset("compression/lab_background.png")} alt="ห้องทดลอง" />
-      <div className="compression-wash" />
-      <header className="compression-title"><span>ขั้นที่ 6/9</span><div><h1>ทดลองแรงกด</h1><p>เพิ่มน้ำหนัก แล้วดูว่ายุบแค่ไหน</p></div></header>
-      <aside className="material-rail">
-        {selector.map((item, slot) => <article className={`material-tile ${slot === 0 ? "active" : ""}`} key={item.id}><img src={asset(`materials/${item.image}`)} alt={item.name} /><span>{item.name}</span></article>)}
-      </aside>
-      <section className={`compression-machine effect-${material.motion.releaseEffect}`} style={motionStyle} aria-label="แท่นทดสอบแรงกด">
-        <div className="bottles" style={{ top: `${3.5 + plateDrop}%` }}>{Array.from({ length: visibleBottles }, (_, i) => <img key={i} src={asset("compression/water_bottle.png")} alt="ขวดน้ำหนัก 500 กรัม" />)}</div>
-        <div className="plate plate-top" style={{ top: `${44 + plateDrop}%` }} />
-        <div className={`material-sprite-stack ${released ? "is-released" : ""}`}>
-          {COMPRESSION_FRAME_KEYS.map((key) => {
-            const active = key === frameKey;
-            return <img key={key} className={`material-sprite ${active ? "active" : ""}`} src={asset(`compression/materials/${material.testFrames[key]}`)} alt={active ? `${material.name} สถานะยุบ ${sag} มิลลิเมตร` : ""} aria-hidden={!active} />;
-          })}
-        </div>
-        <div className="plate plate-bottom" />
-        <div className="ruler"><span className="ruler-body">{[0, 5, 10, 15, 20].map((n) => <i key={n} style={{ top: `${n * 5}%` }}>{n}</i>)}</span></div>
-        <div className="measure-arrow" style={{ top: "56.5%", height: `${Math.max(1.5, plateDrop)}%` }}><b>{sag} มม.</b></div>
-      </section>
-      <aside className="measurement-card">
-        <h2>ผลที่วัดได้</h2>
-        <ResultBox tone="blue" icon="▣" value={`${visibleBottles} ขวด`} />
-        <ResultBox tone="pink" icon="↓" value={`${sag} มม.`} />
-        <ResultBox tone="green" icon="↻" value={released ? `คืน ${material.sag[2] - material.residual} มม.` : "รอดูการคืนตัว"} />
-        <p className={`recovery-note ${released ? "shown" : ""}`}>{released ? `${material.releaseSummary} · เหลือรอยยุบ ${material.residual} มม.` : "ยกขวดออกเพื่อดูว่าวัสดุคืนตัวแค่ไหน"}</p>
-        <small className="simulation-note">ชิ้นทดสอบเริ่มสูงเท่ากัน 20 มม. · 1 ขวด = 500 กรัม · ค่าจำลองเพื่อเปรียบเทียบ</small>
-      </aside>
-      <footer className="compression-actions">
-        <button className="button button-yellow" disabled={bottles >= 3 || released} onClick={addBottle}>＋ เพิ่มขวด</button>
-        <button className="button button-white" onClick={reset}>↶ เริ่มใหม่</button>
-        <div className="test-stars">{[1, 2, 3].map((n) => <span className={bottles >= n ? "filled" : ""} key={n}>☆</span>)}</div>
-        <button className="button button-orange record-button" disabled={bottles < 3} onClick={action}>{released ? "▣ บันทึกผล" : "ยกขวดออก"}</button>
+      <footer className="test-hub-footer"><p>{preview ? "ทดลองอิสระ · ไม่บันทึกผลเข้าทีม" : "ผลที่บันทึกในแต่ละห้องจะเก็บในภารกิจของทีม"}<br /><small>{complete ? "✓ บันทึกผลครบทั้ง 3 ห้องแล้ว" : "กดบันทึกผลในแต่ละห้อง แล้วกลับมาเลือกห้องต่อไปได้"}</small></p>
+        {onComplete && <button className="button button-orange" disabled={!complete} onClick={onComplete}>ทบทวนผลการทดลอง ›</button>}
       </footer>
     </div>
   );
 }
 
-function AbsorptionLab({ save, onSave, onDone }: { save: GameSave; onSave: (r: Record<string, WaterAbsorptionResult>, index: number) => void; onDone: () => void }) {
-  const material = MATERIALS[Math.min(save.absorptionIndex, MATERIALS.length - 1)];
-  const [drops, setDrops] = useState(0);
-  const absorbed = drops ? material.waterDrops[drops - 1] : 0;
-  const selector = MATERIALS.slice(save.absorptionIndex, save.absorptionIndex + 3);
-  const wetLevel = drops ? Math.min(100, 18 + absorbed * 6) : 0;
-  const addDrop = () => {
-    if (drops < 3) {
-      setDrops((value) => value + 1);
-      playSound("04_rain.ogg", save.audio);
-    }
-  };
-  const reset = () => setDrops(0);
-  const record = () => {
-    if (drops < 3) return;
-    const result: WaterAbsorptionResult = { materialId: material.id, drops: [...material.waterDrops], absorbed: material.waterDrops[2], summary: material.waterSummary };
-    const next = save.absorptionIndex + 1;
-    onSave({ ...save.absorptionResults, [material.id]: result }, next);
-    reset();
-    if (next >= MATERIALS.length) onDone();
-  };
-  return (
-    <div className="screen simple-lab-screen water-lab-screen">
-      <img className="compression-bg" src={asset("compression/lab_background.png")} alt="" />
-      <header className="compression-title"><span>ตอนที่ 2 · ห้อง 2/3</span><div><h1>ทดสอบการดูดซับน้ำ</h1><p>หยดน้ำเท่ากัน แล้วดูว่าวัสดุดูดน้ำมากแค่ไหน</p></div></header>
-      <aside className="material-rail">{selector.map((item, slot) => <article className={`material-tile ${slot === 0 ? "active" : ""}`} key={item.id}><img src={asset(`materials/${item.image}`)} alt={item.name} /><span>{item.name}</span></article>)}</aside>
-      <section className="simple-test-stage" aria-label="แท่นทดสอบการดูดซับน้ำ">
-        <div className="drop-cloud">{Array.from({ length: drops }, (_, index) => <span key={index}>●</span>)}</div>
-        <div className="sample-card">
-          <img src={asset(`materials/${material.image}`)} alt={material.name} />
-          <div className="wet-overlay" style={{ opacity: wetLevel / 100 }} />
-        </div>
-        <div className="water-meter"><i style={{ height: `${wetLevel}%` }} /><b>{absorbed} หน่วย</b></div>
-      </section>
-      <aside className="measurement-card simple-result-card">
-        <h2>{material.name}</h2>
-        <ResultBox tone="blue" icon="●" value={`${drops} หยด`} />
-        <ResultBox tone="pink" icon="↓" value={`${absorbed} หน่วย`} />
-        <p className="recovery-note shown">{drops === 3 ? material.waterSummary : "เพิ่มหยดน้ำให้ครบ 3 ครั้งเพื่อเปรียบเทียบ"}</p>
-        <small className="simulation-note">ค่าดูดซับน้ำเป็นค่าจำลองเพื่อเปรียบเทียบในชั้นเรียน</small>
-      </aside>
-      <footer className="compression-actions">
-        <button className="button button-yellow" disabled={drops >= 3} onClick={addDrop}>＋ เพิ่มหยดน้ำ</button>
-        <button className="button button-white" onClick={reset}>↶ เริ่มใหม่</button>
-        <div className="test-stars">{[1, 2, 3].map((n) => <span className={drops >= n ? "filled" : ""} key={n}>☆</span>)}</div>
-        <button className="button button-orange record-button" disabled={drops < 3} onClick={record}>▣ บันทึกผล</button>
-      </footer>
-    </div>
-  );
-}
-
-function ElasticityLab({ save, onSave, onDone }: { save: GameSave; onSave: (r: Record<string, ElasticityResult>, index: number) => void; onDone: () => void }) {
-  const material = MATERIALS[Math.min(save.elasticityIndex, MATERIALS.length - 1)];
-  const [pulls, setPulls] = useState(0);
-  const [released, setReleased] = useState(false);
-  const stretch = released ? material.elasticityResidual : pulls ? material.elasticityStretch[pulls - 1] : 0;
-  const selector = MATERIALS.slice(save.elasticityIndex, save.elasticityIndex + 3);
-  const stretchScale = 1 + stretch / 45;
-  const pull = () => {
-    if (pulls < 3 && !released) {
-      setPulls((value) => value + 1);
-      playSound("07_paper_friction.ogg", save.audio);
-    }
-  };
-  const reset = () => { setPulls(0); setReleased(false); };
-  const action = () => {
-    if (pulls < 3) return;
-    if (!released) {
-      setReleased(true);
-      playSound("10_idea_chime.ogg", save.audio);
-      return;
-    }
-    const result: ElasticityResult = { materialId: material.id, stretch: [...material.elasticityStretch], residual: material.elasticityResidual, recovered: material.elasticityStretch[2] - material.elasticityResidual, summary: material.elasticitySummary };
-    const next = save.elasticityIndex + 1;
-    onSave({ ...save.elasticityResults, [material.id]: result }, next);
-    reset();
-    if (next >= MATERIALS.length) onDone();
-  };
-  return (
-    <div className="screen simple-lab-screen elasticity-lab-screen">
-      <img className="compression-bg" src={asset("compression/lab_background.png")} alt="" />
-      <header className="compression-title"><span>ตอนที่ 2 · ห้อง 3/3</span><div><h1>ทดสอบความยืดหยุ่น</h1><p>ดึงวัสดุเท่า ๆ กัน แล้วดูว่าคืนรูปได้มากแค่ไหน</p></div></header>
-      <aside className="material-rail">{selector.map((item, slot) => <article className={`material-tile ${slot === 0 ? "active" : ""}`} key={item.id}><img src={asset(`materials/${item.image}`)} alt={item.name} /><span>{item.name}</span></article>)}</aside>
-      <section className="simple-test-stage" aria-label="แท่นทดสอบความยืดหยุ่น">
-        <div className="pull-handle left">←</div>
-        <div className={`elastic-sample ${released ? "released" : ""}`} style={{ transform: `scaleX(${stretchScale})` }}>
-          <img src={asset(`materials/${material.image}`)} alt={material.name} />
-        </div>
-        <div className="pull-handle right">→</div>
-        <div className="stretch-ruler"><span style={{ width: `${Math.max(4, stretch * 3)}%` }} /><b>{stretch} มม.</b></div>
-      </section>
-      <aside className="measurement-card simple-result-card">
-        <h2>{material.name}</h2>
-        <ResultBox tone="blue" icon="↔" value={`${pulls} ครั้ง`} />
-        <ResultBox tone="pink" icon="＋" value={`${stretch} มม.`} />
-        <ResultBox tone="green" icon="↻" value={released ? `คืน ${material.elasticityStretch[2] - material.elasticityResidual} มม.` : "รอดูการคืนตัว"} />
-        <p className={`recovery-note ${released ? "shown" : ""}`}>{released ? material.elasticitySummary : "ดึงครบ 3 ครั้ง แล้วปล่อยเพื่อดูการคืนตัว"}</p>
-        <small className="simulation-note">ค่าความยืดหยุ่นเป็นค่าจำลองเพื่อเปรียบเทียบในชั้นเรียน</small>
-      </aside>
-      <footer className="compression-actions">
-        <button className="button button-yellow" disabled={pulls >= 3 || released} onClick={pull}>＋ ดึงวัสดุ</button>
-        <button className="button button-white" onClick={reset}>↶ เริ่มใหม่</button>
-        <div className="test-stars">{[1, 2, 3].map((n) => <span className={pulls >= n ? "filled" : ""} key={n}>☆</span>)}</div>
-        <button className="button button-orange record-button" disabled={pulls < 3} onClick={action}>{released ? "▣ บันทึกผล" : "ปล่อยมือ"}</button>
-      </footer>
-    </div>
-  );
-}
-
-function ResultBox({ tone, icon, value }: { tone: string; icon: string; value: string }) {
-  return <div className={`result-box ${tone}`}><span>{icon}</span><b>{value}</b></div>;
-}
-
-function Recap({ index, onIndex, onDone }: { index: number; onIndex: (n: number) => void; onDone: () => void }) {
+function Recap({ index, answers, onAnswer, onIndex, onDone }: { index: number; answers: Record<string, number[]>; onAnswer: (answers: Record<string, number[]>) => void; onIndex: (n: number) => void; onDone: () => void }) {
+  const advancing = useRef(false);
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => { advancing.current = false; return () => clearTimeout(advanceTimer.current); }, [index]);
   const [message, setMessage] = useState("เลือกคำตอบของทีม");
   const item = RECAP[index];
   const choose = (choice: number) => {
+    if (advancing.current) return;
+    const key = String(index);
+    onAnswer({ ...answers, [key]: [...(answers[key] ?? []), choice] });
     if (choice !== item.answer) { setMessage("ลองคิดจากสิ่งที่เพิ่งทดลองอีกครั้งนะ"); return; }
     setMessage("ถูกต้อง!");
-    setTimeout(() => { setMessage("เลือกคำตอบของทีม"); if (index >= RECAP.length - 1) onDone(); else onIndex(index + 1); }, 500);
+    advancing.current = true;
+    advanceTimer.current = setTimeout(() => { setMessage("เลือกคำตอบของทีม"); if (index >= RECAP.length - 1) onDone(); else onIndex(index + 1); }, 500);
   };
   return <div className="screen recap-screen"><div className="quiz-card"><div className="step-pill">ขั้นที่ 7/9 · ทบทวน {index + 1}/{RECAP.length}</div><h1>{item.question}</h1><div className="quiz-choices">{item.choices.map((choice, i) => <button key={choice} onClick={() => choose(i)}>{choice}</button>)}</div><p>{message}</p></div></div>;
 }
@@ -1735,7 +1996,7 @@ function Prediction({ labsEnabled, values, compressionResults, absorptionResults
       : !labsEnabled
         ? "เลือกไว้แล้ว · ห้องทดลองปิดชั่วคราว"
         : compression && absorption && elasticity
-      ? `กด: ยุบ ${compression.measurements[2]} มม. · น้ำ: ซึม ${absorption.absorbed} หน่วย · ยืด: คืน ${elasticity.recovered} มม.`
+      ? `กด: ยุบ ${compression.deformationMm ?? compression.measurements.at(-1) ?? 0} มม. · น้ำ: ซึม ${absorption.absorbed} หน่วย · ยืด: คืน ${elasticity.recovered} มม.`
       : "รอเลือกวัสดุ";
     return <label key={part}><b>{part}</b><select value={values[part] ?? ""} onChange={(event) => onChange({ ...values, [part]: event.target.value })}><option value="">เลือกวัสดุ</option>{MATERIALS.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select><span>{report}</span></label>;
   })}</div><button className="button button-orange prediction-done" disabled={!complete} onClick={onDone}>บันทึกคำตอบทีม</button></div>;
@@ -1743,5 +2004,11 @@ function Prediction({ labsEnabled, values, compressionResults, absorptionResults
 
 function Summary({ save, onReplay, onReset }: { save: GameSave; onReplay: () => void; onReset: () => void }) {
   const names = save.team.map((m) => m.name).join(" · ");
-  return <div className="screen summary-screen"><div className="summary-card"><div className="step-pill">จบกิจกรรมคาบที่ 1</div><div className="medal">🔎</div><h1>วิเคราะห์ปัญหาและกำหนดสมบัติที่ต้องศึกษาเรียบร้อยแล้ว</h1><p>{names}</p><section className="summary-next-lesson"><span>คาบต่อไป</span><h2>เราจะทดสอบสมบัติของวัสดุทั้ง 3 ด้าน</h2></section><div className="summary-actions"><button className="button button-yellow" onClick={onReplay}>เริ่มภารกิจรอบใหม่</button><button className="button button-white" onClick={onReset}>กลับหน้าปก</button></div></div></div>;
+  const labsComplete = allLabsComplete(save);
+  return <div className="screen summary-screen"><div className="summary-card">
+    <div className="step-pill">{labsComplete ? "จบภารกิจทดลองวัสดุ" : "จบกิจกรรมคาบที่ 1"}</div><div className="medal">🔎</div>
+    <h1>{labsComplete ? "บันทึกกิจกรรมทดลองที่เปิดใช้ครบแล้ว!" : "วิเคราะห์ปัญหาและกำหนดสมบัติที่ต้องศึกษาเรียบร้อยแล้ว"}</h1><p>{names}</p>
+    <section className="summary-next-lesson"><span>{labsComplete ? "สิ่งที่ได้สังเกต" : "คาบต่อไป"}</span><h2>{labsComplete ? "ความต้านทานแรงกดทับ การลดความเสียหายจากแรงกระแทก และการดูดซับน้ำ" : "เราจะทดสอบสมบัติของวัสดุทั้ง 3 ด้าน"}</h2>{labsComplete && <p>นำสิ่งที่สังเกตจากแบบจำลองมาเปรียบเทียบและอภิปรายร่วมกัน</p>}</section>
+    <div className="summary-actions"><button className="button button-yellow" onClick={onReplay}>เริ่มภารกิจรอบใหม่</button><button className="button button-white" onClick={onReset}>กลับหน้าปก</button></div>
+  </div></div>;
 }

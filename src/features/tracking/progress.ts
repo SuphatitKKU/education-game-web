@@ -1,4 +1,6 @@
 import type { Stage } from "@/features/game/data";
+import { LAB_ROOMS_ENABLED, LAB_STAGES } from "@/features/game/labs";
+import { STUDY_TOPICS } from "@/features/game/learning-topics";
 
 export const ACTIVE_STAGE_ORDER: Stage[] = [
   "mission",
@@ -7,11 +9,14 @@ export const ACTIVE_STAGE_ORDER: Stage[] = [
   "materials",
   "studyFocus",
   "exitTicket",
+  "mission1Complete",
+  ...(LAB_ROOMS_ENABLED ? LAB_STAGES : []),
   "summary",
 ];
 
 export const STAGE_LABELS: Record<Stage, string> = {
   menu: "หน้าปก",
+  overview: "เส้นทาง 5 ภารกิจ",
   team: "จัดทีม",
   mission: "รับภารกิจและติดตามพัสดุ",
   story: "เรียนรู้จากเรื่องราว",
@@ -19,17 +24,19 @@ export const STAGE_LABELS: Record<Stage, string> = {
   materials: "ศึกษาวัสดุ",
   studyFocus: "เลือกสิ่งที่ต้องศึกษา",
   exitTicket: "ตอบคำถามรายบุคคล",
+  mission1Complete: "ทำภารกิจที่ 1 สำเร็จ",
   testHub: "ห้องทดสอบ",
-  compression: "ทดสอบแรงกด",
-  absorption: "ทดสอบการดูดซับน้ำ",
-  elasticity: "ทดสอบความยืดหยุ่น",
+  compression: STUDY_TOPICS[0].title,
+  absorption: STUDY_TOPICS[2].title,
+  elasticity: "กิจกรรมยืดและคืนรูป (วิธีเดิม)",
+  impact: STUDY_TOPICS[1].title,
   recap: "ทบทวน",
   prediction: "เลือกวัสดุ",
   summary: "สรุปภารกิจ",
 };
 
 export function stageProgress(stage: Stage): number {
-  if (stage === "summary") return 100;
+  if (stage === "mission1Complete" || stage === "summary") return 100;
   const index = ACTIVE_STAGE_ORDER.indexOf(stage);
   if (index < 0) return 0;
   return Math.round((index / (ACTIVE_STAGE_ORDER.length - 1)) * 100);
