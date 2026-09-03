@@ -671,7 +671,7 @@ export function BubbleWrapContinuousZoom({ depth, level, selectedId, onSelect }:
     {level !== "normal" && <div className={styles.readout}><span>{readout.eyebrow}</span><b>{readout.scale}</b></div>}
     {level !== "normal" && <PanControls onPan={pan.nudge} />}
     {level !== "normal" && <div className={styles.continuousPath} aria-hidden="true"><span>โมเดล 3D</span><i>›</i><span className={level === "micro" ? styles.pathActive : ""}>ภาพ SEM</span><i>›</i><span className={level === "nano" ? styles.pathActive : ""}>ภาพ AFM</span></div>}
-    {level !== "normal" && <div className={styles.note}>ภาพตัวแทนผิวฟิล์ม LDPE ที่ยังไม่ปรับผิว จาก <a href="https://doi.org/10.3390/polym11101704" target="_blank" rel="noreferrer">Múčka และคณะ (2019) · ภาพที่ 8(A)</a> · {level === "nano" ? "สีแทนความสูง ไม่ใช่สีจริง" : "ไฟล์ต้นฉบับความละเอียดสูง"}</div>}
+    {level !== "normal" && <div className={styles.note}>ภาพตัวแทนผิวฟิล์ม LDPE ที่ยังไม่ปรับผิว จาก <a href="https://doi.org/10.3390/polym11101704" target="_blank" rel="noreferrer">Habib และคณะ (2019) · ภาพที่ 8(A)</a> · {level === "nano" ? "สีแทนความสูง ไม่ใช่สีจริง" : "ไฟล์ต้นฉบับความละเอียดสูง"}</div>}
   </div>;
 }
 

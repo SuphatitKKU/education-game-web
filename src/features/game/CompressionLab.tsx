@@ -243,7 +243,7 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
         const result = compressionMaterialResult(item);
         return <tr key={item.id}><td><img src={asset(`materials/${item.image}`)} alt="" />{item.name}</td><td>{formatCompressionMm(result.deformationMm)} มม.</td><td>{formatCompressionMm(result.loadedThicknessMm)} มม.</td><td>{compressionModelObservationLabel(item)}</td><td>{compressionObservationLabel(save.compressionResults[item.id])}</td></tr>;
       })}</tbody></table>
-      <p className={styles.recordNote}>ค่าที่แสดงเป็นชุดข้อมูลอ้างอิงที่กำหนดให้ SIM ภายใต้เงื่อนไขเดียวกัน เด็กยังบันทึกผลจากสิ่งที่ตนสังเกต{preview ? " · บันทึกเฉพาะรอบทดลองอิสระนี้" : ""}</p>
+      <p className={styles.recordNote}>ค่าที่แสดงเป็นชุดข้อมูลอ้างอิงที่กำหนดให้ Simulation ภายใต้เงื่อนไขเดียวกัน เด็กยังบันทึกผลจากสิ่งที่ตนสังเกต{preview ? " · บันทึกเฉพาะรอบทดลองอิสระนี้" : ""}</p>
       <button className={styles.dialogDone} onClick={() => { setShowRecords(false); guard(onDone); }}>กลับไปเลือกห้องทดลอง</button>
     </dialog>
     <dialog ref={confirmRef} className={`${styles.dialog} ${styles.confirm}`} onCancel={() => setPendingAction(null)} aria-labelledby="press-confirm-title">
