@@ -14,13 +14,21 @@ const mime = {
 
 createServer((request, response) => {
   const pathname = decodeURIComponent(new URL(request.url || "/", "http://localhost").pathname);
-  const relative = normalize(pathname).replace(/^([/\\])+/, "");
+  if (pathname === "/" || pathname === "" || pathname === "/education-game-web") {
+    response.writeHead(302, { Location: "/education-game-web/" });
+    response.end();
+    return;
+  }
+  const unaliased = pathname.replace(/^\/education-game-web(?:\/|$)/, "/");
+  const relative = normalize(unaliased).replace(/^([/\\])+/, "");
   let file = join(root, relative || "index.html");
   if (existsSync(file) && statSync(file).isDirectory()) file = join(file, "index.html");
   if (!existsSync(file) || !file.startsWith(root)) file = join(root, "404.html");
   response.writeHead(file.endsWith("404.html") ? 404 : 200, {
     "Content-Type": mime[extname(file)] || "application/octet-stream",
     "Cache-Control": file.includes(`${join("", "_next")}`) ? "public, max-age=31536000, immutable" : "no-cache",
+    "Access-Control-Allow-Origin": "*",
+    "Cross-Origin-Resource-Policy": "cross-origin",
   });
   createReadStream(file).pipe(response);
 }).listen(port, () => console.log(`Parcel Lab is ready at http://localhost:${port}`));

@@ -15,6 +15,14 @@ describe("answer audit", () => {
     const events = answerEvents(EMPTY_SAVE, { exitTickets: { "member-abc": { k: "one match", p: "", v: "" } } });
     expect(events[0]).toMatchObject({ memberId: "abc", eventType: "exit_ticket_answer_changed", payload: { answer: { k: "one match", p: "", v: "" } } });
   });
+  it("records the team's box-mission selections for the teacher dashboard", () => {
+    const events = answerEvents(EMPTY_SAVE, { boxMissionGoals: { "reuse-suitable-material": true } });
+    expect(events).toEqual([expect.objectContaining({
+      eventType: "box_mission_goal_changed",
+      stage: "boxMission",
+      payload: { field: "boxMissionGoals", key: "reuse-suitable-material", previous: null, answer: true },
+    })]);
+  });
   it("tracks lab drafts and recap attempts but ignores unchanged snapshots", () => {
     expect(answerEvents(EMPTY_SAVE, { labAnswerDrafts: { impact: { cardboard: "much" } }, recapAnswers: { "0": [1, 0] } })).toHaveLength(2);
     expect(answerEvents(EMPTY_SAVE, { inspectionFindings: {}, exitTickets: {} })).toEqual([]);

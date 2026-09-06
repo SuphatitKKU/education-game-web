@@ -30,7 +30,13 @@ export function parseLegacyBundle(rawSave: string | null, rawStatistics: string 
 
 export function readLegacyBundle(): LegacyBundle {
   if (typeof window === "undefined") return { save: null, statistics: [] };
-  return parseLegacyBundle(localStorage.getItem(LEGACY_SAVE_KEY), localStorage.getItem(LEGACY_STATS_KEY));
+  try {
+    return parseLegacyBundle(localStorage.getItem(LEGACY_SAVE_KEY), localStorage.getItem(LEGACY_STATS_KEY));
+  } catch {
+    // Safari can expose localStorage while denying access to it (for example in
+    // private/restricted browsing). Storage must never prevent the game booting.
+    return { save: null, statistics: [] };
+  }
 }
 
 export function hasLegacyData(bundle: LegacyBundle): boolean {
@@ -39,15 +45,25 @@ export function hasLegacyData(bundle: LegacyBundle): boolean {
 
 export function markLegacyImported(): void {
   if (typeof window !== "undefined") {
-    localStorage.setItem(LEGACY_IMPORTED_KEY, new Date().toISOString());
-    localStorage.setItem(SUPABASE_CACHE_BOUND_KEY, "true");
+    try {
+      localStorage.setItem(LEGACY_IMPORTED_KEY, new Date().toISOString());
+      localStorage.setItem(SUPABASE_CACHE_BOUND_KEY, "true");
+    } catch { /* keep the game usable when browser storage is unavailable */ }
   }
 }
 
 export function wasLegacyImported(): boolean {
-  return typeof window !== "undefined" && Boolean(localStorage.getItem(LEGACY_IMPORTED_KEY) || localStorage.getItem(SUPABASE_CACHE_BOUND_KEY));
+  if (typeof window === "undefined") return false;
+  try {
+    return Boolean(localStorage.getItem(LEGACY_IMPORTED_KEY) || localStorage.getItem(SUPABASE_CACHE_BOUND_KEY));
+  } catch {
+    return false;
+  }
 }
 
 export function markSupabaseCacheBound(): void {
-  if (typeof window !== "undefined") localStorage.setItem(SUPABASE_CACHE_BOUND_KEY, "true");
+  if (typeof window !== "undefined") {
+    try { localStorage.setItem(SUPABASE_CACHE_BOUND_KEY, "true"); }
+    catch { /* keep the game usable when browser storage is unavailable */ }
+  }
 }

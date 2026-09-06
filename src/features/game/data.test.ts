@@ -1,12 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { DAMAGE_CAUSES, DAMAGES, EMPTY_SAVE, MATERIALS, STORY } from "./data";
+import { BOX_MISSION_GOALS, DAMAGE_CAUSES, DAMAGES, EMPTY_SAVE, MATERIALS, STORY } from "./data";
 
 describe("active lesson-plan content", () => {
   it("starts new saves without prefilled inspection evidence", () => {
     expect(EMPTY_SAVE.inspectionFindings).toEqual({});
+    expect(EMPTY_SAVE.boxMissionGoals).toEqual({});
     expect(EMPTY_SAVE.bigQuestionProgress).toEqual({});
     expect(EMPTY_SAVE.recapAnswers).toEqual({});
     expect(EMPTY_SAVE.mission1Completed).toBe(false);
+  });
+
+  it("uses the four box missions from the revised lesson plan", () => {
+    expect(BOX_MISSION_GOALS.map((goal) => goal.label)).toEqual([
+      "โครงกล่องไม่ยุบง่าย",
+      "ช่วยลดความเสียหายจากแรงกระแทก",
+      "ช่วยลดการเปียก",
+      "นำวัสดุที่ใช้แล้วซึ่งยังมีสภาพเหมาะสมกลับมาใช้ใหม่",
+    ]);
   });
 
   it("offers neutral evidence prompts and includes the damaged cup", () => {

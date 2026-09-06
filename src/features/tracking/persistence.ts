@@ -1,4 +1,5 @@
 import { EMPTY_SAVE, type GameSave, type Stage, type TeamMember } from "@/features/game/data";
+import { createBrowserId } from "@/lib/browser-id";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import type {
   ActiveRunRef,
@@ -194,7 +195,7 @@ export async function updateTeamMembers(teamId: string, members: TeamMember[]): 
 
 export async function startOrResumeRun(team: TeamOverview): Promise<TrackedRun> {
   const client = requireClient();
-  const seed: GameSave = { ...EMPTY_SAVE, team: team.members, stage: "mission", runId: crypto.randomUUID() };
+  const seed: GameSave = { ...EMPTY_SAVE, team: team.members, stage: "mission", runId: createBrowserId() };
   const { data, error } = await client.rpc("start_or_resume_run", {
     p_team_id: team.id,
     p_seed_state: seed,
@@ -291,10 +292,10 @@ export function queueCheckpoint(
   const acknowledged = acknowledgedRuns.get(run.id);
   if (acknowledged?.status === "completed") return;
   const item: OutboxItem = {
-    id: crypto.randomUUID(),
+    id: createBrowserId(),
     run: acknowledged && acknowledged.revision > run.revision ? { id: run.id, teamId: run.teamId, revision: acknowledged.revision } : run,
     save,
-    events: events.map((event) => ({ ...event, id: event.id ?? crypto.randomUUID(), answeredAt: event.answeredAt ?? new Date().toISOString() })),
+    events: events.map((event) => ({ ...event, id: event.id ?? createBrowserId(), answeredAt: event.answeredAt ?? new Date().toISOString() })),
     complete,
     createdAt: new Date().toISOString(),
   };

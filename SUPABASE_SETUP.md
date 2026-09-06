@@ -30,6 +30,14 @@ set display_name = excluded.display_name;
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
+ตั้งค่าได้ที่ **Repository secrets** หรือที่ **Environment `github-pages` secrets**
+ก็ได้ (workflow ผูก build job กับ environment นี้ไว้แล้ว) หากใช้ตัวแปรแทน secret
+ให้ใช้ชื่อเดียวกันใน **Repository variables** หรือ **Environment variables**
+เช่นกัน จากนั้นรัน workflow ใหม่ด้วย `Run workflow` หรือ push เข้า `main`
+
+Workflow จะหยุดทันทีหากไม่พบค่าทั้งสองตัว เพื่อป้องกันการ deploy หน้าเว็บที่
+ทำงานแบบ local อย่างเดียวโดยไม่ส่งข้อมูลไป Supabase
+
 ## 4. ตรวจสอบก่อนใช้งานจริง
 
 1. ใช้บัญชีครูเข้าสู่ `/teacher/`

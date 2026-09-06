@@ -1,4 +1,4 @@
-export type Stage = "menu" | "overview" | "team" | "mission" | "story" | "inspection" | "materials" | "studyFocus" | "exitTicket" | "mission1Complete" | "testHub" | "compression" | "absorption" | "elasticity" | "impact" | "recap" | "prediction" | "summary";
+export type Stage = "menu" | "overview" | "team" | "mission" | "story" | "inspection" | "boxMission" | "materials" | "studyFocus" | "exitTicket" | "mission1Complete" | "mission2Intro" | "testHub" | "compression" | "absorption" | "elasticity" | "impact" | "notebook" | "comparison" | "recap" | "mission2Complete" | "prediction" | "summary";
 
 export type DamageCause = "แรงกด" | "แรงกระแทก" | "น้ำ";
 
@@ -89,6 +89,7 @@ export type GameSave = {
   routeEvents: Record<string, boolean>;
   inspectionIndex: number;
   inspectionFindings: Record<string, DamageCause>;
+  boxMissionGoals: Record<string, boolean>;
   compressionIndex: number;
   absorptionIndex: number;
   elasticityIndex: number;
@@ -106,6 +107,7 @@ export type GameSave = {
   exitTicketConfirmations: Record<string, ExitTicket>;
   labAnswerDrafts: Record<string, Record<string, string>>;
   mission1Completed: boolean;
+  mission2Completed: boolean;
   predictions: Record<string, string>;
   audio: boolean;
 };
@@ -119,6 +121,7 @@ export const EMPTY_SAVE: GameSave = {
   routeEvents: {},
   inspectionIndex: 0,
   inspectionFindings: {},
+  boxMissionGoals: {},
   compressionIndex: 0,
   absorptionIndex: 0,
   elasticityIndex: 0,
@@ -136,6 +139,7 @@ export const EMPTY_SAVE: GameSave = {
   exitTicketConfirmations: {},
   labAnswerDrafts: {},
   mission1Completed: false,
+  mission2Completed: false,
   predictions: {},
   audio: true,
 };
@@ -162,6 +166,13 @@ const ALL_STORY_SCENES = [
 export const STORY = ALL_STORY_SCENES.filter(([image]) => TORN_DAMAGE_STORY_ENABLED || image !== "shot_07_friction_tear.png");
 
 export const DAMAGE_CAUSES: readonly DamageCause[] = ["แรงกด", "แรงกระแทก", "น้ำ"];
+
+export const BOX_MISSION_GOALS = [
+  { id: "resist-compression", label: "โครงกล่องไม่ยุบง่าย", icon: "📦" },
+  { id: "reduce-impact-damage", label: "ช่วยลดความเสียหายจากแรงกระแทก", icon: "🥚" },
+  { id: "reduce-wetting", label: "ช่วยลดการเปียก", icon: "☔" },
+  { id: "reuse-suitable-material", label: "นำวัสดุที่ใช้แล้วซึ่งยังมีสภาพเหมาะสมกลับมาใช้ใหม่", icon: "♻️" },
+] as const;
 
 // Keep the tear hotspot data ready for later, but exclude it from the research flow for now.
 const TORN_DAMAGE_INSPECTION_ENABLED = false;

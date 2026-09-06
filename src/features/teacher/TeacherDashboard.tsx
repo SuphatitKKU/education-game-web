@@ -7,7 +7,7 @@ import { formatDuration, isToday, STAGE_LABELS, stageProgress } from "@/features
 import { deleteTeam, getTeacherTeamDetail, listTeams } from "@/features/tracking/persistence";
 import type { TeacherTeamDetail, TeamOverview } from "@/features/tracking/types";
 import { studyTopicLabel } from "@/features/game/learning-topics";
-import { RECAP } from "@/features/game/data";
+import { BOX_MISSION_GOALS, RECAP } from "@/features/game/data";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -19,6 +19,7 @@ const EVENT_LABELS: Record<string, string> = {
   stage_changed: "ไปยังขั้นถัดไป",
   route_event_tracked: "ติดตามเหตุการณ์ระหว่างขนส่ง",
   damage_finding_saved: "บันทึกร่องรอยและสาเหตุที่คาดว่าเกี่ยวข้อง",
+  box_mission_goal_changed: "เลือกภารกิจของกล่องพัสดุ",
   study_focus_changed: "เลือกหัวข้อที่ต้องศึกษา",
   exit_ticket_saved: "บันทึกคำตอบนักเรียน",
   exit_ticket_answer_changed: "ตอบหรือแก้ไขคำตอบรายบุคคล",
@@ -234,6 +235,7 @@ function TeacherDetailPanel({ team, detail, loading, onClose }: { team: TeamOver
       <div className="teacher-detail-summary"><div><span>สถานะ</span><b>{run.status === "in_progress" ? "กำลังทำ" : "สำเร็จแล้ว"}</b></div><div><span>ขั้นล่าสุด</span><b>{STAGE_LABELS[run.currentStage]}</b></div><div><span>เวลา</span><b>{formatDuration(run.startedAt, run.completedAt)}</b></div></div>
       <section><h3>คำตอบรายบุคคล</h3>{responses.length ? <div className="teacher-response-list">{responses.map((response) => <article key={response.id}><header><b>{response.memberName}</b><span>{new Date(response.savedAt).toLocaleString("th-TH")}</span></header><p><i>K</i>{response.k || "-"}</p><p><i>P</i>{response.p || "-"}</p><p><i>V</i>{response.v || "-"}</p></article>)}</div> : <div className="teacher-inline-empty">ยังไม่มีคำตอบรายบุคคล</div>}</section>
       <section><h3>คำตอบจากหน้าหมุนกล่อง 3 มิติ</h3><div className="teacher-chip-list">{Object.entries(run.saveState.inspectionFindings ?? {}).map(([damageId, cause]) => <span key={damageId}>{DAMAGE_LABELS[damageId] ?? damageId} → {cause}</span>)}{!Object.keys(run.saveState.inspectionFindings ?? {}).length && <em>ยังไม่ได้บันทึกคำตอบ</em>}</div></section>
+      <section><h3>ภารกิจของกล่องที่ทีมเลือก</h3><div className="teacher-chip-list">{BOX_MISSION_GOALS.filter((goal) => run.saveState.boxMissionGoals?.[goal.id]).map((goal) => <span key={goal.id}>{goal.label}</span>)}{!Object.values(run.saveState.boxMissionGoals ?? {}).some(Boolean) && <em>ยังไม่ได้เลือก</em>}</div></section>
       <section><h3>สิ่งที่ทีมเลือกศึกษา</h3><div className="teacher-chip-list">{Object.entries(run.saveState.studyFocus ?? {}).filter(([, selected]) => selected).map(([key]) => <span key={key}>{studyTopicLabel(key)}</span>)}{!Object.values(run.saveState.studyFocus ?? {}).some(Boolean) && <em>ยังไม่ได้เลือก</em>}</div></section>
       {Object.keys(run.saveState.recapAnswers ?? {}).length > 0 && <section><h3>คำตอบแบบทบทวนหลังการทดลอง</h3><div className="teacher-recap-list">{Object.entries(run.saveState.recapAnswers).map(([questionIndex, choices]) => { const item = RECAP[Number(questionIndex)]; return <article key={questionIndex}><b>{item?.question ?? `คำถามที่ ${Number(questionIndex) + 1}`}</b><span>{choices.map((choice) => item?.choices[choice] ?? `ตัวเลือก ${choice + 1}`).join(" → ")}</span></article>; })}</div></section>}
       <section><h3>กิจกรรมตามลำดับเวลา</h3>{events.length ? <ol className="teacher-timeline">{events.map((event) => <li key={event.id}><i /><div><b>{EVENT_LABELS[event.eventType] ?? event.eventType}</b><span>{STAGE_LABELS[event.stage] ?? event.stage}</span><small>{event.memberName ? `${event.memberName} · ` : ""}{new Date(event.occurredAt).toLocaleString("th-TH")}</small></div></li>)}</ol> : <div className="teacher-inline-empty">ยังไม่มีกิจกรรมที่บันทึกไว้</div>}</section>

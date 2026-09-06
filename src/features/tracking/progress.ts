@@ -6,11 +6,17 @@ export const ACTIVE_STAGE_ORDER: Stage[] = [
   "mission",
   "story",
   "inspection",
+  "boxMission",
   "materials",
   "studyFocus",
   "exitTicket",
   "mission1Complete",
+  "mission2Intro",
   ...(LAB_ROOMS_ENABLED ? LAB_STAGES : []),
+  "notebook",
+  "comparison",
+  "recap",
+  "mission2Complete",
   "summary",
 ];
 
@@ -21,22 +27,27 @@ export const STAGE_LABELS: Record<Stage, string> = {
   mission: "รับภารกิจและติดตามพัสดุ",
   story: "เรียนรู้จากเรื่องราว",
   inspection: "สำรวจความเสียหาย",
+  boxMission: "กำหนดภารกิจของกล่อง",
   materials: "ศึกษาวัสดุ",
   studyFocus: "เลือกสิ่งที่ต้องศึกษา",
   exitTicket: "ตอบคำถามรายบุคคล",
   mission1Complete: "ทำภารกิจที่ 1 สำเร็จ",
+  mission2Intro: "รับภารกิจที่ 2",
   testHub: "ห้องทดสอบ",
   compression: STUDY_TOPICS[0].title,
   absorption: STUDY_TOPICS[2].title,
   elasticity: "กิจกรรมยืดและคืนรูป (วิธีเดิม)",
   impact: STUDY_TOPICS[1].title,
+  notebook: "สมุดบันทึกผลของทีม",
+  comparison: "ตารางเปรียบเทียบวัสดุ",
   recap: "ทบทวน",
+  mission2Complete: "ทำภารกิจที่ 2 สำเร็จ",
   prediction: "เลือกวัสดุ",
   summary: "สรุปภารกิจ",
 };
 
 export function stageProgress(stage: Stage): number {
-  if (stage === "mission1Complete" || stage === "summary") return 100;
+  if (stage === "mission1Complete" || stage === "mission2Complete" || stage === "summary") return 100;
   const index = ACTIVE_STAGE_ORDER.indexOf(stage);
   if (index < 0) return 0;
   return Math.round((index / (ACTIVE_STAGE_ORDER.length - 1)) * 100);

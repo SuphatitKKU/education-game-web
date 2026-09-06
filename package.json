@@ -1,9 +1,16 @@
 {
   "name": "parcel-lab-web-game",
   "private": true,
+  "browserslist": [
+    "Chrome >= 80",
+    "Edge >= 80",
+    "Firefox >= 78",
+    "Safari >= 12",
+    "iOS >= 12"
+  ],
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/add-legacy-css-fallbacks.mjs",
     "start": "next start",
     "lint": "tsc --noEmit",
     "test": "vitest run"

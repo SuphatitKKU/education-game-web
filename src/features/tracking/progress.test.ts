@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDuration, isToday, stageProgress } from "./progress";
+import { ACTIVE_STAGE_ORDER, formatDuration, isToday, stageProgress } from "./progress";
 
 describe("tracking progress", () => {
   it("maps active lesson stages to monotonic progress", () => {
@@ -7,6 +7,11 @@ describe("tracking progress", () => {
     expect(values[0]).toBe(0);
     expect(values.at(-1)).toBe(100);
     expect(values).toEqual([...values].sort((a, b) => a - b));
+  });
+
+  it("places the box-mission discussion after inspection and before material exploration", () => {
+    expect(ACTIVE_STAGE_ORDER.indexOf("inspection")).toBeLessThan(ACTIVE_STAGE_ORDER.indexOf("boxMission"));
+    expect(ACTIVE_STAGE_ORDER.indexOf("boxMission")).toBeLessThan(ACTIVE_STAGE_ORDER.indexOf("materials"));
   });
 
   it("formats classroom run durations", () => {

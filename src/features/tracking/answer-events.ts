@@ -6,6 +6,7 @@ export function answerEvents(current: GameSave, next: Partial<GameSave>): Learni
   const events: LearningEventInput[] = [];
   const maps = [
     ["inspectionFindings", "damage_finding_saved", "inspection"],
+    ["boxMissionGoals", "box_mission_goal_changed", "boxMission"],
     ["studyFocus", "study_focus_changed", "studyFocus"],
     ["exitTickets", "exit_ticket_answer_changed", "exitTicket"],
     ["exitTicketConfirmations", "exit_ticket_saved", "exitTicket"],

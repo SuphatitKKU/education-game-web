@@ -15,7 +15,7 @@
 .experiment { border-color: #d2e5d7; }
 .demonstration { flex: 1; min-height: 0; display: grid; grid-template-columns: 57% 43%; align-items: center; margin: .75cqw .9cqw .25cqw; padding: .65cqw; border: .1cqw solid #d4dce1; border-radius: 1cqw; background: linear-gradient(145deg, #fff, #fbfcfd); }
 .scaleStage { position: relative; width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: .35cqw .7cqw .1cqw; }
-.scaleBody { position: relative; z-index: 1; width: min(82%, 16.8cqw); aspect-ratio: 1 / 1.04; max-height: 96%; padding: 0; border: .22cqw solid #606c74; border-radius: 1.25cqw; background: linear-gradient(145deg, #aeb8bd, #717d85); box-shadow: inset 0 .3cqw .24cqw #edf1f2, 0 .4cqw .5cqw #31445a3d; }
+.scaleBody { position: relative; z-index: 1; width: min(82%, 16.8cqw); height: 16.1538cqw; aspect-ratio: 1 / 1.04; max-height: 96%; padding: 0; border: .22cqw solid #606c74; border-radius: 1.25cqw; background: linear-gradient(145deg, #aeb8bd, #717d85); box-shadow: inset 0 .3cqw .24cqw #edf1f2, 0 .4cqw .5cqw #31445a3d; }
 .scaleTop { position: absolute; z-index: 2; left: 7%; right: 7%; top: 4%; height: 70%; border: .2cqw solid #5b676f; border-radius: 1cqw; background: linear-gradient(145deg, #cfd5d8, #8b969d); box-shadow: inset 0 .34cqw .5cqw #46555f52; }
 .scaleWell { position: absolute; inset: 8%; border: .16cqw solid #727f87; border-radius: .7cqw; background: linear-gradient(145deg, #aeb8bd, #7c888f); box-shadow: inset 0 .25cqw .4cqw #34454f4a; }
 .sample { position: absolute; z-index: 2; inset: 13%; display: grid; place-items: center; overflow: hidden; border: .12cqw solid #8b969d; border-radius: .22cqw; background: #f4f6f5; }

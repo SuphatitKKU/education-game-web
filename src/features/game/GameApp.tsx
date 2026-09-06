@@ -1,13 +1,14 @@
 "use client";
 
-import { readValueAnswer, writeValueAnswer } from "./exit-ticket-values";
+import { evaluateValueAnswer, readValueAnswer, writeValueAnswer } from "./exit-ticket-values";
 
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import {
-  AVATARS, BOX_PARTS, DAMAGE_CAUSES, DAMAGES, EMPTY_SAVE, MATERIALS, RECAP, STORY,
+  AVATARS, BOX_MISSION_GOALS, BOX_PARTS, DAMAGE_CAUSES, DAMAGES, EMPTY_SAVE, MATERIALS, RECAP, STORY,
   type CompressionResult, type DamageCause, type ElasticityResult, type ExitTicket, type GameSave, type Stage, type TeamMember, type WaterAbsorptionResult,
 } from "./data";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
+import { createBrowserId } from "@/lib/browser-id";
 import { hasLegacyData, markLegacyImported, markSupabaseCacheBound, readLegacyBundle, wasLegacyImported } from "@/features/tracking/legacy";
 import {
   createTeam,
@@ -57,14 +58,15 @@ const MISSION_ONE_PHASES: Partial<Record<Stage, { step: number; label: string; i
   mission: { step: 1, label: "เกริ่นภารกิจ", icon: "🗺️" },
   story: { step: 2, label: "ติดตามสถานการณ์ 9 ฉาก", icon: "🎬" },
   inspection: { step: 3, label: "สำรวจร่องรอย", icon: "🔎" },
-  materials: { step: 4, label: "สำรวจวัสดุ", icon: "🧱" },
-  studyFocus: { step: 5, label: "เลือกสมบัติที่ต้องศึกษา", icon: "⭐" },
-  exitTicket: { step: 6, label: "คำถามรายบุคคล", icon: "✏️" },
-  mission1Complete: { step: 7, label: "ทำภารกิจสำเร็จ", icon: "🎉" },
+  boxMission: { step: 4, label: "กำหนดภารกิจของกล่อง", icon: "🎯" },
+  materials: { step: 5, label: "สำรวจวัสดุ", icon: "🧱" },
+  studyFocus: { step: 6, label: "เลือกสมบัติที่ต้องศึกษา", icon: "⭐" },
+  exitTicket: { step: 7, label: "คำถามรายบุคคล", icon: "✏️" },
+  mission1Complete: { step: 8, label: "ทำภารกิจสำเร็จ", icon: "🎉" },
 };
 
 function createRunId() {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return createBrowserId();
 }
 
 function asset(path: string) {
@@ -182,9 +184,9 @@ export function GameApp() {
     }
     const legacy = readLegacyBundle();
     setLegacyBundle(legacy);
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!configured && raw) {
-      try {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!configured && raw) {
         const parsed = JSON.parse(raw) as Partial<GameSave>;
         const savedStage = (parsed as { stage?: string }).stage;
         const restoredStage = savedStage === "design" ? "exitTicket" : (savedStage as Stage | undefined) ?? EMPTY_SAVE.stage;
@@ -194,14 +196,17 @@ export function GameApp() {
           stage: !PREDICTION_ENABLED && restoredStage === "prediction" ? "summary" : resumeLabStage(restoredStage),
           studyFocus: parsed.studyFocus ?? { compression: true, water: true, elasticity: true },
         });
-      } catch { /* keep fresh save */ }
-    }
+      }
+    } catch { /* keep a fresh save if storage is blocked or malformed */ }
     setLoaded(true);
   }, []);
 
   useEffect(() => {
     const isPreview = new URLSearchParams(window.location.search).get("preview") === "mission1-complete";
-    if (loaded && !isPreview) localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+    if (loaded && !isPreview) {
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); }
+      catch { /* continue without local persistence in restricted Safari modes */ }
+    }
   }, [loaded, save]);
 
   const syncAnswers = async (runId?: string) => {
@@ -254,7 +259,10 @@ export function GameApp() {
     if (nextAudio) void bgmRef.current?.play().catch(() => undefined);
   };
   const reset = () => {
-    if (!configured) localStorage.removeItem(SAVE_KEY);
+    if (!configured) {
+      try { localStorage.removeItem(SAVE_KEY); }
+      catch { /* storage may be unavailable in restricted Safari modes */ }
+    }
     activeRunIdRef.current = null;
     setActiveRun(null);
     setSelectedTeam(null);
@@ -275,7 +283,7 @@ export function GameApp() {
     const run = await startOrResumeRun(attendingTeam);
     const exitTickets = reconcileExitTickets(run.saveState.team ?? [], sessionMembers, run.saveState.exitTickets ?? {});
     const serverState = { ...EMPTY_SAVE, ...run.saveState, team: sessionMembers, exitTickets, stage: run.currentStage };
-    const restored = { ...serverState, stage: selectedMission === 2 ? "testHub" as const : resumableStage(run.currentStage) };
+    const restored = { ...serverState, stage: selectedMission === 2 ? "mission2Intro" as const : resumableStage(run.currentStage) };
     setSelectedTeam(team);
     activeRunIdRef.current = run.id;
     setActiveRun({ id: run.id, teamId: run.teamId, revision: run.revision });
@@ -321,13 +329,18 @@ export function GameApp() {
       return;
     }
     if (save.stage === "inspection") { patch({ stage: "story", storyIndex: STORY.length - 1 }); return; }
-    if (save.stage === "materials") { go("inspection"); return; }
+    if (save.stage === "boxMission") { go("inspection"); return; }
+    if (save.stage === "materials") { go("boxMission"); return; }
     if (save.stage === "studyFocus") { go("materials"); return; }
     if (save.stage === "exitTicket") { go("studyFocus"); return; }
-    if (save.stage === "testHub") { go("exitTicket"); return; }
+    if (save.stage === "mission2Intro") { go("overview"); return; }
+    if (save.stage === "testHub") { go("mission2Intro"); return; }
     if (save.stage === "compression") { go("testHub"); return; }
     if (save.stage === "absorption" || save.stage === "impact" || save.stage === "elasticity") { go("testHub"); return; }
-    if (save.stage === "recap") { go("testHub"); return; }
+    if (save.stage === "notebook") { go("testHub"); return; }
+    if (save.stage === "comparison") { go("notebook"); return; }
+    if (save.stage === "recap") { go("comparison"); return; }
+    if (save.stage === "mission2Complete") { go("overview"); return; }
     if (save.stage === "prediction") { go(LAB_ROOMS_ENABLED ? "recap" : "exitTicket"); return; }
     if (save.stage === "summary") { go(PREDICTION_ENABLED ? "prediction" : "exitTicket"); }
   };
@@ -361,21 +374,26 @@ export function GameApp() {
       <audio ref={bgmRef} className="game-bgm" src={asset("audio/happy_clappy_loop.ogg")} autoPlay loop muted={!save.audio} />
       <section className="game-frame" aria-live="polite">
         {save.stage === "menu" && <MainMenu onStart={() => go("overview")} onLabs={() => setLabPreview(true)} />}
-        {save.stage === "overview" && <MissionOverview mission2Unlocked={save.mission1Completed} mission1Answer={save.bigQuestionProgress.mission1} animateMission2Unlock={animateMission2Unlock} onUnlockAnimationDone={() => setAnimateMission2Unlock(false)} onBack={() => go("menu")} onSelect={openMission} />}
+        {save.stage === "overview" && <MissionOverview mission2Unlocked={save.mission1Completed} mission3Unlocked={save.mission2Completed} mission1Answer={save.bigQuestionProgress.mission1} animateMission2Unlock={animateMission2Unlock} onUnlockAnimationDone={() => setAnimateMission2Unlock(false)} onBack={() => go("menu")} onSelect={openMission} />}
         {labRoomsPaused && <LabRoomsPaused onContinue={() => go(PREDICTION_ENABLED ? "prediction" : "summary")} />}
-        {!labRoomsPaused && save.stage === "team" && <TeamSetup initial={save.team} legacyBundle={legacyBundle} legacyAlreadyImported={wasLegacyImported()} onBack={() => go("overview")} onChoose={openTeam} onCreate={createAndOpenTeam} onUpdate={updateExistingTeam} onImport={importAndOpenTeam} onLocalDone={(team) => patch({ ...EMPTY_SAVE, team, audio: save.audio, runId: createRunId(), stage: selectedMission === 2 ? "testHub" : "mission" })} />}
+        {!labRoomsPaused && save.stage === "team" && <TeamSetup initial={save.team} legacyBundle={legacyBundle} legacyAlreadyImported={wasLegacyImported()} onBack={() => go("overview")} onChoose={openTeam} onCreate={createAndOpenTeam} onUpdate={updateExistingTeam} onImport={importAndOpenTeam} onLocalDone={(team) => patch({ ...EMPTY_SAVE, team, audio: save.audio, runId: createRunId(), stage: selectedMission === 2 ? "mission2Intro" : "mission" })} />}
         {!labRoomsPaused && save.stage === "mission" && <MissionRoute onBack={reset} onDone={() => {
           const firstScene = STORY[save.storyIndex] ?? STORY[0];
           void playStorySound(STORY_SOUND_BY_IMAGE[firstScene[0]], save.audio).then(() => go("story"));
         }} />}
         {!labRoomsPaused && save.stage === "story" && <ComicStory index={save.storyIndex} audio={save.audio} onIndex={(storyIndex) => patch({ storyIndex })} onDone={() => go("inspection")} />}
-        {!labRoomsPaused && save.stage === "inspection" && <DamageInspection findings={save.inspectionFindings} audio={save.audio} onFinding={(inspectionFindings) => patch({ inspectionFindings })} onReset={() => patch({ inspectionFindings: {}, inspectionIndex: 0 })} onDone={() => go("materials")} />}
-        {!labRoomsPaused && save.stage === "materials" && <MaterialGuide onBack={() => go("inspection")} onDone={() => go("studyFocus")} />}
+        {!labRoomsPaused && save.stage === "inspection" && <DamageInspection findings={save.inspectionFindings} audio={save.audio} onFinding={(inspectionFindings) => patch({ inspectionFindings })} onReset={() => patch({ inspectionFindings: {}, inspectionIndex: 0 })} onDone={() => go("boxMission")} />}
+        {!labRoomsPaused && save.stage === "boxMission" && <BoxMissionScreen values={save.boxMissionGoals ?? {}} onBack={() => go("inspection")} onChange={(boxMissionGoals) => patch({ boxMissionGoals })} onDone={() => go("materials")} />}
+        {!labRoomsPaused && save.stage === "materials" && <MaterialGuide onBack={() => go("boxMission")} onDone={() => go("studyFocus")} />}
         {!labRoomsPaused && save.stage === "studyFocus" && <StudyFocusScreen values={save.studyFocus} onBack={() => go("materials")} onChange={(studyFocus) => patch({ studyFocus })} onDone={() => patch({ stage: "exitTicket", bigQuestionProgress: { ...save.bigQuestionProgress, mission1: MISSION_ONE_BIG_QUESTION_PROGRESS } })} />}
         {!labRoomsPaused && save.stage === "exitTicket" && <ExitTicketScreen key={save.runId} team={save.team} initial={save.exitTickets} confirmations={save.exitTicketConfirmations} onBack={() => go("studyFocus")} onAnswerChange={persistExitTicketAnswers} onSaveDraft={saveExitTicketDraft} onDone={saveExitTickets} />}
         {!labRoomsPaused && save.stage === "mission1Complete" && <MissionOneComplete onHome={() => { setAnimateMission2Unlock(true); go("overview"); }} />}
-        {!labRoomsPaused && <LabScreens save={save} onPatch={patch} onBack={leaveRunToTeams} onComplete={() => patch({ stage: "recap", recapIndex: 0 })} />}
-        {!labRoomsPaused && save.stage === "recap" && <Recap index={save.recapIndex} answers={save.recapAnswers} onAnswer={(recapAnswers) => patch({ recapAnswers })} onIndex={(recapIndex) => patch({ recapIndex })} onDone={() => go(PREDICTION_ENABLED ? "prediction" : "summary")} />}
+        {!labRoomsPaused && save.stage === "mission2Intro" && <MissionTwoIntro onBack={() => go("overview")} onStart={() => go("testHub")} />}
+        {!labRoomsPaused && <LabScreens save={save} onPatch={patch} onBack={leaveRunToTeams} onComplete={() => patch({ stage: "notebook" })} />}
+        {!labRoomsPaused && save.stage === "notebook" && <TeamNotebook save={save} onBack={() => go("testHub")} onDone={() => go("comparison")} />}
+        {!labRoomsPaused && save.stage === "comparison" && <MaterialComparison save={save} onBack={() => go("notebook")} onDone={() => patch({ stage: "recap", recapIndex: 0 })} />}
+        {!labRoomsPaused && save.stage === "recap" && <Recap index={save.recapIndex} answers={save.recapAnswers} onAnswer={(recapAnswers) => patch({ recapAnswers })} onIndex={(recapIndex) => patch({ recapIndex })} onDone={() => go("mission2Complete")} />}
+        {!labRoomsPaused && save.stage === "mission2Complete" && <MissionTwoComplete team={save.team} onHome={() => patch({ mission2Completed: true, stage: "overview" })} />}
         {!labRoomsPaused && PREDICTION_ENABLED && save.stage === "prediction" && <Prediction labsEnabled={LAB_ROOMS_ENABLED} values={save.predictions} compressionResults={save.compressionResults} absorptionResults={save.absorptionResults} elasticityResults={save.elasticityResults} onChange={(predictions) => patch({ predictions })} onDone={() => go("summary")} />}
         {!labRoomsPaused && save.stage === "summary" && <Summary save={save} onReplay={() => void startNewAttempt()} onReset={reset} />}
         {(save.stage === "story" || save.stage === "inspection") && <button className="back-nav-button" onClick={(event) => { event.stopPropagation(); goBack(); }}>‹ ย้อนกลับ</button>}
@@ -397,16 +415,16 @@ function MissionOneProgress({ stage }: { stage: Stage }) {
   }, [expanded, stage]);
 
   if (!phase) return null;
-  const percent = Math.round((phase.step / 7) * 100);
+  const percent = Math.round((phase.step / 8) * 100);
   return (
-    <aside className={`mission-one-progress mission-one-progress-${stage} ${expanded ? "is-expanded" : "is-collapsed"}`} role="status" aria-label={`ภารกิจที่ 1 ช่วงที่ ${phase.step} จาก 7 ${phase.label}`}>
+    <aside className={`mission-one-progress mission-one-progress-${stage} ${expanded ? "is-expanded" : "is-collapsed"}`} role="status" aria-label={`ภารกิจที่ 1 ช่วงที่ ${phase.step} จาก 8 ${phase.label}`}>
       {expanded ? <div className="mission-one-progress-details">
-        <div className="mission-one-progress-heading"><span>ภารกิจที่ 1</span><b>ช่วงที่ {phase.step}/7</b></div>
+        <div className="mission-one-progress-heading"><span>ภารกิจที่ 1</span><b>ช่วงที่ {phase.step}/8</b></div>
         <strong><span aria-hidden="true">{phase.icon}</span>{phase.label}</strong>
-        <div className="mission-one-progress-track" role="progressbar" aria-label="ความคืบหน้าภารกิจที่ 1" aria-valuemin={1} aria-valuemax={7} aria-valuenow={phase.step}>
+        <div className="mission-one-progress-track" role="progressbar" aria-label="ความคืบหน้าภารกิจที่ 1" aria-valuemin={1} aria-valuemax={8} aria-valuenow={phase.step}>
           <i style={{ width: `${percent}%` }} />
         </div>
-      </div> : <button className="mission-one-progress-toggle" type="button" aria-label={`เปิดดูความคืบหน้า ช่วงที่ ${phase.step} จาก 7`} onClick={() => setExpanded(true)}>
+      </div> : <button className="mission-one-progress-toggle" type="button" aria-label={`เปิดดูความคืบหน้า ช่วงที่ ${phase.step} จาก 8`} onClick={() => setExpanded(true)}>
         <span aria-hidden="true">•••</span>
       </button>}
     </aside>
@@ -842,12 +860,19 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
 
   const [ready, setReady] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
+  const [viewerFailed, setViewerFailed] = useState(false);
   const [discoveredIds, setDiscoveredIds] = useState<string[]>(() => DAMAGES.filter((damage) => Boolean(findings[damage.id])).map((damage) => damage.id));
   const [activeDamageId, setActiveDamageId] = useState<string | null>(null);
   const [celebrating, setCelebrating] = useState(false);
   const viewerRef = useRef<ViewerElement | null>(null);
   const celebrationTimerRef = useRef<number | null>(null);
-  useEffect(() => { void import("@google/model-viewer").then(() => setReady(true)); }, []);
+  useEffect(() => {
+    try {
+      const canvas = document.createElement("canvas");
+      if (!canvas.getContext("webgl2")) { setViewerFailed(true); return; }
+    } catch { setViewerFailed(true); return; }
+    void import("@google/model-viewer").then(() => setReady(true)).catch(() => setViewerFailed(true));
+  }, []);
   useEffect(() => {
     if (!ready || !viewerRef.current) return;
     const viewer = viewerRef.current;
@@ -861,9 +886,14 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
       cardboard?.pbrMetallicRoughness.setBaseColorFactor("#C9823E");
       setModelLoaded(true);
     };
+    const failLoading = () => setViewerFailed(true);
     viewer.addEventListener("load", finishLoading);
+    viewer.addEventListener("error", failLoading);
     if (viewer.model) finishLoading();
-    return () => viewer.removeEventListener("load", finishLoading);
+    return () => {
+      viewer.removeEventListener("load", finishLoading);
+      viewer.removeEventListener("error", failLoading);
+    };
   }, [ready]);
   useEffect(() => {
     setDiscoveredIds((current) => {
@@ -922,7 +952,17 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
         {discoveredIds.length > 0 && <button type="button" className="inspection-reset-button" disabled={answerRequired} onClick={resetInspection}>↻ เริ่มสำรวจใหม่</button>}
       </aside>
       <div className="model-stage">
-        {ready && (
+        {viewerFailed ? (
+          <div className="inspection-legacy-fallback">
+            <img src={asset("inspection/damaged_box_preview.png")} alt="ภาพกล่องพัสดุที่มีร่องรอยความเสียหาย" />
+            <p>โหมดภาพสำหรับอุปกรณ์รุ่นเก่า · แตะร่องรอยเพื่อสำรวจ</p>
+            <div>{DAMAGES.map((spot) => {
+              const discovered = discoveredIds.includes(spot.id);
+              const active = spot.id === activeDamageId;
+              return <button key={spot.id} type="button" data-damage={spot.id} disabled={answerRequired && !active} className={discovered ? "is-solved" : ""} onClick={(event) => locateDamage(spot.id, event)}>{discovered ? "✓ " : ""}{spot.label}</button>;
+            })}</div>
+          </div>
+        ) : ready && (
           <model-viewer
             ref={viewerRef}
             src={`${asset("models/damaged_box_blender.glb")}?v=blender-sculpt-6`}
@@ -960,7 +1000,7 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
             })}
           </model-viewer>
         )}
-        {!modelLoaded && <div className="model-loading" role="status"><span className="loading-box" /><b>กำลังเตรียมกล่อง 3 มิติ…</b></div>}
+        {!modelLoaded && !viewerFailed && <div className="model-loading" role="status"><span className="loading-box" /><b>กำลังเตรียมกล่อง 3 มิติ…</b></div>}
       </div>
       {activeDamage && (
         <aside data-damage={activeDamage.id} className={`inspection-cause-panel ${answerRequired ? "is-required" : "is-answered"}`} aria-label={`เลือกสาเหตุที่คาดว่าเกี่ยวข้องกับ${activeDamage.evidence}`}>
@@ -973,6 +1013,55 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
         <div className="inspection-mascot-sprite" style={{ backgroundImage: `url(${asset("mascot/parcel-guide-sprite.png")})`, backgroundPosition: celebrating ? "100% 100%" : "0% 0%" }} />
       </div>
       {completedCount === DAMAGES.length && <button className="inspection-next-button" onClick={onDone}>สำรวจวัสดุ ›</button>}
+    </div>
+  );
+}
+
+function BoxMissionScreen({ values, onBack, onChange, onDone }: {
+  values: Record<string, boolean>;
+  onBack: () => void;
+  onChange: (values: Record<string, boolean>) => void;
+  onDone: () => void;
+}) {
+  const selectedCount = BOX_MISSION_GOALS.filter((goal) => values[goal.id]).length;
+  const complete = selectedCount === BOX_MISSION_GOALS.length;
+  return (
+    <div className="screen box-mission-screen">
+      <img className="group-design-bg" src={asset("compression/lab_background.png")} alt="" />
+      <button className="button button-white box-mission-back" type="button" onClick={onBack}>‹ กลับไปสำรวจกล่อง</button>
+      <header className="box-mission-header">
+        <span>อภิปรายภารกิจของกล่องพัสดุ</span>
+        <h1>กล่องของเราควรช่วยแก้ปัญหาอะไรบ้าง?</h1>
+      </header>
+      <section className="box-mission-grid" aria-label="ตัวเลือกภารกิจของกล่องพัสดุ">
+        {BOX_MISSION_GOALS.map((goal) => (
+          <button
+            type="button"
+            key={goal.id}
+            aria-pressed={Boolean(values[goal.id])}
+            className={values[goal.id] ? "selected" : ""}
+            onClick={() => onChange({ ...values, [goal.id]: !values[goal.id] })}
+          >
+            <i aria-hidden="true">{goal.icon}</i>
+            <b>{goal.label}</b>
+            <span>{values[goal.id] ? "✓ เลือกแล้ว" : "แตะเพื่อเลือก"}</span>
+          </button>
+        ))}
+      </section>
+      <aside className="box-mission-discussion">
+        <b>💬 ชวนกันอภิปราย</b>
+        <p>วัสดุที่ใช้แล้วแต่ยังมีสภาพเหมาะสม เรานำกลับมาใช้ใหม่ได้หรือไม่ เพราะเหตุใด</p>
+      </aside>
+      <footer className="box-mission-footer">
+        <div className="box-mission-progress">
+          <span aria-live="polite">เลือกแล้ว <strong>{selectedCount}/{BOX_MISSION_GOALS.length}</strong> ข้อ</span>
+          <div role="progressbar" aria-label="ความคืบหน้าการเลือกภารกิจของกล่อง" aria-valuemin={0} aria-valuemax={BOX_MISSION_GOALS.length} aria-valuenow={selectedCount}>
+            <i style={{ width: `${(selectedCount / BOX_MISSION_GOALS.length) * 100}%` }} />
+          </div>
+          <small>{complete ? "ครบแล้ว ไปสำรวจวัสดุกันเลย!" : "เลือกภารกิจของกล่องให้ครบทั้ง 4 ข้อ"}</small>
+        </div>
+        <button className="button button-orange" type="button" disabled={!complete} onClick={onDone}>ไปสำรวจวัสดุ ›</button>
+      </footer>
     </div>
   );
 }
@@ -1036,7 +1125,7 @@ const CORRUGATED_FEATURES = [
 const CORRUGATED_OVERVIEW = {
   label: "กระดาษลูกฟูกลอน E 3 ชั้น",
   icon: "📦",
-  detail: "กระดาษลูกฟูกมีแผ่นเรียบ 2 แผ่นประกบลอนกระดาษไว้ตรงกลาง ช่องอากาศในลอนช่วยรับแรงกดและลดแรงกระแทก จึงทำให้กล่องแข็งแรงแต่มีน้ำหนักเบา",
+  detail: "กระดาษลูกฟูกมีแผ่นเรียบ 2 แผ่นประกบลอนกระดาษไว้ตรงกลาง ช่องอากาศในลอนช่วยรับแรงกดและลดแรงกระแทก จึงช่วยให้แผ่นวัสดุคงรูปและรับแรงได้ดีขึ้น",
 };
 
 type MaterialExplorerFeature = {
@@ -1121,7 +1210,7 @@ const PE_FOAM_FEATURES = [
     id: "single-foam-sheet",
     label: "โฟม PE หนึ่งแผ่น",
     icon: "▰",
-    detail: "โฟม EPE ชิ้นนี้เป็นแผ่นเดี่ยวสีขาว มีน้ำหนักเบาและมีความหนาเล็กน้อย",
+    detail: "โฟม EPE ชิ้นนี้เป็นแผ่นเดี่ยวสีขาว มีความหนาเล็กน้อย และมีผิวเซลล์ละเอียด",
     position: "-1.45m 0.2m -0.75m",
     normal: "0 1 0",
     orbit: "30deg 54deg 6.8m",
@@ -1197,7 +1286,7 @@ const KRAFT_PAPER_FEATURES = [
     id: "thin-kraft-edge",
     label: "ขอบแผ่นบาง",
     icon: "▬",
-    detail: "กระดาษคราฟต์เป็นแผ่นเดี่ยวที่บางและน้ำหนักเบา ขอบไม่มีลอนหรือชั้นโฟมอยู่ภายใน",
+    detail: "กระดาษคราฟต์เป็นแผ่นเดี่ยวที่บาง ขอบไม่มีลอนหรือชั้นโฟมอยู่ภายใน",
     position: "1.55m 0.09m 1.88m",
     normal: "0 0 1",
     orbit: "-18deg 80deg 5.9m",
@@ -1240,7 +1329,7 @@ const WAX_PAPER_FEATURES = [
     id: "very-flexible-sheet",
     label: "แผ่นบางโค้งงอได้มาก",
     icon: "⌁",
-    detail: "กระดาษไขเป็นแผ่นบางและน้ำหนักเบา จึงโค้ง พับ หรือห่อรอบสิ่งของได้ง่ายโดยไม่ต้องทำเป็นแผ่นหนา",
+    detail: "กระดาษไขเป็นแผ่นบาง จึงโค้ง พับ หรือห่อรอบสิ่งของได้ง่ายโดยไม่ต้องทำเป็นแผ่นหนา",
     position: "1.8m 0.32m -1m",
     normal: "0 1 0",
     orbit: "42deg 60deg 6.6m",
@@ -1251,7 +1340,7 @@ const WAX_PAPER_FEATURES = [
 const MATERIAL_EXPLORERS = {
   corrugated_cardboard: {
     title: "กระดาษลูกฟูก",
-    description: "ทำจากกระดาษเรียบ 2 ชั้น มีลอนกระดาษและช่องอากาศอยู่ตรงกลาง ลอนช่วยรับแรงกดและลดแรงกระแทก จึงแข็งแรงแต่น้ำหนักเบา",
+    description: "ทำจากกระดาษเรียบ 2 ชั้น มีลอนกระดาษและช่องอากาศอยู่ตรงกลาง ลอนช่วยรับแรงกดและลดแรงกระแทก จึงช่วยให้โครงสร้างคงรูปและรับแรงได้ดีขึ้น",
     model: "models/corrugated_cardboard.glb",
     alt: "โมเดลกระดาษลูกฟูกสามมิติ แสดงแผ่นผิวบน ลอน E และแผ่นผิวล่าง",
     loading: "กำลังประกอบลอนกระดาษ 3 มิติ…",
@@ -1290,11 +1379,11 @@ const MATERIAL_EXPLORERS = {
   },
   closed_cell_pe_foam: {
     title: "แผ่นโฟม EPE",
-    description: "มีช่องอากาศเล็ก ๆ จำนวนมาก จึงมีน้ำหนักเบา นุ่ม และช่วยลดแรงกระแทกโดยดูดซับน้ำได้น้อย",
+    description: "มีช่องอากาศเล็ก ๆ จำนวนมาก เนื้อนุ่ม และช่วยลดแรงกระแทกโดยดูดซับน้ำได้น้อย",
     model: "models/pe_foam_sheet.glb",
     alt: "โมเดลแผ่นโฟม EPE สีขาวแบบหนึ่งแผ่น มีความหนาเล็กน้อย ขอบมน และผิวเซลล์ละเอียด",
     loading: "กำลังสร้างเซลล์โฟม EPE 3 มิติ…",
-    overview: { label: "แผ่นโฟม EPE เซลล์ปิด", icon: "▰", detail: "โฟม EPE สีขาวหนึ่งแผ่น น้ำหนักเบา เนื้อนุ่ม และมีผิวเซลล์ละเอียด" },
+    overview: { label: "แผ่นโฟม EPE เซลล์ปิด", icon: "▰", detail: "โฟม EPE สีขาวหนึ่งแผ่น เนื้อนุ่ม และมีผิวเซลล์ละเอียด" },
     features: PE_FOAM_FEATURES,
     orbit: "34deg 60deg 7.1m",
     target: "0m 0m 0m",
@@ -1316,11 +1405,11 @@ const MATERIAL_EXPLORERS = {
   },
   kraft_paper: {
     title: "กระดาษคราฟต์",
-    description: "ทำจากเส้นใยกระดาษที่ยึดเกาะกัน มีสีน้ำตาล น้ำหนักเบา และโค้งงอได้ จึงใช้ห่อหรือทำถุงได้",
+    description: "ทำจากเส้นใยกระดาษที่ยึดเกาะกัน มีสีน้ำตาลและโค้งงอได้ จึงใช้ห่อหรือทำถุงได้",
     model: "models/kraft_paper_single_sheet.glb",
     alt: "โมเดลกระดาษคราฟต์สีน้ำตาลแบบหนึ่งแผ่น บาง มีผิวเส้นใยละเอียด และโค้งเป็นคลื่นเล็กน้อย",
     loading: "กำลังเตรียมเส้นใยกระดาษคราฟต์ 3 มิติ…",
-    overview: { label: "กระดาษคราฟต์หนึ่งแผ่น", icon: "≋", detail: "กระดาษคราฟต์สีน้ำตาลหนึ่งแผ่น ผิวด้านมีเส้นใยละเอียด เนื้อบาง น้ำหนักเบา และโค้งงอได้" },
+    overview: { label: "กระดาษคราฟต์หนึ่งแผ่น", icon: "≋", detail: "กระดาษคราฟต์สีน้ำตาลหนึ่งแผ่น ผิวด้านมีเส้นใยละเอียด เนื้อบาง และโค้งงอได้" },
     features: KRAFT_PAPER_FEATURES,
     orbit: "34deg 60deg 7.2m",
     target: "0m 0.04m 0m",
@@ -1729,10 +1818,9 @@ function isStructuredExitTicketComplete(ticket?: ExitTicket) {
   if (!ticket) return false;
   const kMatches = readMatches(ticket.k, KNOWLEDGE_MATCHES);
   const pMatches = readMatches(ticket.p, PROCESS_MATCHES);
-  const valueAnswer = readValueAnswer(ticket.v);
   return Object.keys(kMatches).length === KNOWLEDGE_MATCHES.length
     && Object.keys(pMatches).length === PROCESS_MATCHES.length
-    && Boolean(valueAnswer.choice && valueAnswer.reason.trim());
+    && evaluateValueAnswer(ticket.v).complete;
 }
 
 function exitTicketsAreEqual(first?: ExitTicket, second?: ExitTicket) {
@@ -1837,38 +1925,28 @@ function ExitTicketScreen({ team, initial, confirmations, onBack, onAnswerChange
   const savedValues = confirmations;
   const [selectedAnswers, setSelectedAnswers] = useState<Record<MatchField, string>>({ k: "", p: "" });
   const activeKey = exitTicketKey(team[activeIndex] ?? { name: "", avatar: "" }, activeIndex);
-  const activeName = team[activeIndex]?.name ?? "นักเรียน";
   const current = values[activeKey] ?? EMPTY_EXIT_TICKET;
   const isTicketComplete = isStructuredExitTicketComplete;
   const complete = team.length > 0 && team.every((member, index) => {
     const key = exitTicketKey(member, index);
     return isTicketComplete(savedValues[key]) && exitTicketsAreEqual(values[key], savedValues[key]);
   });
-  const currentReady = isTicketComplete(current);
-  const savedCurrent = isTicketComplete(savedValues[activeKey]) && exitTicketsAreEqual(current, savedValues[activeKey]);
   const completedCount = team.filter((member, index) => {
     const key = exitTicketKey(member, index);
     return isTicketComplete(savedValues[key]) && exitTicketsAreEqual(values[key], savedValues[key]);
   }).length;
+  const activeComplete = isTicketComplete(current);
+  const activeSaved = activeComplete && isTicketComplete(savedValues[activeKey]) && exitTicketsAreEqual(current, savedValues[activeKey]);
   const update = (field: keyof ExitTicket, value: string) => {
-    const nextValues = { ...values, [activeKey]: { ...current, [field]: value } };
+    const nextTicket = { ...current, [field]: value };
+    const nextValues = { ...values, [activeKey]: nextTicket };
     onAnswerChange(nextValues);
   };
-  const valueAnswer = readValueAnswer(current.v);
   const saveCurrent = () => {
-    if (!currentReady) return;
-    const nextDraftValues = { ...values, [activeKey]: current };
-    const nextSavedValues = { ...savedValues, [activeKey]: current };
-    onSaveDraft(nextDraftValues, nextSavedValues);
-    const nextStudentIndex = team.findIndex((member, index) => {
-      const key = exitTicketKey(member, index);
-      return index !== activeIndex && (!isTicketComplete(nextSavedValues[key]) || !exitTicketsAreEqual(nextDraftValues[key], nextSavedValues[key]));
-    });
-    if (nextStudentIndex >= 0) setActiveIndex(nextStudentIndex);
+    if (!activeComplete || activeSaved) return;
+    onSaveDraft(values, { ...savedValues, [activeKey]: current });
   };
-  const finish = () => {
-    if (complete) onDone(values);
-  };
+  const valueAnswer = readValueAnswer(current.v);
   return (
     <div className="screen exit-ticket-screen">
       <img className="group-design-bg" src={asset("compression/lab_background.png")} alt="" />
@@ -1894,19 +1972,19 @@ function ExitTicketScreen({ team, initial, confirmations, onBack, onAnswerChange
           <MatchingQuestion field="k" questionNumber={1} instruction="จากสถานการณ์ ให้จับคู่ปัญหาของกล่องพัสดุกับสมบัติของวัสดุที่ควรศึกษา" items={KNOWLEDGE_MATCHES} value={current.k} selectedAnswer={selectedAnswers.k} onSelectAnswer={(answer) => setSelectedAnswers((all) => ({ ...all, k: answer }))} onChange={(value) => update("k", value)} />
           <MatchingQuestion field="p" questionNumber={2} instruction="จากร่องรอยที่พบ ให้จับคู่ร่องรอยความเสียหายกับสาเหตุที่คาดว่าเกี่ยวข้อง" items={PROCESS_MATCHES} value={current.p} selectedAnswer={selectedAnswers.p} onSelectAnswer={(answer) => setSelectedAnswers((all) => ({ ...all, p: answer }))} onChange={(value) => update("p", value)} />
           <section className="value-question">
-            <header><strong>3</strong><h2><span>ข้อที่ 3</span> ถ้ากล่องแข็งแรง แต่ใช้วัสดุมากเกินความจำเป็นและมีน้ำหนักมาก กล่องนั้นเหมาะสมหรือไม่ เพราะเหตุใด</h2></header>
+            <header><strong>3</strong><h2><span>ข้อที่ 3</span> วัสดุที่ใช้แล้วแต่ยังมีสภาพเหมาะสม เรานำกลับมาใช้ใหม่ได้หรือไม่ เพราะเหตุใด</h2></header>
             <div className="value-answer-controls">
-              <div className="value-choice" role="group" aria-label="เลือกความเหมาะสม">
-                {["เหมาะสม", "ไม่เหมาะสม"].map((choice) => <button type="button" key={choice} aria-pressed={valueAnswer.choice === choice} onClick={() => update("v", writeValueAnswer(choice, valueAnswer.reason))}>{valueAnswer.choice === choice ? "✓ " : ""}{choice}</button>)}
+              <div className="value-choice" role="group" aria-label="เลือกว่านำกลับมาใช้ใหม่ได้หรือไม่">
+                {["ได้", "ไม่ได้"].map((choice) => <button type="button" key={choice} aria-pressed={valueAnswer.choice === choice} onClick={() => update("v", writeValueAnswer(choice, valueAnswer.reason))}>{valueAnswer.choice === choice ? "✓ " : ""}{choice}</button>)}
               </div>
               <label><span>อธิบายเหตุผล</span><textarea value={valueAnswer.reason} maxLength={240} onChange={(event) => update("v", writeValueAnswer(valueAnswer.choice, event.target.value))} placeholder="พิมพ์เหตุผลของนักเรียนที่นี่..." /></label>
             </div>
           </section>
-          <div className="kpv-actions">
-            <span>{activeName} · {savedCurrent ? "ยืนยันแล้ว" : currentReady ? "ครบแล้ว · พร้อมยืนยัน" : "ทยอยบันทึกอัตโนมัติ · ตอบให้ครบทั้ง 3 ข้อ"}</span>
-            <button className="button button-orange" disabled={!currentReady} onClick={saveCurrent}>ยืนยันและไปคนถัดไป</button>
-            {complete && <button className="button button-orange system-continue-button" onClick={finish}>ไปต่อ</button>}
-          </div>
+          <footer className="kpv-actions">
+            <span>{activeSaved ? "✓ บันทึกคำตอบคนนี้แล้ว" : activeComplete ? "ตอบครบแล้ว กดบันทึกคำตอบได้เลย" : "ตอบคำถามให้ครบทั้ง 3 ข้อ"}</span>
+            <button type="button" className="button button-orange" disabled={!activeComplete || activeSaved} onClick={saveCurrent}>{activeSaved ? "✓ บันทึกแล้ว" : "บันทึกคำตอบคนนี้"}</button>
+            <button type="button" className="button button-orange system-continue-button" disabled={!complete} onClick={() => onDone(values)}>ไปต่อ ›</button>
+          </footer>
         </div>
       </section>
     </div>
@@ -1964,6 +2042,50 @@ function TestHub({ save, onStart, onBack, onComplete, preview }: {
       </footer>
     </div>
   );
+}
+
+function MissionTwoIntro({ onBack, onStart }: { onBack: () => void; onStart: () => void }) {
+  return <div className="screen mission-two-screen mission-two-intro">
+    <button className="button button-white mission-two-back" onClick={onBack}>‹ กลับเส้นทางภารกิจ</button>
+    <header><span>ภารกิจที่ 2 · นักวิทย์วัสดุ</span><h1>สำรวจ 3 สมบัติลับของวัสดุ</h1><p>วันนี้ทีมจะใช้ผลการทดลองเป็นหลักฐาน ก่อนเลือกวัสดุสำหรับสร้างกล่องพัสดุ</p></header>
+    <section className="mission-two-big-question"><b>💡 คำถามใหญ่ของเรา</b><h2>วัสดุชนิดใดเหมาะกับการรับแรงกด ลดแรงกระแทก และช่วยป้องกันน้ำ?</h2><p>ทดลองภายใต้เงื่อนไขเดียวกัน บันทึกผล แล้วเปรียบเทียบอย่างมีเหตุผล</p></section>
+    <div className="mission-two-route" aria-label="เส้นทางภารกิจที่ 2"><article><i>1</i><b>ทดลอง</b><span>ทดสอบวัสดุ 5 ชนิด</span></article><article><i>2</i><b>บันทึก</b><span>เก็บหลักฐานของทีม</span></article><article><i>3</i><b>เปรียบเทียบ</b><span>อ่านผลจากตาราง</span></article><article><i>4</i><b>สรุป</b><span>ตอบคำถามทบทวน</span></article></div>
+    <button className="button button-orange mission-two-primary" onClick={onStart}>เริ่มสำรวจวัสดุ ›</button>
+  </div>;
+}
+
+function materialResults(save: GameSave, materialId: string) {
+  const compression = save.compressionResults[materialId];
+  const impact = save.impactResults[materialId];
+  const water = save.absorptionResults[materialId];
+  return {
+    compression: compression ? `${compression.deformationMm ?? compression.measurements.at(-1) ?? 0} มม.` : "-",
+    impact: impact ? ({ none: "เสียหายน้อย", slight: "เสียหายเล็กน้อย", much: "เสียหายมาก" }[impact.observation]) : "-",
+    water: water ? `${water.absorbed} หน่วย` : "-",
+  };
+}
+
+function TeamNotebook({ save, onBack, onDone }: { save: GameSave; onBack: () => void; onDone: () => void }) {
+  return <div className="screen mission-two-screen mission-two-report">
+    <button className="button button-white mission-two-back" onClick={onBack}>‹ กลับห้องทดลอง</button>
+    <header><span>ภารกิจที่ 2 · ขั้นที่ 2/5</span><h1>สมุดบันทึกผลของทีม</h1><p>หลักฐานที่ทีมบันทึกจากการทดลองภายใต้เงื่อนไขเดียวกัน</p></header>
+    <section className="material-notebook"><div className="notebook-heading"><b>📒 ผลการทดลองของทีม</b><span>วัสดุ 5 ชนิด · 3 สมบัติ</span></div><div className="notebook-grid">{LAB_MATERIALS.map((material) => { const result = materialResults(save, material.id); return <article key={material.id}><img src={asset(`materials/${material.image}`)} alt="" /><h2>{material.name}</h2><p><b>แรงกด</b><span>ยุบ {result.compression}</span></p><p><b>แรงกระแทก</b><span>{result.impact}</span></p><p><b>การดูดซับน้ำ</b><span>{result.water}</span></p></article>; })}</div></section>
+    <footer><p>✓ บันทึกผลของทีมครบแล้ว · ใช้ตารางถัดไปช่วยอ่านและเปรียบเทียบหลักฐาน</p><button className="button button-orange" onClick={onDone}>ดูตารางเปรียบเทียบ ›</button></footer>
+  </div>;
+}
+
+function MaterialComparison({ save, onBack, onDone }: { save: GameSave; onBack: () => void; onDone: () => void }) {
+  return <div className="screen mission-two-screen mission-two-compare">
+    <button className="button button-white mission-two-back" onClick={onBack}>‹ กลับสมุดบันทึก</button>
+    <header><span>ภารกิจที่ 2 · ขั้นที่ 3/5</span><h1>ตารางเปรียบเทียบวัสดุ</h1><p>ตัวเลขและหลักฐานช่วยให้ทีมอธิบายการเลือกวัสดุได้ชัดเจนขึ้น</p></header>
+    <section className="comparison-table-wrap"><table><thead><tr><th>วัสดุ</th><th>รับแรงกด<br /><small>ยุบตัวน้อยดีกว่า</small></th><th>ลดแรงกระแทก</th><th>ดูดซับน้ำ<br /><small>ซึมน้อยดีกว่า</small></th></tr></thead><tbody>{LAB_MATERIALS.map((material) => { const result = materialResults(save, material.id); return <tr key={material.id}><th><img src={asset(`materials/${material.image}`)} alt="" />{material.name}</th><td>{result.compression}</td><td>{result.impact}</td><td>{result.water}</td></tr>; })}</tbody></table></section>
+    <aside className="comparison-tip"><b>🔍 วิธีอ่านหลักฐาน</b><span>เปรียบเทียบเฉพาะวัสดุที่ทดสอบด้วยเงื่อนไขเดียวกัน แล้วใช้ผลทั้ง 3 ด้านร่วมกันก่อนตัดสินใจ</span></aside>
+    <footer><button className="button button-orange" onClick={onDone}>ตอบคำถามทบทวน ›</button></footer>
+  </div>;
+}
+
+function MissionTwoComplete({ team, onHome }: { team: TeamMember[]; onHome: () => void }) {
+  return <div className="screen mission-two-screen mission-two-complete"><div className="mission-two-medal">🧪</div><span>ภารกิจที่ 2 สำเร็จ</span><h1>ทีมอ่านผลการทดลองได้แล้ว!</h1><p>{team.map((member) => member.name).join(" · ")}</p><section><b>สิ่งที่ทีมทำสำเร็จ</b><p>ทดลอง บันทึกผล เปรียบเทียบวัสดุ และใช้หลักฐานตอบคำถามทั้ง 3 ข้อ</p></section><div className="mission-three-unlock">🔓 <b>ปลดล็อกภารกิจที่ 3</b><span>ออกแบบและสร้างกล่องพัสดุ</span></div><button className="button button-orange" onClick={onHome}>กลับสู่เส้นทางภารกิจ ›</button></div>;
 }
 
 function Recap({ index, answers, onAnswer, onIndex, onDone }: { index: number; answers: Record<string, number[]>; onAnswer: (answers: Record<string, number[]>) => void; onIndex: (n: number) => void; onDone: () => void }) {
