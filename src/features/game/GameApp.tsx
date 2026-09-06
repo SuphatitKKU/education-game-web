@@ -856,7 +856,9 @@ function ComicStory({ index, audio, onIndex, onDone }: { index: number; audio: b
 
 function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { findings: Record<string, DamageCause>; audio: boolean; onFinding: (findings: Record<string, DamageCause>) => void; onReset: () => void; onDone: () => void }) {
   type ViewerMaterial = { name: string; pbrMetallicRoughness: { setBaseColorFactor: (color: string | number[]) => void } };
-  type ViewerElement = HTMLElement & { model?: { materials: ViewerMaterial[] } };
+  type ViewerElement = HTMLElement & { model?: { materials: ViewerMaterial[] }; src?: string; alt?: string };
+  const inspectionModelSrc = `${asset("models/damaged_box_blender.glb")}?v=blender-sculpt-6`;
+  const inspectionModelAlt = "กล่องพัสดุเปิดฝาออกครบทั้งสี่ด้าน เห็นวัสดุกันกระแทกและแก้วด้านในที่แตกร้าวและขอบบิ่น สามารถหมุนตรวจสอบและแตะตอบได้";
 
   const [ready, setReady] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
@@ -889,12 +891,16 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
     const failLoading = () => setViewerFailed(true);
     viewer.addEventListener("load", finishLoading);
     viewer.addEventListener("error", failLoading);
+    // React can omit src/alt when a custom element is already registered.
+    // Set them after model-viewer is ready so the loader receives the real URL.
+    viewer.setAttribute("src", inspectionModelSrc);
+    viewer.setAttribute("alt", inspectionModelAlt);
     if (viewer.model) finishLoading();
     return () => {
       viewer.removeEventListener("load", finishLoading);
       viewer.removeEventListener("error", failLoading);
     };
-  }, [ready]);
+  }, [ready, inspectionModelSrc, inspectionModelAlt]);
   useEffect(() => {
     setDiscoveredIds((current) => {
       const savedIds = DAMAGES.filter((damage) => Boolean(findings[damage.id])).map((damage) => damage.id);
@@ -965,8 +971,8 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
         ) : ready && (
           <model-viewer
             ref={viewerRef}
-            src={`${asset("models/damaged_box_blender.glb")}?v=blender-sculpt-6`}
-            alt="กล่องพัสดุเปิดฝาออกครบทั้งสี่ด้าน เห็นวัสดุกันกระแทกและแก้วด้านในที่แตกร้าวและขอบบิ่น สามารถหมุนตรวจสอบและแตะตอบได้"
+            src={inspectionModelSrc}
+            alt={inspectionModelAlt}
             camera-controls
             disable-pan
             disable-zoom
@@ -1441,6 +1447,8 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
     cameraTarget?: string;
     loaded?: boolean;
     jumpCameraToGoal?: () => void;
+    src?: string;
+    alt?: string;
   };
   const [exploringMaterial, setExploringMaterial] = useState<MaterialExplorerId | null>(null);
   const [viewerReady, setViewerReady] = useState(false);
@@ -1454,6 +1462,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
   const materialViewerRef = useRef<MaterialViewerElement | null>(null);
   const exploring = exploringMaterial !== null;
   const explorer = MATERIAL_EXPLORERS[exploringMaterial ?? "corrugated_cardboard"];
+  const materialModelSrc = `${asset(explorer.model)}?v=wax-paper-single-sheet-v21-${modelAttempt}`;
   const explorerFeatures = explorer.features as readonly MaterialExplorerFeature[];
   const microscopeMaterialId = (exploringMaterial ?? "corrugated_cardboard") as MaterialMicroscopeId;
   const isCorrugatedContinuousZoom = microscopeMaterialId === "corrugated_cardboard";
@@ -1491,12 +1500,16 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
     };
     viewer.addEventListener("load", finishLoading);
     viewer.addEventListener("error", failLoading);
+    // Assign the source after the custom element is upgraded. This is
+    // required by React 19 for model-viewer's src/alt properties on Pages.
+    viewer.setAttribute("src", materialModelSrc);
+    viewer.setAttribute("alt", explorer.alt);
     if (viewer.loaded) finishLoading();
     return () => {
       viewer.removeEventListener("load", finishLoading);
       viewer.removeEventListener("error", failLoading);
     };
-  }, [exploring, viewerReady, modelAttempt, viewScale]);
+  }, [exploring, viewerReady, modelAttempt, viewScale, materialModelSrc, explorer.alt]);
 
   const openExplorer = (materialId: MaterialExplorerId) => {
     setViewScale("normal");
@@ -1645,7 +1658,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
                 <model-viewer
                   key={modelAttempt}
                   ref={materialViewerRef}
-                  src={`${asset(explorer.model)}?v=wax-paper-single-sheet-v21-${modelAttempt}`}
+                  src={materialModelSrc}
                   alt={explorer.alt}
                   camera-controls
                   touch-action="pan-y"
