@@ -881,8 +881,10 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
     const hideInternalFocusFrame = () => {
       viewer.shadowRoot?.querySelector<HTMLElement>(".userInput")?.style.setProperty("outline", "none");
     };
+    let loaded = false;
     hideInternalFocusFrame();
     const finishLoading = () => {
+      loaded = true;
       hideInternalFocusFrame();
       const cardboard = viewer.model?.materials.find((material) => material.name === "MAT_Cardboard_Fiber");
       cardboard?.pbrMetallicRoughness.setBaseColorFactor("#C9823E");
@@ -896,7 +898,11 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
     viewer.setAttribute("src", inspectionModelSrc);
     viewer.setAttribute("alt", inspectionModelAlt);
     if (viewer.model) finishLoading();
+    const fallbackTimer = window.setTimeout(() => {
+      if (!loaded) setViewerFailed(true);
+    }, 10000);
     return () => {
+      window.clearTimeout(fallbackTimer);
       viewer.removeEventListener("load", finishLoading);
       viewer.removeEventListener("error", failLoading);
     };
@@ -973,6 +979,7 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
             ref={viewerRef}
             src={inspectionModelSrc}
             alt={inspectionModelAlt}
+            poster={asset("inspection/damaged_box_preview.png")}
             camera-controls
             disable-pan
             disable-zoom
@@ -1462,6 +1469,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
   const materialViewerRef = useRef<MaterialViewerElement | null>(null);
   const exploring = exploringMaterial !== null;
   const explorer = MATERIAL_EXPLORERS[exploringMaterial ?? "corrugated_cardboard"];
+  const explorerImage = MATERIALS.find((material) => material.id === exploringMaterial)?.image ?? "corrugated_cardboard.png";
   const materialModelSrc = `${asset(explorer.model)}?v=wax-paper-single-sheet-v21-${modelAttempt}`;
   const explorerFeatures = explorer.features as readonly MaterialExplorerFeature[];
   const microscopeMaterialId = (exploringMaterial ?? "corrugated_cardboard") as MaterialMicroscopeId;
@@ -1479,18 +1487,31 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
 
   useEffect(() => {
     if (!exploring) return;
-    void import("@google/model-viewer").then(() => setViewerReady(true));
+    let active = true;
+    void import("@google/model-viewer").then(() => {
+      if (active) setViewerReady(true);
+    }).catch(() => {
+      if (!active) return;
+      setViewerReady(false);
+      setModelLoaded(false);
+      setModelError("อุปกรณ์นี้ไม่รองรับโมเดล 3 มิติ จะแสดงภาพวัสดุแทน");
+    });
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setExploringMaterial(null);
     };
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      active = false;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
   }, [exploring]);
 
   useEffect(() => {
     if (!exploring || !viewerReady || !materialViewerRef.current) return;
     const viewer = materialViewerRef.current;
+    let loaded = false;
     const finishLoading = () => {
+      loaded = true;
       setModelError("");
       setModelLoaded(true);
     };
@@ -1505,7 +1526,11 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
     viewer.setAttribute("src", materialModelSrc);
     viewer.setAttribute("alt", explorer.alt);
     if (viewer.loaded) finishLoading();
+    const fallbackTimer = window.setTimeout(() => {
+      if (!loaded) setModelError("โหลดโมเดล 3D ไม่สำเร็จ จะแสดงภาพวัสดุแทน");
+    }, 10000);
     return () => {
+      window.clearTimeout(fallbackTimer);
       viewer.removeEventListener("load", finishLoading);
       viewer.removeEventListener("error", failLoading);
     };
@@ -1660,6 +1685,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
                   ref={materialViewerRef}
                   src={materialModelSrc}
                   alt={explorer.alt}
+                  poster={asset(`materials/${explorerImage}`)}
                   camera-controls
                   touch-action="pan-y"
                   camera-orbit={explorer.orbit}
@@ -1693,7 +1719,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
                 </model-viewer>
               )}
               {viewScale === "normal" && !modelLoaded && !modelError && <div className="material-3d-loading" role="status"><span className="loading-box" /><b>{explorer.loading}</b></div>}
-              {viewScale === "normal" && modelError && <div className="material-3d-error" role="alert"><span>⚠</span><b>{modelError}</b><button type="button" onClick={retryModel}>โหลดโมเดลอีกครั้ง</button></div>}
+              {viewScale === "normal" && modelError && <div className="material-3d-error" role="alert"><img src={asset(`materials/${explorerImage}`)} alt="ภาพวัสดุสำรอง" /><span>⚠</span><b>{modelError}</b><button type="button" onClick={retryModel}>โหลดโมเดลอีกครั้ง</button></div>}
               {viewScale === "normal" && <div className="material-3d-gesture-hint">ลากเพื่อหมุน เลื่อนหรือหนีบเพื่อซูม และกดป้ายเพื่อดูส่วนนั้น</div>}
               {!isContinuousZoomMaterial && viewScale !== "normal" && <MaterialMicroscope key={`${microscopeMaterialId}-${viewScale}`} materialId={microscopeMaterialId} level={viewScale} selectedId={selectedFeature} zoomProgress={viewScale === "micro" ? (zoomDepth - 34) / 33 : (zoomDepth - 68) / 32} onSelect={focusMicroscopeFeature} />}
             </div>
