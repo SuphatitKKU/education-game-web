@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 import { PwaRegister } from "./pwa-register";
 
@@ -35,6 +36,16 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="th">
+      <head>
+        {/*
+          Next's client runtime uses globalThis. Safari 12 (including the last
+          iPad mini 2/3 updates) can run the game but does not define it yet.
+          Keep this tiny ES5 guard before any async Next chunks are evaluated.
+        */}
+        <Script id="legacy-browser-globals" strategy="beforeInteractive">
+          {( `(function(root){if(typeof root.globalThis === "undefined"){root.globalThis=root;}})(typeof self !== "undefined" ? self : window);` )}
+        </Script>
+      </head>
       <body>
         {children}
         <PwaRegister />

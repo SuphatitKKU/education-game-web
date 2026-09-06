@@ -2,6 +2,8 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const CSS_OUTPUT = join(process.cwd(), "out", "_next", "static", "chunks");
+const HTML_OUTPUT = join(process.cwd(), "out");
+const LEGACY_GLOBALS_BOOTSTRAP = `<script id="legacy-browser-globals-bootstrap">(function(root){if(typeof root.globalThis === "undefined"){root.globalThis=root;}})(typeof self !== "undefined" ? self : window);</script>`;
 
 function legacyContainerWidth(value) {
   return value.replace(/(-?(?:\d+\.?\d*|\.\d+))cqw\b/g, (_, raw) => {
@@ -43,3 +45,22 @@ for (const file of files) {
 }
 
 console.log(`Added Safari 12 CSS fallbacks to ${fallbackCount} generated stylesheet(s).`);
+
+// Turbopack wraps every client chunk in `globalThis.TURBOPACK`. Safari 12 can
+// execute the rest of the bundle but does not expose globalThis, so install
+// this ES5 guard synchronously before Next's async scripts are evaluated.
+const htmlEntries = await readdir(HTML_OUTPUT, { withFileTypes: true });
+let htmlBootstrapCount = 0;
+for (const entry of htmlEntries) {
+  if (!entry.isFile() || !entry.name.endsWith(".html")) continue;
+  const file = join(HTML_OUTPUT, entry.name);
+  const original = await readFile(file, "utf8");
+  if (original.includes("legacy-browser-globals-bootstrap")) continue;
+  const compatible = original.replace("<head>", `<head>${LEGACY_GLOBALS_BOOTSTRAP}`);
+  if (compatible !== original) {
+    htmlBootstrapCount += 1;
+    await writeFile(file, compatible);
+  }
+}
+
+console.log(`Added Safari globalThis bootstrap to ${htmlBootstrapCount} generated HTML file(s).`);
