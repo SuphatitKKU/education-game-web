@@ -27,7 +27,8 @@ self.addEventListener("fetch", (event) => {
   const isAppCode = request.mode === "navigate"
     || request.destination === "script"
     || request.destination === "style"
-    || request.destination === "worker";
+    || request.destination === "worker"
+    || url.pathname.indexOf("/_next/") >= 0;
   const fetchAndCache = () => fetch(request).then((response) => {
     if (response.ok) {
       const copy = response.clone();

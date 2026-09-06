@@ -4,6 +4,7 @@ import { join } from "node:path";
 const CSS_OUTPUT = join(process.cwd(), "out", "_next", "static", "chunks");
 const HTML_OUTPUT = join(process.cwd(), "out");
 const LEGACY_GLOBALS_BOOTSTRAP = `<script id="legacy-browser-globals-bootstrap">(function(root){if(typeof root.globalThis === "undefined"){root.globalThis=root;}})(typeof self !== "undefined" ? self : window);</script>`;
+const LEGACY_SERVICE_WORKER_BOOTSTRAP = `<script id="legacy-service-worker-bootstrap">(function(root){if(!root.navigator||!root.navigator.serviceWorker){return;}var path=root.location.pathname;var base=path.indexOf("/education-game-web")===0?"/education-game-web":"";root.navigator.serviceWorker.register(base+"/sw.js",{scope:base+"/"}).catch(function(){});})(typeof self !== "undefined" ? self : window);</script>`;
 
 function legacyContainerWidth(value) {
   return value.replace(/(-?(?:\d+\.?\d*|\.\d+))cqw\b/g, (_, raw) => {
@@ -56,7 +57,7 @@ for (const entry of htmlEntries) {
   const file = join(HTML_OUTPUT, entry.name);
   const original = await readFile(file, "utf8");
   if (original.includes("legacy-browser-globals-bootstrap")) continue;
-  const compatible = original.replace("<head>", `<head>${LEGACY_GLOBALS_BOOTSTRAP}`);
+  const compatible = original.replace("<head>", `<head>${LEGACY_GLOBALS_BOOTSTRAP}${LEGACY_SERVICE_WORKER_BOOTSTRAP}`);
   if (compatible !== original) {
     htmlBootstrapCount += 1;
     await writeFile(file, compatible);
