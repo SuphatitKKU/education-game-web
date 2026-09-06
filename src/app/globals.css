@@ -590,3 +590,26 @@ p,small,span,label,input,select,textarea,b,strong{font-family:var(--font-kodchas
 .matching-kpv-card .kpv-actions span,.matching-kpv-card .kpv-actions button,.matching-kpv-card .matching-question h2,.matching-kpv-card .value-question h2,.matching-kpv-card .matching-prompt>span,.matching-kpv-card .answer-bank button,.matching-kpv-card .answer-drop-zone>span,.matching-kpv-card .value-answer-controls label>span,.student-tabs span,.system-record-card p{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
 .matching-kpv-card .matching-question h2,.matching-kpv-card .value-question h2{overflow:hidden;text-overflow:clip}
 .matching-kpv-card .answer-drop-zone,.matching-kpv-card .answer-bank button,.matching-kpv-card .kpv-actions .button{min-width:0}
+
+/* Responsive landscape canvas: fill the available viewport instead of letterboxing a fixed 16:9 frame. */
+html,body{width:100%;height:100%;overflow:hidden}
+body{overscroll-behavior:none;background:#d9f1ff}
+.app-shell{position:fixed;inset:0;width:100vw;height:100vh;min-height:100vh;padding:max(0px,env(safe-area-inset-top)) max(0px,env(safe-area-inset-right)) max(0px,env(safe-area-inset-bottom)) max(0px,env(safe-area-inset-left));background:#d9f1ff}
+.game-frame{width:100%;height:100%;max-width:none;max-height:none;aspect-ratio:auto;box-shadow:none}
+.screen{inset:0;width:100%;height:100%;transform:none;container-type:inline-size}
+.menu-cover,.comic-image,.inspection-bg,.compression-bg,.group-design-bg,.material-guide-bg,.mission-route-bg,.soft-bg{object-fit:cover;object-position:center}
+
+@supports (height:100dvh){
+  .app-shell{height:100dvh;min-height:100dvh}
+}
+
+/* The game is intentionally landscape-only. Keep portrait screens clear and explain how to continue. */
+@media (orientation:portrait){
+  body{background:#0c2238}
+  body::before{content:"เกมนี้รองรับเฉพาะโหมดแนวนอน\A กรุณาหมุนอุปกรณ์เป็นแนวนอนเพื่อเริ่มเล่น";position:fixed;z-index:9999;inset:0;display:grid;place-items:center;padding:2rem;color:#fff;font-family:var(--font-kodchasan),Kodchasan,Tahoma,Arial,sans-serif;font-size:clamp(1.1rem,4vw,2rem);line-height:1.6;text-align:center;white-space:pre-line;pointer-events:none}
+  .app-shell,.loading-screen{display:none!important}
+}
+
+@media (orientation:landscape){
+  body::before{display:none}
+}
