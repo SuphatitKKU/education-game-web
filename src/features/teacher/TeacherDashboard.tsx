@@ -10,6 +10,11 @@ import { studyTopicLabel } from "@/features/game/learning-topics";
 import { BOX_MISSION_GOALS, RECAP } from "@/features/game/data";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+// Convenience access for the classroom device. This is intentionally a simple
+// front-end gate; Supabase email/password login remains available for teacher
+// actions that require an authenticated account (for example deleting a team).
+export const TEACHER_QUICK_ACCESS_CODE = "box1234";
+const QUICK_ACCESS_STORAGE_KEY = "parcel-lab-teacher-quick-access-v1";
 
 type AuthState = "loading" | "signed_out" | "checking" | "authorized" | "denied";
 
@@ -52,9 +57,26 @@ function friendlyError(error: unknown): string {
   return "เกิดข้อผิดพลาด กรุณาลองใหม่";
 }
 
+function hasRememberedQuickAccess(): boolean {
+  if (typeof window === "undefined") return false;
+  try { return window.localStorage.getItem(QUICK_ACCESS_STORAGE_KEY) === TEACHER_QUICK_ACCESS_CODE; }
+  catch { return false; }
+}
+
+function rememberQuickAccess(): void {
+  try { window.localStorage.setItem(QUICK_ACCESS_STORAGE_KEY, TEACHER_QUICK_ACCESS_CODE); }
+  catch { /* Safari private mode may deny localStorage; the current tab still works. */ }
+}
+
+function clearRememberedQuickAccess(): void {
+  try { window.localStorage.removeItem(QUICK_ACCESS_STORAGE_KEY); }
+  catch { /* Ignore storage failures while signing out. */ }
+}
+
 export function TeacherDashboard() {
   const [authState, setAuthState] = useState<AuthState>("loading");
   const [session, setSession] = useState<Session | null>(null);
+  const [quickAccess, setQuickAccess] = useState(false);
   const [teams, setTeams] = useState<TeamOverview[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<TeamOverview | null>(null);
   const [detail, setDetail] = useState<TeacherTeamDetail | null>(null);
@@ -69,7 +91,13 @@ export function TeacherDashboard() {
 
   const authorize = useCallback(async (nextSession: Session | null) => {
     setSession(nextSession);
-    if (!nextSession) { setAuthState("signed_out"); return; }
+    if (!nextSession) {
+      const remembered = hasRememberedQuickAccess();
+      setQuickAccess(remembered);
+      setAuthState(remembered ? "authorized" : "signed_out");
+      return;
+    }
+    setQuickAccess(false);
     const client = getSupabaseClient();
     if (!client) { setAuthState("signed_out"); return; }
     setAuthState("checking");
@@ -84,6 +112,10 @@ export function TeacherDashboard() {
 
   useEffect(() => {
     if (!configured) { setAuthState("signed_out"); return; }
+    if (hasRememberedQuickAccess()) {
+      setQuickAccess(true);
+      setAuthState("authorized");
+    }
     const client = getSupabaseClient();
     if (!client) return;
     void client.auth.getSession().then(({ data }) => authorize(data.session));
@@ -171,7 +203,7 @@ export function TeacherDashboard() {
 
   if (!configured) return <TeacherSetupRequired />;
   if (authState === "loading" || authState === "checking") return <TeacherLoading />;
-  if (authState === "signed_out") return <TeacherLogin />;
+  if (authState === "signed_out") return <TeacherLogin onQuickAccess={() => { rememberQuickAccess(); setQuickAccess(true); setAuthState("authorized"); }} />;
   if (authState === "denied") return <TeacherDenied email={session?.user.email ?? ""} onSignOut={() => void getSupabaseClient()?.auth.signOut()} />;
 
   return <main className="teacher-dashboard-shell">
@@ -179,7 +211,7 @@ export function TeacherDashboard() {
       <a className="teacher-brand" href={`${BASE_PATH}/`}><span>▣</span><div><b>กล่องแกร่ง</b><small>Teacher Dashboard</small></div></a>
       <nav><button className="active">⌂ ภาพรวมชั้นเรียน</button><button onClick={() => document.getElementById("teacher-team-list")?.scrollIntoView({ behavior: "smooth" })}>♟ ทีมทั้งหมด</button></nav>
       <div className="teacher-privacy-note"><b>ข้อมูลเปิดในหน้าเกม</b><span>โปรดใช้ชื่อเล่นของนักเรียนเท่านั้น</span></div>
-      <div className="teacher-account"><span>{session?.user.email}</span><button onClick={() => void getSupabaseClient()?.auth.signOut()}>ออกจากระบบ</button></div>
+      <div className="teacher-account"><span>{quickAccess ? "รหัสครูแบบเร็ว · โหมดดูข้อมูล" : session?.user.email}</span><button onClick={() => { if (quickAccess) { clearRememberedQuickAccess(); setQuickAccess(false); setAuthState("signed_out"); } else { void getSupabaseClient()?.auth.signOut(); } }}>ออกจากระบบ</button></div>
     </aside>
     <section className="teacher-main">
       <header className="teacher-topbar"><div><p>ภาพรวมการเรียนรู้</p><h1>สวัสดีคุณครู 👋</h1><span>ติดตามสิ่งที่เด็ก ๆ กำลังคิด ทดลอง และบันทึก</span></div><button className="teacher-refresh" onClick={() => void refresh()} disabled={loadingData}>{loadingData ? "กำลังอัปเดต…" : "↻ อัปเดตข้อมูล"}</button></header>
@@ -192,7 +224,7 @@ export function TeacherDashboard() {
       </div>
       <section className="teacher-teams-section" id="teacher-team-list">
         <header><div><h2>ความก้าวหน้าของแต่ละทีม</h2><p>ข้อมูลจะอัปเดตอัตโนมัติระหว่างที่เด็กทำกิจกรรม</p></div><div className="teacher-filters"><input aria-label="ค้นหาทีม" value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} placeholder="ค้นหาชื่อทีม" /><select aria-label="กรองสถานะ" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="all">ทุกสถานะ</option><option value="active">กำลังทำ</option><option value="completed">ทำเสร็จแล้ว</option></select><input aria-label="กรองวันที่" type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} /></div></header>
-        {loadingData && teams.length === 0 ? <div className="teacher-empty">กำลังโหลดข้อมูลชั้นเรียน…</div> : filteredTeams.length === 0 ? <div className="teacher-empty"><b>ไม่พบทีมตามตัวกรอง</b><span>ลองเปลี่ยนสถานะ ชื่อทีม หรือวันที่</span></div> : <div className="teacher-team-grid">{filteredTeams.map((team) => <TeacherTeamCard key={team.id} team={team} onOpen={() => void openDetail(team)} onDelete={() => setDeleteTarget(team)} />)}</div>}
+        {loadingData && teams.length === 0 ? <div className="teacher-empty">กำลังโหลดข้อมูลชั้นเรียน…</div> : filteredTeams.length === 0 ? <div className="teacher-empty"><b>ไม่พบทีมตามตัวกรอง</b><span>ลองเปลี่ยนสถานะ ชื่อทีม หรือวันที่</span></div> : <div className="teacher-team-grid">{filteredTeams.map((team) => <TeacherTeamCard key={team.id} team={team} canDelete={!quickAccess} onOpen={() => void openDetail(team)} onDelete={() => setDeleteTarget(team)} />)}</div>}
       </section>
     </section>
     {selectedTeam && <TeacherDetailPanel team={selectedTeam} detail={detail} loading={loadingData} onClose={() => { setSelectedTeam(null); setDetail(null); }} />}
@@ -200,14 +232,14 @@ export function TeacherDashboard() {
   </main>;
 }
 
-function TeacherTeamCard({ team, onOpen, onDelete }: { team: TeamOverview; onOpen: () => void; onDelete: () => void }) {
+function TeacherTeamCard({ team, canDelete, onOpen, onDelete }: { team: TeamOverview; canDelete: boolean; onOpen: () => void; onDelete: () => void }) {
   const run = team.activeRun ?? team.completedRuns[0];
   const progress = run ? stageProgress(run.currentStage) : 0;
   return <article className="teacher-team-card">
     <header><div className="teacher-avatar-stack">{team.members.slice(0, 5).map((member) => <img key={member.id ?? member.name} src={`${BASE_PATH}/assets/profiles/${member.avatar}.png`} alt="" />)}</div><span className={team.activeRun ? "active" : "complete"}>{team.activeRun ? "กำลังทำ" : team.completedRuns.length ? "ทำเสร็จแล้ว" : "ยังไม่เริ่ม"}</span></header>
     <h3>{team.name}</h3><p>{team.members.map((member) => member.name).join(" · ")}</p>
     <div className="teacher-progress-label"><span>{run ? STAGE_LABELS[run.currentStage] : "ยังไม่เริ่มภารกิจ"}</span><b>{progress}%</b></div><div className="teacher-progress"><i style={{ width: `${progress}%` }} /></div>
-    <footer><div><span>ระยะเวลา</span><b>{run ? formatDuration(run.startedAt, run.completedAt) : "-"}</b></div><div><span>รอบที่ผ่านมา</span><b>{team.completedRuns.length}</b></div><div className="teacher-card-actions"><button className="teacher-detail-button" onClick={onOpen}>ดูรายละเอียด →</button><button className="teacher-delete-button" onClick={onDelete} aria-label={`ลบทีม ${team.name}`}>ลบทีม</button></div></footer>
+    <footer><div><span>ระยะเวลา</span><b>{run ? formatDuration(run.startedAt, run.completedAt) : "-"}</b></div><div><span>รอบที่ผ่านมา</span><b>{team.completedRuns.length}</b></div><div className="teacher-card-actions"><button className="teacher-detail-button" onClick={onOpen}>ดูรายละเอียด →</button>{canDelete && <button className="teacher-delete-button" onClick={onDelete} aria-label={`ลบทีม ${team.name}`}>ลบทีม</button>}</div></footer>
   </article>;
 }
 
@@ -243,11 +275,13 @@ function TeacherDetailPanel({ team, detail, loading, onClose }: { team: TeamOver
   </aside></div>;
 }
 
-function TeacherLogin() {
+function TeacherLogin({ onQuickAccess }: { onQuickAccess: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [quickCode, setQuickCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [quickError, setQuickError] = useState("");
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setError("");
     const client = getSupabaseClient();
@@ -256,7 +290,13 @@ function TeacherLogin() {
     if (signInError) setError(friendlyError(signInError));
     setBusy(false);
   };
-  return <main className="teacher-auth-page"><div className="teacher-auth-card"><a href={`${BASE_PATH}/`}>← กลับไปหน้าเกม</a><div className="teacher-auth-icon">▣</div><p>ภารกิจกล่องแกร่ง</p><h1>Dashboard สำหรับครู</h1><span>เข้าสู่ระบบเพื่อติดตามการเรียนรู้ของเด็ก ๆ</span><form onSubmit={submit}><label>อีเมล<input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>รหัสผ่าน<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>{error && <div role="alert">{error}</div>}<button disabled={busy}>{busy ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ Dashboard"}</button></form></div></main>;
+  const submitQuick = (event: FormEvent) => {
+    event.preventDefault();
+    setQuickError(quickCode.trim().toLowerCase() === TEACHER_QUICK_ACCESS_CODE ? "" : "รหัสครูไม่ถูกต้อง");
+    if (quickCode.trim().toLowerCase() !== TEACHER_QUICK_ACCESS_CODE) return;
+    onQuickAccess();
+  };
+  return <main className="teacher-auth-page"><div className="teacher-auth-card"><a href={`${BASE_PATH}/`}>← กลับไปหน้าเกม</a><div className="teacher-auth-icon">▣</div><p>ภารกิจกล่องแกร่ง</p><h1>Dashboard สำหรับครู</h1><span>ติดตามสิ่งที่เด็ก ๆ กำลังคิด ทดลอง และบันทึก</span><section className="teacher-quick-login"><h2>เข้าด้วยรหัสครูแบบเร็ว</h2><p>เหมาะสำหรับเครื่องประจำห้องเรียน ระบบจะจำสิทธิ์ไว้ในเครื่องนี้</p><form onSubmit={submitQuick}><label>รหัสครู<input type="password" inputMode="text" autoComplete="current-password" placeholder="เช่น box1234" required value={quickCode} onChange={(event) => setQuickCode(event.target.value)} /></label>{quickError && <div role="alert">{quickError}</div>}<button>เข้าสู่ Dashboard</button></form></section><details className="teacher-account-login"><summary>ใช้บัญชี Supabase แทน</summary><form onSubmit={submit}><label>อีเมล<input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>รหัสผ่าน<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>{error && <div role="alert">{error}</div>}<button disabled={busy}>{busy ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ Dashboard"}</button></form></details></div></main>;
 }
 
 function TeacherDenied({ email, onSignOut }: { email: string; onSignOut: () => void }) {
