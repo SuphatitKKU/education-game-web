@@ -14,7 +14,7 @@ export function CompressionPress3D({ material, phase, children }: {
   const inputRef = useRef({ material, phase, startedAt: 0 });
   const dragRef = useRef<{ id: number; x: number } | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "fallback">("loading");
-  const [view, setView] = useState<"front" | "perspective">("perspective");
+  const [view, setView] = useState<"front" | "perspective">("front");
 
   useEffect(() => {
     let active = true;

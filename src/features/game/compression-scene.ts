@@ -51,7 +51,7 @@ export function createCompressionScene(canvas: HTMLCanvasElement, onFailure: () 
   scene.add(rim);
 
   const camera = new THREE.OrthographicCamera(-2, 2, 2, -2, .1, 30);
-  let angle = .3;
+  let angle = 0;
   const pointCamera = () => {
     camera.position.set(Math.sin(angle) * 8, angle === 0 ? 2.05 : 3.35, Math.cos(angle) * 8);
     camera.lookAt(0, 1.48, 0);

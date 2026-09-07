@@ -2,7 +2,7 @@
   --ink: #122163;
   --blue: #2269e8;
   display: grid;
-  grid-template-columns: minmax(0, 16fr) minmax(0, 56fr) minmax(0, 26fr);
+  grid-template-columns: minmax(0, 22fr) minmax(0, 56fr) minmax(0, 22fr);
   grid-template-rows: 6cqw minmax(0, 1fr) 12cqw;
   gap: 1cqw 1.3cqw;
   padding: 1.2cqw 1.4cqw 1.3cqw;
