@@ -95,12 +95,11 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
 
   return <div className={`screen ${base.screen} ${styles.screen}`}>
     <header className={base.header}>
-      <div className={base.brand}><span><LabIcon name="flask" /></span><b>วิทยาศาสตร์ ป.2</b></div>
+      <button className={base.home} onClick={() => guard(onDone)} disabled={running} aria-label="กลับไปหน้าเลือกห้องทดลอง"><LabIcon name="home" />กลับไปหน้าเลือกห้องทดลอง</button>
       <div className={`${base.heading} ${styles.heading}`}><h1>กระแทกแล้ว ของเสียหายไหม?</h1><p>ห้องที่ 2 : ความสามารถในการลดความเสียหายจากแรงกระแทก</p></div>
-      <button className={base.home} onClick={() => guard(onDone)} disabled={running}><LabIcon name="home" />เลือกห้อง</button>
     </header>
 
-    <aside className={base.panel}>
+    <aside className={`${base.panel} ${base.conditions}`}>
       <Title icon="scale">เงื่อนไขการทดลอง</Title>
       <div className={`${base.conditionList} ${styles.conditions}`}>
         <div><ImpactEgg /><p>สิ่งของเหมือนกัน</p></div>

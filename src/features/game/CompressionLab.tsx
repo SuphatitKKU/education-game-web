@@ -174,9 +174,8 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
 
   return <div className={`screen ${styles.screen}`}>
     <header className={styles.header}>
-      <div className={styles.brand}><span><Icon name="flask" /></span><b>วิทยาศาสตร์ ป.2</b></div>
+      <button className={styles.home} onClick={() => guard(onDone)} disabled={running} aria-label="กลับไปหน้าเลือกห้องทดลอง"><Icon name="home" />กลับไปหน้าเลือกห้องทดลอง</button>
       <div className={styles.heading}><h1>ห้องที่ 1 : ความต้านทานแรงกดทับ</h1><p>กดแล้ว ยุบแค่ไหน?</p></div>
-      <button className={styles.home} onClick={() => guard(onDone)} disabled={running}><Icon name="home" />เลือกห้อง</button>
     </header>
 
     <aside className={`${styles.panel} ${styles.conditions}`}>

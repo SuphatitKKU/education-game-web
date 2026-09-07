@@ -18,15 +18,21 @@
 .brand > span { width: 4.8cqw; height: 4.8cqw; border-radius: 50%; background: linear-gradient(#75a5ff, #326ce4); border: .12cqw solid #5488e8; color: #fff; display: grid; place-items: center; box-shadow: inset 0 0 .8cqw #ffffff55; }
 .brand svg { width: 3cqw; height: 3cqw; }
 .brand b { font-size: 1.3cqw; border: .1cqw solid #bfd7ff; border-radius: .9cqw; padding: .7cqw 1cqw; background: #edf4ff; }
-.heading { position: absolute; left: 27%; right: 26%; text-align: center; }
+.heading { position: absolute; left: 21%; right: 21%; text-align: center; }
 .heading h1 { margin: 0; font-size: 2.25cqw; line-height: 1.15; color: #101a5e; }
 .heading p { margin: .2cqw 0 0; font-size: 1.75cqw; line-height: 1.25; color: #506392; }
-.home { display: flex; align-items: center; gap: .65cqw; margin-right: 6cqw; padding: .7cqw 1cqw; border: .1cqw solid #a9c9ff; border-radius: 1.6cqw; color: var(--blue); background: #fff; font-size: 1.5cqw; box-shadow: 0 .25cqw 0 #e8eef8; }
+.home { display: flex; align-items: center; gap: .65cqw; margin: 0; min-width: 18.5cqw; padding: .7cqw 1cqw; border: .1cqw solid #a9c9ff; border-radius: 1.6cqw; color: var(--blue); background: #fff; font-size: 1.12cqw; line-height: 1.2; white-space: nowrap; box-shadow: 0 .25cqw 0 #e8eef8; position: relative; z-index: 1; }
 .home svg { width: 1.8cqw; height: 1.8cqw; }
 .panel { min-width: 0; min-height: 0; border: .1cqw solid #d3e2fa; border-radius: 1.2cqw; background: #fff; overflow: hidden; display: flex; flex-direction: column; }
 .panelTitle { display: flex; align-items: center; justify-content: center; gap: .7cqw; flex-shrink: 0; margin: 0; min-height: 3.7cqw; padding: .6cqw .7cqw; border-bottom: .1cqw solid #cdddf8; background: linear-gradient(120deg, #edf3ff, #f5f8ff); font-size: 1.85cqw; color: #234fba; line-height: 1.2; }
 .panelTitle svg { width: 2.25cqw; height: 2.25cqw; }
 .panelTitle small { font-size: 1.13cqw; }
+.conditions { grid-column: 3; grid-row: 2; }
+.experiment { grid-column: 2; grid-row: 2; border-color: #d2e5d7; }
+.materials { grid-column: 1; grid-row: 2; border-color: #dcd3fa; }
+.startPanel { grid-column: 1; grid-row: 3; }
+.results { grid-column: 2; grid-row: 3; border-color: #f2d5e1; }
+.recordPanel { grid-column: 3; grid-row: 3; }
 .conditions .panelTitle { gap: .4cqw; padding-inline: .4cqw; font-size: 1.3cqw; }
 .conditions .panelTitle svg { width: 1.8cqw; height: 1.8cqw; }
 .conditionList { padding: .7cqw; flex: 1; min-height: 0; display: grid; grid-template-rows: 1fr 1fr 1fr .78fr; gap: .65cqw; }
@@ -42,7 +48,6 @@
 .conditionList > section svg { display: none; }
 .conditionList > section p { font-size: .98cqw; }
 .conditionList > section small { font-size: .8cqw; }
-.experiment { border-color: #d2e5d7; }
 .experiment .panelTitle { color: #28763b; border-color: #d2e5d7; background: linear-gradient(120deg, #eaf5eb, #f4faf5); }
 .machines { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 3.3cqw minmax(0, 1fr); gap: 0; align-items: center; padding: 1.5cqw .4cqw .1cqw; }
 .machines figure { margin: 0; min-width: 0; display: flex; flex-direction: column; align-items: center; }
@@ -74,7 +79,6 @@
 .progressTrack .progressRunning { animation: fillProgress 3s linear forwards; }
 .progressTrack .progressDone { width: 100%; }
 @keyframes fillProgress { to { width: 100%; } }
-.materials { border-color: #dcd3fa; }
 .materials .panelTitle { background: linear-gradient(120deg, #f0ebff, #f8f5ff); border-color: #dcd3fa; color: #5c37bf; }
 .materialList { padding: .95cqw; display: grid; grid-template-rows: repeat(5, minmax(0, 1fr)); gap: .6cqw; flex: 1; min-height: 0; }
 .materialList button { display: grid; position: relative; grid-template-columns: 40% 1fr; align-items: center; gap: .55cqw; min-height: 0; padding: .3cqw .75cqw .3cqw .4cqw; border: .11cqw solid #e0e3ef; border-radius: .9cqw; background: #fff; color: #1b2867; text-align: left; }
@@ -89,7 +93,6 @@
 .start svg { width: 1.9cqw; height: 1.9cqw; }
 .hint { display: flex; align-items: flex-start; gap: .3cqw; margin: 0; color: #4b68a1; font-size: .85cqw; line-height: 1.5; }
 .hint span { color: #f8b518; font-size: 1.45cqw; line-height: 1.1; }
-.results { border-color: #f2d5e1; }
 .results .panelTitle { background: linear-gradient(120deg, #fff0f5, #fff7fa); border-color: #f2d5e1; color: #c13873; min-height: 3.1cqw; font-size: 1.65cqw; padding: .45cqw; }
 .results .panelTitle svg { height: 1.85cqw; }
 .observations { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8cqw; padding: .7cqw 1cqw; min-height: 0; flex: 1; }
