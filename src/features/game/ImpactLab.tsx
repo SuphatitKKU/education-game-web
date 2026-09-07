@@ -5,7 +5,6 @@ import type { GameSave, ImpactDamage, ImpactResult, MaterialDefinition } from ".
 import { LAB_MATERIALS } from "./labs";
 import { IMPACT_DROP_MS, IMPACT_SETTLE_MS, IMPACT_OBSERVATIONS, impactDamageFor, impactObservationLabel, recordImpact, type ImpactPhase } from "./impact";
 import { LabIcon, type LabIconName } from "./LabIcon";
-import { LabSteps } from "./LabSteps";
 import { ImpactEgg } from "./ImpactEgg";
 import base from "./CompressionLab.module.css";
 import styles from "./ImpactLab.module.css";
@@ -60,7 +59,7 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
   const [accepted, setAccepted] = useState(false);
   const [message, setMessage] = useState("กดปุ่มเริ่มทดลอง เพื่อดูการตกกระแทก");
   const [showRecords, setShowRecords] = useState(false);
-  const [showConditions, setShowConditions] = useState(false);
+  const [showConditions, setShowConditions] = useState(true);
   const [pending, setPending] = useState<null | (() => void)>(null);
   const recordsDialog = useRef<HTMLDialogElement>(null);
   const confirmDialog = useRef<HTMLDialogElement>(null);
@@ -95,13 +94,10 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
     setMessage(preview ? "บันทึกในรอบทดลองอิสระแล้ว เลือกวัสดุถัดไปได้" : "รับผลเข้าภารกิจแล้ว ดูสถานะการบันทึกที่มุมจอ");
   };
 
-  const activeStep = phase === "idle" ? 1 : done ? 3 : 2;
-
   return <div className={`screen ${base.screen} ${styles.screen}`}>
     <header className={base.header}>
       <button className={base.home} onClick={() => guard(onDone)} disabled={running} aria-label="กลับไปหน้าเลือกห้องทดลอง"><LabIcon name="home" />กลับไปหน้าเลือกห้องทดลอง</button>
       <div className={`${base.heading} ${styles.heading}`}><h1>กระแทกแล้ว ของเสียหายไหม?</h1><p>ห้องที่ 2 : ความสามารถในการลดความเสียหายจากแรงกระแทก</p></div>
-      <LabSteps active={activeStep} completed={accepted ? 3 : 0} />
       <button className={base.conditionToggle} type="button" aria-expanded={showConditions} aria-controls="impact-conditions" onClick={() => setShowConditions((visible) => !visible)}><LabIcon name="scale" />{showConditions ? "ซ่อนเงื่อนไข" : "ดูเงื่อนไข"}</button>
     </header>
 
@@ -153,12 +149,10 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
     </section>
 
     <section className={`${base.panel} ${base.recordPanel}`}>
-      <Title icon="save">บันทึกผล <small>{count}/5</small></Title>
       <div className={base.recordButtons}>
         <button disabled={!done || !observation || accepted} onClick={record}><LabIcon name="save" />{accepted ? "✓ รับผลแล้ว" : "บันทึกผลการทดลอง"}</button>
-        <button onClick={() => setShowRecords(true)}><LabIcon name="book" />ดูบันทึกผลการทดลอง</button>
+        <button onClick={() => setShowRecords(true)}><LabIcon name="book" />ดูตารางผลการทดลอง</button>
       </div>
-      <small className={base.sessionNote}>{preview ? "ทดลองอิสระ · ไม่บันทึกเข้าทีม" : "บันทึกผลในภารกิจของทีม"} · ผลจำลอง ไม่ใช่ผลทดสอบจริง</small>
     </section>
 
     <dialog ref={recordsDialog} className={base.dialog} onCancel={() => setShowRecords(false)} onClose={() => setShowRecords(false)} aria-labelledby="impact-records-title">

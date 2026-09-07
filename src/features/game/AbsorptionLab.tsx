@@ -5,7 +5,6 @@ import type { GameSave, MaterialDefinition, WaterAbsorptionResult } from "./data
 import { LAB_MATERIALS } from "./labs";
 import { ABSORPTION_STEP_MS, absorptionLevel, absorptionLevelLabel, absorptionStep, recordAbsorption, type AbsorptionPhase } from "./absorption";
 import { LabIcon, type LabIconName } from "./LabIcon";
-import { LabSteps } from "./LabSteps";
 import base from "./CompressionLab.module.css";
 import styles from "./AbsorptionLab.module.css";
 
@@ -52,7 +51,7 @@ export function AbsorptionLab({ save, onSave, onDone, preview = false }: {
   const [accepted, setAccepted] = useState(false);
   const [message, setMessage] = useState("เลือกวัสดุ แล้วกดเริ่มทดสอบ");
   const [showRecords, setShowRecords] = useState(false);
-  const [showConditions, setShowConditions] = useState(false);
+  const [showConditions, setShowConditions] = useState(true);
   const [pending, setPending] = useState<null | (() => void)>(null);
   const recordsDialog = useRef<HTMLDialogElement>(null);
   const confirmDialog = useRef<HTMLDialogElement>(null);
@@ -94,13 +93,10 @@ export function AbsorptionLab({ save, onSave, onDone, preview = false }: {
   const step = absorptionStep(phase);
   const stepLabels = ["ชั่งก่อนสัมผัสน้ำ", "ให้น้ำสัมผัสผิวด้านเดียว", "ซับน้ำส่วนเกินบนผิว", "ชั่งหลังสัมผัสน้ำ"];
 
-  const activeStep = phase === "idle" ? 1 : done ? 3 : 2;
-
   return <div className={`screen ${base.screen} ${styles.screen}`}>
     <header className={base.header}>
       <button className={base.home} onClick={() => guard(onDone)} disabled={running} aria-label="กลับไปหน้าเลือกห้องทดลอง"><LabIcon name="home" />กลับไปหน้าเลือกห้องทดลอง</button>
       <div className={`${base.heading} ${styles.heading}`}><h1>วัสดุดูดน้ำแค่ไหน?</h1><p>ห้องที่ 3 : การดูดซับน้ำของวัสดุ</p></div>
-      <LabSteps active={activeStep} completed={accepted ? 3 : 0} />
       <button className={base.conditionToggle} type="button" aria-expanded={showConditions} aria-controls="absorption-conditions" onClick={() => setShowConditions((visible) => !visible)}><LabIcon name="scale" />{showConditions ? "ซ่อนเงื่อนไข" : "ดูเงื่อนไข"}</button>
     </header>
 
@@ -149,12 +145,10 @@ export function AbsorptionLab({ save, onSave, onDone, preview = false }: {
     </section>
 
     <section className={`${base.panel} ${base.recordPanel}`}>
-      <Title icon="save">บันทึกผล <small>{count}/{LAB_MATERIALS.length}</small></Title>
       <div className={base.recordButtons}>
         <button disabled={!done || accepted} onClick={record}><LabIcon name="save" />{accepted ? "✓ รับผลแล้ว" : "บันทึกผลการทดลอง"}</button>
-        <button onClick={() => setShowRecords(true)}><LabIcon name="book" />ดูบันทึกผลการทดลอง</button>
+        <button onClick={() => setShowRecords(true)}><LabIcon name="book" />ดูตารางผลการทดลอง</button>
       </div>
-      <small className={base.sessionNote}>{preview ? "ทดลองอิสระ · ไม่บันทึกเข้าทีม" : "บันทึกผลในภารกิจของทีม"} · ผลจำลอง ไม่ใช่ผลทดสอบจริง</small>
     </section>
 
     <dialog ref={recordsDialog} className={base.dialog} onCancel={() => setShowRecords(false)} onClose={() => setShowRecords(false)} aria-labelledby="water-records-title">

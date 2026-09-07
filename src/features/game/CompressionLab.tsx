@@ -5,7 +5,6 @@ import type { CompressionResult, GameSave, MaterialDefinition } from "./data";
 import { LAB_MATERIALS } from "./labs";
 import { APPROACH_DURATION_MS, COMPRESSION_CONDITIONS, COMPRESSION_OBSERVATIONS, LIFT_DURATION_MS, PRESS_DURATION_MS, compressionMaterialResult, compressionModelObservationLabel, compressionObservationLabel, compressionVisualScale, formatCompressionMm, recordCompression, type CompressionObservation, type CompressionPhase } from "./compression";
 import { CompressionPress3D } from "./CompressionPress3D";
-import { LabSteps } from "./LabSteps";
 import styles from "./CompressionLab.module.css";
 
 const asset = (path: string) => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/assets/${path}`;
@@ -119,7 +118,7 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
   const [justSaved, setJustSaved] = useState(false);
   const [message, setMessage] = useState("เลือกวัสดุ แล้วกดเริ่มทดสอบ");
   const [showRecords, setShowRecords] = useState(false);
-  const [showConditions, setShowConditions] = useState(false);
+  const [showConditions, setShowConditions] = useState(true);
   const [pendingAction, setPendingAction] = useState<null | (() => void)>(null);
   const [elapsedMs, setElapsedMs] = useState(phase === "done" ? PRESS_DURATION_MS : 0);
   const recordsRef = useRef<HTMLDialogElement>(null);
@@ -174,13 +173,10 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
     setMessage(preview ? "บันทึกในรอบทดลองอิสระแล้ว · เลือกวัสดุถัดไปได้เลย" : "รับผลเข้าภารกิจแล้ว · ดูสถานะการบันทึกที่มุมจอ");
   };
 
-  const activeStep = phase === "idle" ? 1 : phase === "done" ? 3 : 2;
-
   return <div className={`screen ${styles.screen}`}>
     <header className={styles.header}>
       <button className={styles.home} onClick={() => guard(onDone)} disabled={running} aria-label="กลับไปหน้าเลือกห้องทดลอง"><Icon name="home" />กลับไปหน้าเลือกห้องทดลอง</button>
       <div className={styles.heading}><h1>ห้องที่ 1 : ความต้านทานแรงกดทับ</h1><p>กดแล้ว ยุบแค่ไหน?</p></div>
-      <LabSteps active={activeStep} completed={justSaved ? 3 : 0} />
       <button className={styles.conditionToggle} type="button" aria-expanded={showConditions} aria-controls="compression-conditions" onClick={() => setShowConditions((visible) => !visible)}><Icon name="scale" />{showConditions ? "ซ่อนเงื่อนไข" : "ดูเงื่อนไข"}</button>
     </header>
 
@@ -233,12 +229,10 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
     </section>
 
     <section className={`${styles.panel} ${styles.recordPanel}`}>
-      <PanelTitle icon="save">บันทึกผล <small>{count}/{LAB_MATERIALS.length}</small></PanelTitle>
       <div className={styles.recordButtons}>
         <button onClick={record} disabled={phase !== "done" || !observation || justSaved}><Icon name="save" />{justSaved ? "✓ รับผลแล้ว" : "บันทึกผลการทดลอง"}</button>
-        <button onClick={() => setShowRecords(true)}><Icon name="book" />ดูบันทึกผลการทดลอง</button>
+        <button onClick={() => setShowRecords(true)}><Icon name="book" />ดูตารางผลการทดลอง</button>
       </div>
-      <small className={styles.sessionNote}>{preview ? "ทดลองอิสระ · ไม่บันทึกเข้าทีม" : "บันทึกผลในภารกิจของทีม"}</small>
     </section>
 
     <dialog ref={recordsRef} className={styles.dialog} onCancel={() => setShowRecords(false)} onClose={() => setShowRecords(false)} aria-labelledby="press-record-title">
