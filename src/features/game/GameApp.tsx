@@ -51,6 +51,10 @@ const SAVE_KEY = "parcel-lab-web-save-v1";
 const STATS_KEY = "parcel-lab-group-design-statistics-v1";
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const PREDICTION_ENABLED = false;
+// Mission 2 is the material-testing workspace. Keep it available from the
+// mission map so teachers can select an existing team and continue working
+// without having to replay mission 1 first.
+const MISSION_TWO_AVAILABLE = true;
 const DISABLED_LAB_STAGES = new Set<Stage>(LAB_STAGES);
 const MISSION_ONE_BIG_QUESTION_PROGRESS = "เราทราบแล้วว่าต้องศึกษาสมบัติ 3 ด้าน แต่ยังไม่ทราบว่าวัสดุชนิดใดเหมาะกับแต่ละหน้าที่";
 
@@ -374,7 +378,7 @@ export function GameApp() {
       <audio ref={bgmRef} className="game-bgm" src={asset("audio/happy_clappy_loop.ogg")} autoPlay loop muted={!save.audio} />
       <section className="game-frame" aria-live="polite">
         {save.stage === "menu" && <MainMenu onStart={() => go("overview")} onLabs={() => setLabPreview(true)} />}
-        {save.stage === "overview" && <MissionOverview mission2Unlocked={save.mission1Completed} mission3Unlocked={save.mission2Completed} mission1Answer={save.bigQuestionProgress.mission1} animateMission2Unlock={animateMission2Unlock} onUnlockAnimationDone={() => setAnimateMission2Unlock(false)} onBack={() => go("menu")} onSelect={openMission} />}
+        {save.stage === "overview" && <MissionOverview mission2Unlocked={MISSION_TWO_AVAILABLE} mission3Unlocked={save.mission2Completed} mission1Answer={save.bigQuestionProgress.mission1} animateMission2Unlock={animateMission2Unlock} onUnlockAnimationDone={() => setAnimateMission2Unlock(false)} onBack={() => go("menu")} onSelect={openMission} />}
         {labRoomsPaused && <LabRoomsPaused onContinue={() => go(PREDICTION_ENABLED ? "prediction" : "summary")} />}
         {!labRoomsPaused && save.stage === "team" && <TeamSetup initial={save.team} legacyBundle={legacyBundle} legacyAlreadyImported={wasLegacyImported()} onBack={() => go("overview")} onChoose={openTeam} onCreate={createAndOpenTeam} onUpdate={updateExistingTeam} onImport={importAndOpenTeam} onLocalDone={(team) => patch({ ...EMPTY_SAVE, team, audio: save.audio, runId: createRunId(), stage: selectedMission === 2 ? "mission2Intro" : "mission" })} />}
         {!labRoomsPaused && save.stage === "mission" && <MissionRoute onBack={reset} onDone={() => {
