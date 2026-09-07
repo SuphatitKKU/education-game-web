@@ -5,6 +5,7 @@ import type { GameSave, ImpactDamage, ImpactResult, MaterialDefinition } from ".
 import { LAB_MATERIALS } from "./labs";
 import { IMPACT_DROP_MS, IMPACT_SETTLE_MS, IMPACT_OBSERVATIONS, impactDamageFor, impactObservationLabel, recordImpact, type ImpactPhase } from "./impact";
 import { LabIcon, type LabIconName } from "./LabIcon";
+import { LabSteps } from "./LabSteps";
 import { ImpactEgg } from "./ImpactEgg";
 import base from "./CompressionLab.module.css";
 import styles from "./ImpactLab.module.css";
@@ -59,6 +60,7 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
   const [accepted, setAccepted] = useState(false);
   const [message, setMessage] = useState("กดปุ่มเริ่มทดลอง เพื่อดูการตกกระแทก");
   const [showRecords, setShowRecords] = useState(false);
+  const [showConditions, setShowConditions] = useState(false);
   const [pending, setPending] = useState<null | (() => void)>(null);
   const recordsDialog = useRef<HTMLDialogElement>(null);
   const confirmDialog = useRef<HTMLDialogElement>(null);
@@ -93,13 +95,17 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
     setMessage(preview ? "บันทึกในรอบทดลองอิสระแล้ว เลือกวัสดุถัดไปได้" : "รับผลเข้าภารกิจแล้ว ดูสถานะการบันทึกที่มุมจอ");
   };
 
+  const activeStep = phase === "idle" ? 1 : done ? 3 : 2;
+
   return <div className={`screen ${base.screen} ${styles.screen}`}>
     <header className={base.header}>
       <button className={base.home} onClick={() => guard(onDone)} disabled={running} aria-label="กลับไปหน้าเลือกห้องทดลอง"><LabIcon name="home" />กลับไปหน้าเลือกห้องทดลอง</button>
       <div className={`${base.heading} ${styles.heading}`}><h1>กระแทกแล้ว ของเสียหายไหม?</h1><p>ห้องที่ 2 : ความสามารถในการลดความเสียหายจากแรงกระแทก</p></div>
+      <LabSteps active={activeStep} completed={accepted ? 3 : 0} />
+      <button className={base.conditionToggle} type="button" aria-expanded={showConditions} aria-controls="impact-conditions" onClick={() => setShowConditions((visible) => !visible)}><LabIcon name="scale" />{showConditions ? "ซ่อนเงื่อนไข" : "ดูเงื่อนไข"}</button>
     </header>
 
-    <aside className={`${base.panel} ${base.conditions}`}>
+    <aside id="impact-conditions" data-collapsed={!showConditions} className={`${base.panel} ${base.conditions}`}>
       <Title icon="scale">เงื่อนไขการทดลอง</Title>
       <div className={`${base.conditionList} ${styles.conditions}`}>
         <div><ImpactEgg /><p>สิ่งของเหมือนกัน</p></div>
