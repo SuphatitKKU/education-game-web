@@ -42,16 +42,16 @@
 .conditionList { padding: .38cqw .55cqw; flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: 1fr; gap: .45cqw; }
 .conditionList > div, .conditionList > section { display: flex; align-items: center; justify-content: center; gap: .35cqw; padding: .3cqw .4cqw; border: .1cqw solid #c8dcff; border-radius: .75cqw; background: linear-gradient(130deg, #fff, #fcfdff); min-height: 0; }
 .conditionList svg { width: 1.65cqw; height: 1.65cqw; color: #2767d6; }
-.conditionList p { min-width: 0; margin: 0; font-size: .78cqw; line-height: 1.3; }
-.conditionList small { display: block; font-size: .64cqw; color: #52668b; line-height: 1.28; }
-.conditionList .forceCondition { font-size: .78cqw; line-height: 1.3; }
-.conditionList .forceCondition small { font-size: .64cqw; line-height: 1.28; }
+.conditionList p { min-width: 0; margin: 0; font-size: 1.2cqw; line-height: 1.2; }
+.conditionList small { display: block; font-size: .95cqw; color: #52668b; line-height: 1.2; }
+.conditionList .forceCondition { font-size: 1.2cqw; line-height: 1.2; }
+.conditionList .forceCondition small { font-size: .95cqw; line-height: 1.2; }
 .conditionTimer { margin-top: .08cqw; width: fit-content; padding: .08cqw .22cqw; border: .08cqw solid #9cb8d1; border-radius: .4cqw; background: #f6fbff; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .conditionTimer[data-active="true"] { border-color: #4a9a70; background: #e9f8ef; color: #226744; }
 .conditionList > section { background: #f1f6ff; }
 .conditionList > section svg { display: block; }
-.conditionList > section p { font-size: .78cqw; }
-.conditionList > section small { font-size: .64cqw; }
+.conditionList > section p { font-size: 1.2cqw; }
+.conditionList > section small { font-size: .95cqw; }
 .experiment .panelTitle { color: #28763b; border-color: #d2e5d7; background: linear-gradient(120deg, #eaf5eb, #f4faf5); }
 .machines { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 3.3cqw minmax(0, 1fr); gap: 0; align-items: center; padding: 1.5cqw .4cqw .1cqw; }
 .machines figure { margin: 0; min-width: 0; display: flex; flex-direction: column; align-items: center; }
@@ -97,22 +97,24 @@
 .start svg { width: 1.9cqw; height: 1.9cqw; }
 .hint { display: flex; align-items: flex-start; gap: .3cqw; margin: 0; color: #4b68a1; font-size: .85cqw; line-height: 1.5; }
 .hint span { color: #f8b518; font-size: 1.45cqw; line-height: 1.1; }
-.results .panelTitle { background: linear-gradient(120deg, #fff0f5, #fff7fa); border-color: #f2d5e1; color: #c13873; min-height: 3.1cqw; font-size: 1.65cqw; padding: .45cqw; }
-.results .panelTitle svg { height: 1.85cqw; }
+.results .panelTitle { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; justify-content: center; column-gap: .4cqw; row-gap: .1cqw; background: linear-gradient(120deg, #fff0f5, #fff7fa); border-color: #f2d5e1; min-height: 4.1cqw; font-size: 1.65cqw; padding: .4cqw .55cqw; }
+.results .panelTitle svg { grid-column: 1; grid-row: 1 / span 2; align-self: center; height: 1.85cqw; }
+.results .panelTitle .resultsTitle { grid-column: 2; grid-row: 1; white-space: nowrap; line-height: 1.15; }
+.results .panelTitle small { grid-column: 2; grid-row: 2; justify-self: start; font-size: 1cqw; line-height: 1.15; white-space: nowrap; }
 .observations { display: grid; grid-template-columns: 1fr; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: .45cqw; padding: .55cqw .65cqw; min-height: 0; flex: 1; }
-.observations button { min-height: 0; display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: .45cqw; padding: .3cqw .55cqw; background: #fff; border: .12cqw dashed #c5cadd; border-radius: .85cqw; color: #253174; }
+.observations button { position: relative; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: .2cqw; padding: .45cqw .55cqw .4cqw; background: #fff; border: .12cqw dashed #c5cadd; border-radius: .85cqw; color: #253174; }
 .observations button:disabled { opacity: 1; color: #55618b; }
 .observations button[aria-pressed="true"] { border: .15cqw solid #d94688; background: #fff1f7; color: #982f66; }
-.observations span { font-size: .92cqw; line-height: 1.25; }
-.sampleExample { height: 2.2cqw; width: 48%; display: flex; align-items: flex-end; }
+.observations span { order: 2; font-size: 1.12cqw; line-height: 1.25; text-align: center; }
+.sampleExample { order: 1; width: 88%; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
 .sampleArt { display: block; width: 100%; height: 100%; overflow: visible; }
-.observations i { flex-shrink: 0; width: 1.3cqw; height: 1.3cqw; border: .1cqw solid #aab2c1; border-radius: 50%; font-style: normal; display: grid; place-items: center; font-size: .9cqw; }
+.observations i { position: absolute; top: .55cqw; right: .55cqw; width: 1.4cqw; height: 1.4cqw; border: .1cqw solid #aab2c1; border-radius: 50%; font-style: normal; display: grid; place-items: center; font-size: 1cqw; }
 .observations [aria-pressed="true"] i { background: #d94688; color: #fff; border-color: #d94688; }
 .recordButtons { display: grid; flex: 1; min-height: 0; grid-template-rows: 1fr 1fr; gap: .65cqw; padding: .1cqw 0; }
-.recordButtons button { display: flex; align-items: center; justify-content: center; gap: .7cqw; padding: .3cqw .7cqw; border: .12cqw solid transparent; border-radius: 1.1cqw; color: #fff; font-size: 1.1cqw; box-shadow: 0 .22cqw 0 #173a7c33; }
+.recordButtons button { display: flex; align-items: center; justify-content: center; gap: .7cqw; padding: .3cqw .7cqw; border: .12cqw solid transparent; border-radius: 1.1cqw; color: #fff; font-size: 1.35cqw; box-shadow: 0 .22cqw 0 #173a7c33; }
 .recordButtons button:first-child { background: linear-gradient(145deg, #2c8df5, #1766db); border-color: #0d59c8; }
 .recordButtons button:last-child { background: linear-gradient(145deg, #9a6ee8, #7046c6); border-color: #5736a8; }
-.recordButtons svg { width: 1.65cqw; height: 1.65cqw; }
+.recordButtons svg { width: 1.85cqw; height: 1.85cqw; }
 .dialog { color: #172f58; width: min(92vw, 1180px); max-height: 82vh; padding: 22px; border: 1px solid #b8d1f0; border-radius: 22px; box-shadow: 0 20px 70px #23395c55; }
 .dialog::backdrop { background: #14294666; backdrop-filter: blur(4px); }
 .dialog header { display: flex; justify-content: space-between; align-items: center; }

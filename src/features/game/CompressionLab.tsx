@@ -220,10 +220,10 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
     </section>
 
     <section className={`${styles.panel} ${styles.results}`} aria-label="เลือกผลการสังเกต">
-      <PanelTitle icon="chart">ผลการทดลอง <small>(ฉันสังเกตเห็นการยุบ…)</small></PanelTitle>
+      <PanelTitle icon="chart"><span className={styles.resultsTitle}>ผลการทดลอง</span><small>(ฉันสังเกตเห็นการยุบ…)</small></PanelTitle>
       <div className={styles.observations} role="group" aria-label="ฉันสังเกตเห็นการยุบ">
         {COMPRESSION_OBSERVATIONS.map((item) => <button key={item.id} aria-pressed={observation === item.id} disabled={phase !== "done"} onClick={() => { setObservation(item.id); onAnswer?.(material.id, item.id); setJustSaved(false); setMessage("เลือกผลแล้ว กดบันทึกผลการทดลอง"); }}>
-          <span>{item.label}</span><div className={styles.sampleExample}><CompressionSampleArt material={material} observation={item.id} /></div><i aria-hidden="true">{observation === item.id ? "✓" : ""}</i>
+          <div className={styles.sampleExample}><CompressionSampleArt material={material} observation={item.id} /></div><span>{item.label}</span><i aria-hidden="true">{observation === item.id ? "✓" : ""}</i>
         </button>)}
       </div>
     </section>
