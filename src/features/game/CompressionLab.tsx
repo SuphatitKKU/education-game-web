@@ -116,11 +116,9 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
   const [phase, setPhase] = useState<Phase>("idle");
   const [observation, setObservation] = useState<CompressionObservation | null>(null);
   const [justSaved, setJustSaved] = useState(false);
-  const [message, setMessage] = useState("เลือกวัสดุ แล้วกดเริ่มทดสอบ");
   const [showRecords, setShowRecords] = useState(false);
   const [showConditions, setShowConditions] = useState(true);
   const [pendingAction, setPendingAction] = useState<null | (() => void)>(null);
-  const [elapsedMs, setElapsedMs] = useState(phase === "done" ? PRESS_DURATION_MS : 0);
   const recordsRef = useRef<HTMLDialogElement>(null);
   const confirmRef = useRef<HTMLDialogElement>(null);
   const running = phase === "lifting" || phase === "approach" || phase === "pressing";
@@ -131,46 +129,30 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
   useEffect(() => {
     if (phase !== "lifting" && phase !== "approach" && phase !== "pressing") return;
     const timer = window.setTimeout(() => {
-      if (phase === "lifting") { setPhase("approach"); setMessage("ยกแท่นแล้ว กำลังเลื่อนแท่นลงมาเริ่มใหม่"); }
-      else if (phase === "approach") { setPhase("pressing"); setMessage("กำลังกดและจับเวลา 3 วินาที"); }
-      else { setPhase("done"); setMessage("สังเกตการยุบ แล้วเลือกผลที่เห็นด้านล่าง"); }
+      if (phase === "lifting") setPhase("approach");
+      else if (phase === "approach") setPhase("pressing");
+      else setPhase("done");
     }, phase === "lifting" ? LIFT_DURATION_MS : phase === "approach" ? APPROACH_DURATION_MS : PRESS_DURATION_MS);
     return () => window.clearTimeout(timer);
   }, [phase]);
   useEffect(() => { if (showRecords) recordsRef.current?.showModal(); else recordsRef.current?.close(); }, [showRecords]);
   useEffect(() => { if (pendingAction) confirmRef.current?.showModal(); else confirmRef.current?.close(); }, [pendingAction]);
-  useEffect(() => {
-    if (phase === "done") { setElapsedMs(PRESS_DURATION_MS); return; }
-    setElapsedMs(0);
-    if (phase !== "pressing") return;
-    const startedAt = performance.now();
-    let frame = 0;
-    const tick = (now: number) => {
-      const next = Math.min(PRESS_DURATION_MS, now - startedAt);
-      setElapsedMs(next);
-      if (next < PRESS_DURATION_MS) frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [phase]);
 
   const reset = () => { setPhase("idle"); setObservation(null); setJustSaved(false); };
   const guard = (action: () => void) => { if (dirty) setPendingAction(() => action); else action(); };
   const selectMaterial = (index: number) => {
     if (running || index === materialIndex) return;
-    guard(() => { reset(); onSave(save.compressionResults, index); setMessage("เลือกวัสดุแล้ว กดเริ่มทดสอบได้เลย"); });
+    guard(() => { reset(); onSave(save.compressionResults, index); });
   };
   const start = () => guard(() => {
     setObservation(null);
     setJustSaved(false);
     setPhase(phase === "done" ? "lifting" : "approach");
-    setMessage(phase === "done" ? "กำลังยกแท่นกดเพื่อเริ่มการทดลองใหม่" : "เครื่องกำลังกดวัสดุ สังเกตเทียบกับก่อนกดนะ");
   });
   const record = () => {
     if (phase !== "done" || !observation || justSaved) return;
     onSave({ ...save.compressionResults, [material.id]: recordCompression(material, observation) }, materialIndex);
     setJustSaved(true);
-    setMessage(preview ? "บันทึกในรอบทดลองอิสระแล้ว · เลือกวัสดุถัดไปได้เลย" : "รับผลเข้าภารกิจแล้ว · ดูสถานะการบันทึกที่มุมจอ");
   };
 
   return <div className={`screen ${styles.screen}`}>
@@ -185,10 +167,7 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
       <div className={styles.conditionList}>
         <div><Icon name="size" /><p>ชิ้นวัสดุ<small>{COMPRESSION_CONDITIONS.specimenWidthCm} × {COMPRESSION_CONDITIONS.specimenLengthCm} ซม.<br />หนาเริ่มต้น {COMPRESSION_CONDITIONS.initialThicknessMm} มม.</small></p></div>
         <div><Icon name="arrow" /><p className={styles.forceCondition}>แรงกด<small>{COMPRESSION_CONDITIONS.forceN} นิวตัน<br />ความดัน {COMPRESSION_CONDITIONS.pressureKPa} kPa</small></p></div>
-        <div><Icon name="clock" /><p>เวลากดเท่ากัน<small className={styles.conditionTimer} role="timer" data-active={phase === "pressing"}
-          aria-label={phase === "lifting" ? "นาฬิกาจับเวลา กำลังยกแท่นกด" : phase === "approach" ? "นาฬิกาจับเวลา กำลังเตรียมกด" : `นาฬิกาจับเวลา ${(elapsedMs / 1000).toFixed(1)} จาก 3 วินาที`}>
-          {phase === "lifting" ? "ยกแท่นกด" : phase === "approach" ? "เตรียมกด" : `${(elapsedMs / 1000).toFixed(1)} / 3.0 วินาที`}
-        </small></p></div>
+        <div><Icon name="clock" /><p>เวลากดเท่ากัน<small>ระบบควบคุมอัตโนมัติ</small></p></div>
         <section><Icon name="flask" /><p>สังเกตความหนา<small>ขณะวัสดุรับแรง</small></p></section>
       </div>
     </aside>
@@ -202,7 +181,10 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
         <figure><figcaption className={styles.loadedLabel}>ขณะรับแรงกด</figcaption><PressMachine material={material} phase={phase} /></figure>
       </div>
       </CompressionPress3D>
-      <p className={styles.experimentStatus} role="status">{phase === "idle" ? `${material.name} · หนาเริ่มต้น ${COMPRESSION_CONDITIONS.initialThicknessMm} มม.` : phase === "lifting" ? "กำลังยกแท่นกดเพื่อเริ่มใหม่…" : phase === "approach" ? "แท่นกดกำลังเลื่อนลง…" : phase === "pressing" ? "กำลังกดและจับเวลา…" : `ยุบ ${formatCompressionMm(materialResult.deformationMm)} มม. · เหลือหนา ${formatCompressionMm(materialResult.loadedThicknessMm)} มม.`}</p>
+      <div className={styles.experimentMeasurements} role="status" aria-live="polite">
+        <p>หนาเริ่มต้น {COMPRESSION_CONDITIONS.initialThicknessMm} มม.</p>
+        <p>{phase === "idle" ? "รอเริ่มทดสอบ" : phase === "lifting" ? "กำลังยกแท่นกด…" : phase === "approach" ? "แท่นกดกำลังเลื่อนลง…" : phase === "pressing" ? "กำลังกดวัสดุ…" : `ยุบ ${formatCompressionMm(materialResult.deformationMm)} มม. · เหลือหนา ${formatCompressionMm(materialResult.loadedThicknessMm)} มม.`}</p>
+      </div>
       <div className={styles.progressTrack} aria-hidden="true">{phase !== "idle" && <i className={phase === "pressing" ? styles.progressRunning : phase === "done" ? styles.progressDone : ""} />}</div>
     </section>
 
@@ -216,13 +198,12 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
 
     <section className={`${styles.panel} ${styles.startPanel}`}>
       <button className={styles.start} disabled={running} onClick={start}><Icon name="play" />{running ? "กำลังทดสอบ…" : phase === "done" ? "ทดสอบอีกครั้ง" : "เริ่มทดสอบ"}</button>
-      <p className={styles.hint} role="status"><span aria-hidden="true">★</span>{message}</p>
     </section>
 
     <section className={`${styles.panel} ${styles.results}`} aria-label="เลือกผลการสังเกต">
       <PanelTitle icon="chart"><span className={styles.resultsTitle}>ผลการทดลอง</span><small>(ฉันสังเกตเห็นการยุบ…)</small></PanelTitle>
       <div className={styles.observations} role="group" aria-label="ฉันสังเกตเห็นการยุบ">
-        {COMPRESSION_OBSERVATIONS.map((item) => <button key={item.id} aria-pressed={observation === item.id} disabled={phase !== "done"} onClick={() => { setObservation(item.id); onAnswer?.(material.id, item.id); setJustSaved(false); setMessage("เลือกผลแล้ว กดบันทึกผลการทดลอง"); }}>
+        {COMPRESSION_OBSERVATIONS.map((item) => <button key={item.id} aria-pressed={observation === item.id} disabled={phase !== "done"} onClick={() => { setObservation(item.id); onAnswer?.(material.id, item.id); setJustSaved(false); }}>
           <div className={styles.sampleExample}><CompressionSampleArt material={material} observation={item.id} /></div><span>{item.label}</span><i aria-hidden="true">{observation === item.id ? "✓" : ""}</i>
         </button>)}
       </div>

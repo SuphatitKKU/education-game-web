@@ -46,8 +46,6 @@
 .conditionList small { display: block; font-size: .95cqw; color: #52668b; line-height: 1.2; }
 .conditionList .forceCondition { font-size: 1.2cqw; line-height: 1.2; }
 .conditionList .forceCondition small { font-size: .95cqw; line-height: 1.2; }
-.conditionTimer { margin-top: .08cqw; width: fit-content; padding: .08cqw .22cqw; border: .08cqw solid #9cb8d1; border-radius: .4cqw; background: #f6fbff; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.conditionTimer[data-active="true"] { border-color: #4a9a70; background: #e9f8ef; color: #226744; }
 .conditionList > section { background: #f1f6ff; }
 .conditionList > section svg { display: block; }
 .conditionList > section p { font-size: 1.2cqw; }
@@ -67,7 +65,6 @@
 .sceneCanvas:active { cursor: grabbing; }
 .sceneCanvas:focus-visible { outline: .2cqw solid #ffb900; outline-offset: -.25cqw; border-radius: 1cqw; }
 .sceneCompareArrow { position: absolute; top: 48%; left: 50%; transform: translate(-50%, -50%); color: #527cab; font-size: 2cqw; pointer-events: none; }
-.sceneForce { position: absolute; top: 37%; left: 74.5%; transform: translateX(-50%); color: #2678e9; font-size: 3.1cqw; line-height: 1; text-shadow: 0 .12cqw .1cqw #b5d3ff; pointer-events: none; }
 .sceneTools { position: relative; display: flex; align-items: center; justify-content: center; flex-shrink: 0; gap: .5cqw; min-height: 2.6cqw; padding: .3cqw .7cqw; color: #71869a; font-size: .86cqw; }
 .sceneTools > div { display: flex; margin-left: .5cqw; gap: .3cqw; }
 .sceneTools button { border: .08cqw solid #d4e0eb; background: #fff; color: #57738d; border-radius: .6cqw; padding: .3cqw .65cqw; font-size: .9cqw; }
@@ -77,7 +74,9 @@
 .platen { transition: transform 1800ms cubic-bezier(.3,.7,.25,1); }
 .specimen { transition: transform 1800ms cubic-bezier(.3,.7,.25,1); }
 .compareArrow { color: #87b0ef; font-size: 2.5cqw; text-align: center; margin-top: 4cqw; }
-.experimentStatus { flex-shrink: 0; font-size: 1.05cqw; color: #497a59; text-align: center; margin: 0 1cqw .5cqw; min-height: 1.6cqw; }
+.experimentMeasurements { flex-shrink: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 5%; margin: 0 1.6cqw .5cqw; min-height: 1.6cqw; font-size: 1.05cqw; line-height: 1.25; }
+.experimentMeasurements p { margin: 0; text-align: center; color: #3a6592; }
+.experimentMeasurements p:last-child { color: #497a59; }
 .progressTrack { height: .35cqw; margin: 0 2cqw 1cqw; border-radius: 1cqw; background: #edf4f0; overflow: hidden; flex-shrink: 0; }
 .progressTrack i { display: block; height: 100%; width: 0; background: #67b887; }
 .progressTrack .progressRunning { animation: fillProgress 3s linear forwards; }
@@ -95,8 +94,6 @@
 .startPanel { justify-content: flex-start; padding: .9cqw .65cqw .5cqw; gap: .65cqw; }
 .start { display: flex; align-items: center; justify-content: center; gap: .4cqw; padding: .8cqw .3cqw; min-height: 4.8cqw; width: 100%; border: .18cqw solid #2263c7; border-radius: 3cqw; background: linear-gradient(145deg, #3789fd, #1763dc); color: #fff; box-shadow: inset .25cqw .25cqw 0 #80b2ff, 0 .3cqw 0 #bad3fc; font-size: 1.45cqw; }
 .start svg { width: 1.9cqw; height: 1.9cqw; }
-.hint { display: flex; align-items: flex-start; gap: .3cqw; margin: 0; color: #4b68a1; font-size: .85cqw; line-height: 1.5; }
-.hint span { color: #f8b518; font-size: 1.45cqw; line-height: 1.1; }
 .results .panelTitle { position: relative; display: grid; grid-template-columns: 1fr; grid-template-rows: auto auto; justify-items: center; row-gap: .1cqw; background: linear-gradient(120deg, #fff0f5, #fff7fa); border-color: #f2d5e1; min-height: 4.1cqw; font-size: 1.65cqw; padding: .4cqw 2.5cqw; text-align: center; }
 .results .panelTitle svg { position: absolute; left: .75cqw; top: 50%; width: 1.85cqw; height: 1.85cqw; transform: translateY(-50%); }
 .results .panelTitle .resultsTitle { grid-column: 1; grid-row: 1; white-space: nowrap; line-height: 1.15; }

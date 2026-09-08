@@ -77,7 +77,6 @@ export function CompressionPress3D({ material, phase, children }: {
           setView("perspective");
         }} />
       <span className={styles.sceneCompareArrow} aria-hidden="true">···➜</span>
-      {phase !== "idle" && phase !== "lifting" && <span className={styles.sceneForce} aria-hidden="true">⬇</span>}
     </div>
     {status !== "ready" && children}
     <div className={styles.sceneTools}>
