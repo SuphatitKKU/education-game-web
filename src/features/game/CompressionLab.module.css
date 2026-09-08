@@ -102,19 +102,19 @@
 .results .panelTitle .resultsTitle { grid-column: 1; grid-row: 1; white-space: nowrap; line-height: 1.15; }
 .results .panelTitle small { grid-column: 1; grid-row: 2; justify-self: center; font-size: 1cqw; line-height: 1.15; white-space: nowrap; }
 .observations { display: grid; grid-template-columns: 1fr; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: .45cqw; padding: .55cqw .65cqw; min-height: 0; flex: 1; }
-.observations button { position: relative; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: .2cqw; padding: .45cqw .55cqw .4cqw; background: #fff; border: .12cqw dashed #c5cadd; border-radius: .85cqw; color: #253174; }
+.observations button { position: relative; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .4cqw; padding: .4cqw .55cqw; background: #fff; border: .12cqw dashed #c5cadd; border-radius: .85cqw; color: #253174; }
 .observations button:disabled { opacity: 1; color: #55618b; }
 .observations button[aria-pressed="true"] { border: .15cqw solid #d94688; background: #fff1f7; color: #982f66; }
-.observations span { order: 2; font-size: 1.4cqw; line-height: 1.2; text-align: center; }
-.sampleExample { order: 1; width: 88%; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.observations span { order: 2; font-size: 16px; line-height: 1.15; text-align: center; }
+.sampleExample { order: 1; width: 88%; height: 4.2cqw; flex: 0 0 4.2cqw; min-height: 0; display: flex; align-items: center; justify-content: center; }
 .sampleArt { display: block; width: 100%; height: 100%; overflow: visible; }
 .observations i { position: absolute; top: .55cqw; right: .55cqw; width: 1.4cqw; height: 1.4cqw; border: .1cqw solid #aab2c1; border-radius: 50%; font-style: normal; display: grid; place-items: center; font-size: 1cqw; }
 .observations [aria-pressed="true"] i { background: #d94688; color: #fff; border-color: #d94688; }
 .recordButtons { display: grid; flex: 1; min-height: 0; grid-template-rows: 1fr 1fr; gap: .65cqw; padding: .1cqw 0; }
-.recordButtons button { display: flex; align-items: center; justify-content: center; gap: .7cqw; padding: .3cqw .7cqw; border: .12cqw solid transparent; border-radius: 1.1cqw; color: #fff; font-size: 1.35cqw; box-shadow: 0 .22cqw 0 #173a7c33; }
+.recordButtons button { display: flex; align-items: center; justify-content: center; gap: .7cqw; padding: .3cqw .7cqw; border: .12cqw solid transparent; border-radius: 1.1cqw; color: #fff; font-size: 16px; box-shadow: 0 .22cqw 0 #173a7c33; }
 .recordButtons button:first-child { background: linear-gradient(145deg, #2c8df5, #1766db); border-color: #0d59c8; }
 .recordButtons button:last-child { background: linear-gradient(145deg, #9a6ee8, #7046c6); border-color: #5736a8; }
-.recordButtons svg { width: 1.85cqw; height: 1.85cqw; }
+.recordButtons svg { width: 2cqw; height: 2cqw; }
 .dialog { color: #172f58; width: min(92vw, 1180px); max-height: 82vh; padding: 22px; border: 1px solid #b8d1f0; border-radius: 22px; box-shadow: 0 20px 70px #23395c55; }
 .dialog::backdrop { background: #14294666; backdrop-filter: blur(4px); }
 .dialog header { display: flex; justify-content: space-between; align-items: center; }
