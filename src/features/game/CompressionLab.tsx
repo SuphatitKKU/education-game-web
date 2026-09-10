@@ -117,7 +117,7 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
   const [observation, setObservation] = useState<CompressionObservation | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const [showRecords, setShowRecords] = useState(false);
-  const [showConditions, setShowConditions] = useState(true);
+  const [showConditions, setShowConditions] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | (() => void)>(null);
   const recordsRef = useRef<HTMLDialogElement>(null);
   const confirmRef = useRef<HTMLDialogElement>(null);
@@ -125,6 +125,8 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
   const dirty = phase === "done" && !justSaved;
   const count = LAB_MATERIALS.filter((item) => save.compressionResults[item.id]).length;
   const materialResult = compressionMaterialResult(material);
+  const focusStep = running ? "experiment" : phase !== "done" ? "material" : !observation ? "result" : !justSaved ? "save" : "next";
+  const nextMaterialIndex = LAB_MATERIALS.findIndex((item, index) => index !== materialIndex && !save.compressionResults[item.id]);
 
   useEffect(() => {
     if (phase !== "lifting" && phase !== "approach" && phase !== "pressing") return;
@@ -154,16 +156,20 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
     onSave({ ...save.compressionResults, [material.id]: recordCompression(material, observation) }, materialIndex);
     setJustSaved(true);
   };
+  const advance = () => {
+    if (nextMaterialIndex >= 0) selectMaterial(nextMaterialIndex);
+    else onDone();
+  };
 
-  return <div className={`screen ${styles.screen}`}>
+  return <div className={`screen ${styles.screen}`} data-focus={focusStep}>
     <header className={styles.header}>
       <button className={styles.home} onClick={() => guard(onDone)} disabled={running} aria-label="กลับไปหน้าเลือกห้องทดลอง"><Icon name="home" />กลับไปหน้าเลือกห้องทดลอง</button>
       <div className={styles.heading}><h1>ห้องที่ 1 : ความต้านทานแรงกดทับ</h1><p>กดแล้ว ยุบแค่ไหน?</p></div>
-      <button className={styles.conditionToggle} type="button" aria-expanded={showConditions} aria-controls="compression-conditions" onClick={() => setShowConditions((visible) => !visible)}><Icon name="scale" />{showConditions ? "ซ่อนเงื่อนไข" : "ดูเงื่อนไข"}</button>
     </header>
 
     <aside id="compression-conditions" data-collapsed={!showConditions} className={`${styles.panel} ${styles.conditions}`}>
       <PanelTitle icon="scale">เงื่อนไขการทดลอง</PanelTitle>
+      <p className={styles.conditionSummary}><Icon name="scale" /><b>เงื่อนไขเหมือนกันทุกวัสดุ</b><span>ขนาดเท่ากัน แรงกดเท่ากัน ระบบควบคุมอัตโนมัติ</span></p>
       <div className={styles.conditionList}>
         <div><Icon name="size" /><p>ชิ้นวัสดุ<small>{COMPRESSION_CONDITIONS.specimenWidthCm} × {COMPRESSION_CONDITIONS.specimenLengthCm} ซม.<br />หนาเริ่มต้น {COMPRESSION_CONDITIONS.initialThicknessMm} มม.</small></p></div>
         <div><Icon name="arrow" /><p className={styles.forceCondition}>แรงกด<small>{COMPRESSION_CONDITIONS.forceN} นิวตัน<br />ความดัน {COMPRESSION_CONDITIONS.pressureKPa} kPa</small></p></div>
@@ -198,20 +204,24 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
 
     <section className={`${styles.panel} ${styles.startPanel}`}>
       <button className={styles.start} disabled={running} onClick={start}><Icon name="play" />{running ? "กำลังทดสอบ…" : phase === "done" ? "ทดสอบอีกครั้ง" : "เริ่มทดสอบ"}</button>
+      <button className={styles.conditionToggle} type="button" aria-expanded={showConditions} aria-controls="compression-conditions" onClick={() => setShowConditions((visible) => !visible)}><Icon name="scale" />{showConditions ? "ซ่อนเงื่อนไข" : "ดูเงื่อนไข"}</button>
     </section>
 
     <section className={`${styles.panel} ${styles.results}`} aria-label="เลือกผลการสังเกต">
       <PanelTitle icon="chart"><span className={styles.resultsTitle}>ผลการทดลอง</span><small>(ฉันสังเกตเห็นการยุบ…)</small></PanelTitle>
-      <div className={styles.observations} role="group" aria-label="ฉันสังเกตเห็นการยุบ">
-        {COMPRESSION_OBSERVATIONS.map((item) => <button key={item.id} aria-pressed={observation === item.id} disabled={phase !== "done"} onClick={() => { setObservation(item.id); onAnswer?.(material.id, item.id); setJustSaved(false); }}>
-          <div className={styles.sampleExample}><CompressionSampleArt material={material} observation={item.id} /></div><span>{item.label}</span><i aria-hidden="true">{observation === item.id ? "✓" : ""}</i>
-        </button>)}
-      </div>
+      {phase !== "done" ? <div className={styles.resultPlaceholder} role="status"><span aria-hidden="true">3</span><b>{running ? "กำลังทดลอง…" : "ทดลองวัสดุก่อน"}</b><small>เมื่อทดลองเสร็จ คำตอบจะปรากฏตรงนี้</small></div> : <>
+        <div className={styles.observations} role="group" aria-label="ฉันสังเกตเห็นการยุบ">
+          {COMPRESSION_OBSERVATIONS.map((item) => <button key={item.id} aria-pressed={observation === item.id} onClick={() => { setObservation(item.id); onAnswer?.(material.id, item.id); setJustSaved(false); }}>
+            <div className={styles.sampleExample}><CompressionSampleArt material={material} observation={item.id} /></div><span>{item.label}</span><i aria-hidden="true">{observation === item.id ? "✓" : ""}</i>
+          </button>)}
+        </div>
+        {justSaved && <p className={styles.feedback} role="status">✓ บันทึกคำตอบแล้ว</p>}
+      </>}
     </section>
 
     <section className={`${styles.panel} ${styles.recordPanel}`}>
       <div className={styles.recordButtons}>
-        <button onClick={record} disabled={phase !== "done" || !observation || justSaved}><Icon name="save" />{justSaved ? "✓ รับผลแล้ว" : "บันทึกผลการทดลอง"}</button>
+        <button data-saved={justSaved} onClick={justSaved ? advance : record} disabled={!justSaved && (phase !== "done" || !observation)}><Icon name={justSaved ? "play" : "save"} />{justSaved ? (nextMaterialIndex >= 0 ? "ทดลองวัสดุถัดไป" : "กลับไปเลือกห้องทดลอง") : phase === "done" && !observation ? "เลือกผลก่อน" : "บันทึกผลการทดลอง"}</button>
         <button onClick={() => setShowRecords(true)}><Icon name="book" />ดูตารางผลการทดลอง</button>
       </div>
     </section>
@@ -220,8 +230,9 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
       <header><h2 id="press-record-title">บันทึกผลการทดลอง</h2><button autoFocus onClick={() => setShowRecords(false)} aria-label="ปิดบันทึก">×</button></header>
       <p>ความต้านทานแรงกดทับ · บันทึกแล้ว {count}/{LAB_MATERIALS.length} วัสดุ</p>
       <table><thead><tr><th>วัสดุ</th><th>ยุบ</th><th>ความหนาขณะกด</th><th>ผลจากข้อมูล</th><th>ผลที่เราสังเกต</th></tr></thead><tbody>{LAB_MATERIALS.map((item) => {
+        const savedResult = save.compressionResults[item.id];
         const result = compressionMaterialResult(item);
-        return <tr key={item.id}><td><img src={asset(`materials/${item.image}`)} alt="" />{item.name}</td><td>{formatCompressionMm(result.deformationMm)} มม.</td><td>{formatCompressionMm(result.loadedThicknessMm)} มม.</td><td>{compressionModelObservationLabel(item)}</td><td>{compressionObservationLabel(save.compressionResults[item.id])}</td></tr>;
+        return <tr key={item.id} className={!savedResult ? styles.missingRecord : undefined}><td><img src={asset(`materials/${item.image}`)} alt="" />{item.name}</td>{savedResult ? <><td>{formatCompressionMm(result.deformationMm)} มม.</td><td>{formatCompressionMm(result.loadedThicknessMm)} มม.</td><td>{compressionModelObservationLabel(item)}</td><td>{compressionObservationLabel(savedResult)}</td></> : <><td>ยังไม่มีข้อมูล</td><td>—</td><td>—</td><td>ยังไม่บันทึก</td></>}</tr>;
       })}</tbody></table>
       <p className={styles.recordNote}>ค่าที่แสดงเป็นชุดข้อมูลอ้างอิงที่กำหนดให้ Simulation ภายใต้เงื่อนไขเดียวกัน เด็กยังบันทึกผลจากสิ่งที่ตนสังเกต{preview ? " · บันทึกเฉพาะรอบทดลองอิสระนี้" : ""}</p>
       <button className={styles.dialogDone} onClick={() => { setShowRecords(false); guard(onDone); }}>กลับไปเลือกห้องทดลอง</button>

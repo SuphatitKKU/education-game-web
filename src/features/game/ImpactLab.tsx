@@ -3,9 +3,10 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { GameSave, ImpactDamage, ImpactResult, MaterialDefinition } from "./data";
 import { LAB_MATERIALS } from "./labs";
-import { IMPACT_DROP_MS, IMPACT_SETTLE_MS, IMPACT_OBSERVATIONS, impactDamageFor, impactObservationLabel, recordImpact, type ImpactPhase } from "./impact";
+import { IMPACT_CONDITIONS, IMPACT_DROP_MS, IMPACT_GRIPPER_MS, IMPACT_SETTLE_MS, IMPACT_OBSERVATIONS, impactDamageFor, impactObservationLabel, recordImpact, type ImpactPhase } from "./impact";
 import { LabIcon, type LabIconName } from "./LabIcon";
 import { ImpactEgg } from "./ImpactEgg";
+import { ImpactRig3D } from "./ImpactRig3D";
 import base from "./CompressionLab.module.css";
 import styles from "./ImpactLab.module.css";
 
@@ -38,7 +39,7 @@ function DropRig({ material, phase }: { material: MaterialDefinition; phase: Imp
       <path d="M183 119h81M184 311h81" stroke="#6ca0fa" strokeWidth="1.3" strokeDasharray="4 3" />
       <g className={styles.callout} fill="#293e80"><text x="274" y="117">ปล่อยไข่จำลอง</text><text x="274" y="137">จากความสูงเท่ากัน</text><text x="274" y="307">ชิ้นวัสดุที่เลือกใช้</text></g>
       <path d="m60 326 18-20h136l20 20Z" fill={material.id === "corrugated_cardboard" ? "#e9ba78" : material.id === "pe_sheet" ? "#d4edff" : "#e5e9ed"} stroke="#a4a8a9" />
-      <image href={asset(`compression/materials/${material.testFrames.idle}`)} x="56" y="320" width="184" height="21" preserveAspectRatio="none" />
+      <image href={asset(`compression/materials/${material.testFrames.idle}`)} x="56" y="312" width="184" height="29" preserveAspectRatio="none" />
       <g className={styles.fallingEgg} style={{ transform: `translateY(${lowered ? 139 : 0}px)`, transitionDuration: phase === "dropping" ? `${IMPACT_DROP_MS}ms` : "0ms" }}>
         <foreignObject x="116" y="114" width="62" height="77"><ImpactEgg damage={hit ? impactDamageFor(material.id) : "none"} /></foreignObject>
       </g>
@@ -57,9 +58,8 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
   const [phase, setPhase] = useState<ImpactPhase>("idle");
   const [observation, setObservation] = useState<ImpactDamage | null>(null);
   const [accepted, setAccepted] = useState(false);
-  const [message, setMessage] = useState("กดปุ่มเริ่มทดลอง เพื่อดูการตกกระแทก");
   const [showRecords, setShowRecords] = useState(false);
-  const [showConditions, setShowConditions] = useState(true);
+  const [showConditions, setShowConditions] = useState(false);
   const [pending, setPending] = useState<null | (() => void)>(null);
   const recordsDialog = useRef<HTMLDialogElement>(null);
   const confirmDialog = useRef<HTMLDialogElement>(null);
@@ -68,14 +68,16 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
   const hit = done || phase === "settling";
   const dirty = done && !accepted;
   const count = LAB_MATERIALS.filter((item) => records[item.id]).length;
+  const focusStep = running ? "experiment" : !done ? "material" : !observation ? "result" : !accepted ? "save" : "next";
+  const nextMaterialIndex = LAB_MATERIALS.findIndex((item, itemIndex) => itemIndex !== index && !records[item.id]);
 
   useEffect(() => {
     if (phase !== "preparing" && phase !== "dropping" && phase !== "settling") return;
     const timer = window.setTimeout(() => {
       if (phase === "preparing") setPhase("dropping");
       else if (phase === "dropping") setPhase("settling");
-      else { setPhase("done"); setMessage("สังเกตสิ่งของหลังตก แล้วเลือกผลที่เห็น"); }
-    }, phase === "preparing" ? 100 : phase === "dropping" ? IMPACT_DROP_MS : IMPACT_SETTLE_MS);
+      else setPhase("done");
+    }, phase === "preparing" ? IMPACT_GRIPPER_MS : phase === "dropping" ? IMPACT_DROP_MS : IMPACT_SETTLE_MS);
     return () => window.clearTimeout(timer);
   }, [phase]);
   useEffect(() => { if (showRecords) recordsDialog.current?.showModal(); else recordsDialog.current?.close(); }, [showRecords]);
@@ -84,50 +86,54 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
   const reset = () => { setPhase("idle"); setObservation(null); setAccepted(false); };
   const select = (nextIndex: number) => {
     if (running || nextIndex === index) return;
-    guard(() => { reset(); onSave(records, nextIndex); setMessage("เลือกวัสดุแล้ว กดเริ่มทดลองได้เลย"); });
+    guard(() => { reset(); onSave(records, nextIndex); });
   };
-  const start = () => guard(() => { setPhase("preparing"); setObservation(null); setAccepted(false); setMessage("กำลังปล่อยไข่จำลอง สังเกตการกระแทกนะ"); });
+  const start = () => guard(() => { setPhase("preparing"); setObservation(null); setAccepted(false); });
   const record = () => {
     if (!done || !observation || accepted) return;
     onSave({ ...records, [material.id]: recordImpact(material.id, observation) }, index);
     setAccepted(true);
-    setMessage(preview ? "บันทึกในรอบทดลองอิสระแล้ว เลือกวัสดุถัดไปได้" : "รับผลเข้าภารกิจแล้ว ดูสถานะการบันทึกที่มุมจอ");
+  };
+  const advance = () => {
+    if (nextMaterialIndex >= 0) select(nextMaterialIndex);
+    else onDone();
   };
 
-  return <div className={`screen ${base.screen} ${styles.screen}`}>
+  return <div className={`screen ${base.screen} ${styles.screen}`} data-focus={focusStep}>
     <header className={base.header}>
       <button className={base.home} onClick={() => guard(onDone)} disabled={running} aria-label="กลับไปหน้าเลือกห้องทดลอง"><LabIcon name="home" />กลับไปหน้าเลือกห้องทดลอง</button>
-      <div className={`${base.heading} ${styles.heading}`}><h1>กระแทกแล้ว ของเสียหายไหม?</h1><p>ห้องที่ 2 : ความสามารถในการลดความเสียหายจากแรงกระแทก</p></div>
-      <button className={base.conditionToggle} type="button" aria-expanded={showConditions} aria-controls="impact-conditions" onClick={() => setShowConditions((visible) => !visible)}><LabIcon name="scale" />{showConditions ? "ซ่อนเงื่อนไข" : "ดูเงื่อนไข"}</button>
+      <div className={base.heading}><h1>ห้องที่ 2 : ความสามารถในการลดความเสียหายจากแรงกระแทก</h1><p>กระแทกแล้ว ของเสียหายไหม?</p></div>
     </header>
 
-    <aside id="impact-conditions" data-collapsed={!showConditions} className={`${base.panel} ${base.conditions}`}>
+    <aside id="impact-conditions" data-collapsed={!showConditions} className={`${base.panel} ${base.conditions} ${styles.conditionPanel}`}>
       <Title icon="scale">เงื่อนไขการทดลอง</Title>
+      <p className={`${base.conditionSummary} ${styles.conditionSummary}`}><LabIcon name="scale" /><b>เงื่อนไขเท่ากันทุกวัสดุ</b><span>ไข่จำลอง · ระดับปล่อย · การตรวจ<br />เหมือนกันทุกครั้ง</span></p>
       <div className={`${base.conditionList} ${styles.conditions}`}>
-        <div><ImpactEgg /><p>สิ่งของเหมือนกัน</p></div>
-        <div><LabIcon name="height" /><p>ความสูงเท่ากัน</p></div>
-        <div><LabIcon name="size" /><p>ชิ้นวัสดุขนาดเท่ากัน</p></div>
-        <section><LabIcon name="flask" /><p>เครื่องทดสอบแรงกระแทก<small>แบบจำลองเพื่อการเรียนรู้ ป.2</small></p><b className={styles.check} aria-hidden="true">✓</b></section>
+        <div><ImpactEgg /><p>ไข่จำลอง<small>มวล {IMPACT_CONDITIONS.eggMassG} กรัม<br />สูง {IMPACT_CONDITIONS.eggHeightCm} ซม.</small></p></div>
+        <div><LabIcon name="height" /><p>ระดับปล่อย<small>สูง {IMPACT_CONDITIONS.dropHeightCm} ซม.<br />ตำแหน่งเดิมทุกครั้ง</small></p></div>
+        <div><LabIcon name="size" /><p>ชิ้นวัสดุ<small>{IMPACT_CONDITIONS.specimenWidthCm} × {IMPACT_CONDITIONS.specimenLengthCm} ซม.<br />หนาเริ่มต้น {IMPACT_CONDITIONS.initialThicknessMm} มม.</small></p></div>
+        <section><LabIcon name="flask" /><p>ตรวจผล<small>ปล่อย {IMPACT_CONDITIONS.dropsPerTrial} ครั้ง<br />ตรวจหลังการกระแทก</small></p></section>
       </div>
     </aside>
 
     <section className={`${base.panel} ${base.experiment} ${styles.experiment}`} aria-label="ทดลองปล่อยสิ่งของจำลอง">
-      <Title icon="flask">ขั้นทดลอง</Title>
-      <div className={styles.demonstration}>
-        <DropRig material={material} phase={phase} />
-        <div className={styles.comparison}>
-          <h3>สิ่งของจำลอง (ไข่)</h3>
-          <figure><figcaption>ก่อนกระแทก</figcaption><ImpactEgg label="ไข่จำลองก่อนกระแทก ไม่เสียหาย" /></figure>
-          <span className={styles.downArrow} aria-hidden="true">⬇</span>
-          <figure><figcaption>หลังกระแทก</figcaption>{hit ? <ImpactEgg damage={impactDamageFor(material.id)} label="สภาพไข่จำลองหลังกระแทก" /> : <div className={styles.waiting}><span>?</span><small>{running ? "กำลังทดลอง…" : "รอเริ่มทดลอง"}</small></div>}</figure>
+      <Title icon="flask">การทดลอง</Title>
+      <ImpactRig3D material={material} phase={phase}>
+        <div className={styles.demonstration}>
+          <DropRig material={material} phase={phase} />
+          <div className={styles.comparison}>
+            <h3>สิ่งของจำลอง (ไข่)</h3>
+            <figure><figcaption>ก่อนกระแทก</figcaption><ImpactEgg label="ไข่จำลองก่อนกระแทก ไม่เสียหาย" /></figure>
+            <span className={styles.downArrow} aria-hidden="true">⬇</span>
+            <figure><figcaption>หลังกระแทก</figcaption>{hit ? <ImpactEgg damage={impactDamageFor(material.id)} label="สภาพไข่จำลองหลังกระแทก" /> : <div className={styles.waiting}><span>?</span><small>{running ? "กำลังทดลอง…" : "รอเริ่มทดลอง"}</small></div>}</figure>
+          </div>
         </div>
-      </div>
-      <div className={styles.instruction}><LabIcon name="bulb" /><p>เลือกวัสดุรองรับ แล้วทดสอบการตกกระแทก<br />สังเกตและบันทึกสภาพของสิ่งของจำลอง</p></div>
+      </ImpactRig3D>
     </section>
 
     <aside className={`${base.panel} ${base.materials}`}>
       <Title icon="layers">เลือกวัสดุ</Title>
-      <div className={styles.materialGrid}>{LAB_MATERIALS.map((item, i) => <button key={item.id} aria-label={`เลือกวัสดุ ${item.name}`} aria-pressed={i === index} disabled={running} onClick={() => select(i)}>
+      <div className={base.materialList}>{LAB_MATERIALS.map((item, i) => <button key={item.id} aria-label={`เลือกวัสดุ ${item.name}`} aria-pressed={i === index} disabled={running} onClick={() => select(i)}>
         <img src={asset(`materials/${item.image}`)} alt="" /><span>{item.name}</span>
         {i === index ? <b className={base.selectedCheck} aria-hidden="true">✓</b> : records[item.id] ? <b className={base.savedDot} aria-label="บันทึกแล้ว">✓</b> : null}
       </button>)}</div>
@@ -135,22 +141,25 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
 
     <section className={`${base.panel} ${base.startPanel}`}>
       <button className={base.start} disabled={running} onClick={start}><LabIcon name="play" />{running ? "กำลังทดลอง…" : done ? "ทดลองอีกครั้ง" : "เริ่มทดลอง"}</button>
-      <p className={base.hint} role="status"><span aria-hidden="true">★</span>{message}</p>
+      <button className={base.conditionToggle} type="button" aria-expanded={showConditions} aria-controls="impact-conditions" onClick={() => setShowConditions((visible) => !visible)}><LabIcon name="scale" />{showConditions ? "ซ่อนเงื่อนไข" : "ดูเงื่อนไข"}</button>
     </section>
 
     <section className={`${base.panel} ${base.results} ${styles.results}`} aria-label="บันทึกสิ่งที่สังเกตได้">
       <Title icon="chart">ผลการทดลอง <small>(บันทึกสิ่งที่สังเกตได้)</small></Title>
-      <p className={styles.resultQuestion}>สิ่งของจำลองมีสภาพอย่างไร?</p>
-      <div className={styles.observations} role="group" aria-label="สภาพของสิ่งของจำลอง">
-        {IMPACT_OBSERVATIONS.map((item) => <button key={item.id} aria-pressed={observation === item.id} disabled={!done} onClick={() => { setObservation(item.id); onAnswer?.(material.id, item.id); setAccepted(false); setMessage("เลือกผลแล้ว กดบันทึกผลการทดลอง"); }}>
-          <i aria-hidden="true">{observation === item.id ? "✓" : ""}</i><span>{item.label}</span><ImpactEgg damage={item.id} />
-        </button>)}
-      </div>
+      {!done ? <div className={base.resultPlaceholder} role="status"><span aria-hidden="true">3</span><b>{running ? "กำลังทดลอง…" : "ทดลองวัสดุก่อน"}</b><small>เมื่อทดลองเสร็จ คำตอบจะปรากฏตรงนี้</small></div> : <>
+        <p className={styles.resultQuestion}>สิ่งของจำลองมีสภาพอย่างไร?</p>
+        <div className={styles.observations} role="group" aria-label="สภาพของสิ่งของจำลอง">
+          {IMPACT_OBSERVATIONS.map((item) => <button key={item.id} aria-pressed={observation === item.id} onClick={() => { setObservation(item.id); onAnswer?.(material.id, item.id); setAccepted(false); }}>
+            <i aria-hidden="true">{observation === item.id ? "✓" : ""}</i><span>{item.label}</span><ImpactEgg damage={item.id} />
+          </button>)}
+        </div>
+        {accepted && <p className={base.feedback} role="status">✓ บันทึกคำตอบแล้ว</p>}
+      </>}
     </section>
 
     <section className={`${base.panel} ${base.recordPanel}`}>
       <div className={base.recordButtons}>
-        <button disabled={!done || !observation || accepted} onClick={record}><LabIcon name="save" />{accepted ? "✓ รับผลแล้ว" : "บันทึกผลการทดลอง"}</button>
+        <button data-saved={accepted} disabled={!accepted && (!done || !observation)} onClick={accepted ? advance : record}><LabIcon name={accepted ? "play" : "save"} />{accepted ? (nextMaterialIndex >= 0 ? "ทดลองวัสดุถัดไป" : "กลับไปเลือกห้องทดลอง") : done && !observation ? "เลือกผลก่อน" : "บันทึกผลการทดลอง"}</button>
         <button onClick={() => setShowRecords(true)}><LabIcon name="book" />ดูตารางผลการทดลอง</button>
       </div>
     </section>
@@ -158,7 +167,7 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
     <dialog ref={recordsDialog} className={base.dialog} onCancel={() => setShowRecords(false)} onClose={() => setShowRecords(false)} aria-labelledby="impact-records-title">
       <header><h2 id="impact-records-title">บันทึกผลแรงกระแทก</h2><button autoFocus onClick={() => setShowRecords(false)} aria-label="ปิดบันทึก">×</button></header>
       <p>สภาพสิ่งของจำลองหลังตกกระแทก · บันทึกแล้ว {count}/5 วัสดุ</p>
-      <table><thead><tr><th>วัสดุรองรับ</th><th>ผลที่เราสังเกต</th></tr></thead><tbody>{LAB_MATERIALS.map((item) => <tr key={item.id}><td><img src={asset(`materials/${item.image}`)} alt="" />{item.name}</td><td>{impactObservationLabel(records[item.id])}</td></tr>)}</tbody></table>
+      <table><thead><tr><th>วัสดุรองรับ</th><th>ผลที่เราสังเกต</th></tr></thead><tbody>{LAB_MATERIALS.map((item) => <tr key={item.id} className={!records[item.id] ? base.missingRecord : undefined}><td><img src={asset(`materials/${item.image}`)} alt="" />{item.name}</td><td>{impactObservationLabel(records[item.id])}</td></tr>)}</tbody></table>
       <p className={base.recordNote}>เป็นคำตอบจากการสังเกตสถานการณ์จำลอง ไม่ใช่ค่าทดสอบหรือการจัดอันดับวัสดุจริง{preview ? " · เก็บเฉพาะรอบทดลองอิสระนี้" : ""}</p>
       <button className={base.dialogDone} onClick={() => { setShowRecords(false); guard(onDone); }}>กลับไปเลือกห้องทดลอง</button>
     </dialog>

@@ -17,6 +17,12 @@ export const ACTIVE_STAGE_ORDER: Stage[] = [
   "comparison",
   "recap",
   "mission2Complete",
+  "mission3Intro",
+  "mission3Data",
+  "mission3Materials",
+  "mission3Design",
+  "mission3Reason",
+  "mission3Complete",
   "summary",
 ];
 
@@ -42,6 +48,12 @@ export const STAGE_LABELS: Record<Stage, string> = {
   comparison: "ตารางเปรียบเทียบวัสดุ",
   recap: "ทบทวน",
   mission2Complete: "ทำภารกิจที่ 2 สำเร็จ",
+  mission3Intro: "รับภารกิจที่ 3",
+  mission3Data: "ผลการทดลองจากภารกิจที่ 2",
+  mission3Materials: "เลือกวัสดุตามหน้าที่",
+  mission3Design: "ออกแบบสามมิติและแผนการสร้าง",
+  mission3Reason: "เหตุผลของทีม",
+  mission3Complete: "ทำภารกิจที่ 3 สำเร็จ",
   prediction: "เลือกวัสดุ",
   summary: "สรุปภารกิจ",
 };

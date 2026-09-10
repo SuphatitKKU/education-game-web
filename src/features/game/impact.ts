@@ -2,6 +2,17 @@ import type { ImpactDamage, ImpactResult, Stage } from "./data";
 
 export const IMPACT_DROP_MS = 900;
 export const IMPACT_SETTLE_MS = 600;
+/** Time reserved for the visible squeeze-then-release gripper sequence. */
+export const IMPACT_GRIPPER_MS = 1300;
+export const IMPACT_CONDITIONS = {
+  eggMassG: 60,
+  eggHeightCm: 5.7,
+  dropHeightCm: 50,
+  specimenWidthCm: 10,
+  specimenLengthCm: 10,
+  initialThicknessMm: 5,
+  dropsPerTrial: 1,
+} as const;
 export type ImpactPhase = "idle" | "preparing" | "dropping" | "settling" | "done";
 export const IMPACT_OBSERVATIONS = [
   { id: "none", label: "ไม่พบความเสียหาย" },
@@ -29,7 +40,7 @@ export function recordImpact(materialId: string, observation: ImpactDamage): Imp
   return {
     materialId, observation, simulatedDamage: impactDamageFor(materialId),
     method: "egg-drop-v1", modelVersion: "illustrative-v1",
-    conditions: { object: "same-model-egg", height: "fixed", specimen: "equal-size" },
+    conditions: IMPACT_CONDITIONS,
   };
 }
 

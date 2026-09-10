@@ -2,7 +2,7 @@
 
 import { evaluateValueAnswer, readValueAnswer, writeValueAnswer } from "./exit-ticket-values";
 
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
   AVATARS, BOX_MISSION_GOALS, BOX_PARTS, DAMAGE_CAUSES, DAMAGES, EMPTY_SAVE, MATERIALS, RECAP, STORY,
   type CompressionResult, type DamageCause, type ElasticityResult, type ExitTicket, type GameSave, type Stage, type TeamMember, type WaterAbsorptionResult,
@@ -32,6 +32,7 @@ import { ImpactLab } from "./ImpactLab";
 import { AbsorptionLab } from "./AbsorptionLab";
 import { resumeLabStage } from "./impact";
 import { MissionOverview, type MissionNumber } from "./MissionOverview";
+import { MissionThreeScreen, type MissionThreeStage } from "./MissionThree";
 import { attendingMembers, exitTicketKey, reconcileExitTickets } from "./team-attendance";
 import {
   BubbleWrapContinuousZoom,
@@ -55,8 +56,13 @@ const PREDICTION_ENABLED = false;
 // mission map so teachers can select an existing team and continue working
 // without having to replay mission 1 first.
 const MISSION_TWO_AVAILABLE = true;
+// Keep Mission 3 available from the mission map so teams can enter it
+// directly while the three mission screens are being tested together.
+const MISSION_THREE_AVAILABLE = true;
 const DISABLED_LAB_STAGES = new Set<Stage>(LAB_STAGES);
 const MISSION_ONE_BIG_QUESTION_PROGRESS = "เราทราบแล้วว่าต้องศึกษาสมบัติ 3 ด้าน แต่ยังไม่ทราบว่าวัสดุชนิดใดเหมาะกับแต่ละหน้าที่";
+const IPAD_MINI_CANVAS_WIDTH = 1024;
+const IPAD_MINI_CANVAS_HEIGHT = 768;
 
 const MISSION_ONE_PHASES: Partial<Record<Stage, { step: number; label: string; icon: string }>> = {
   mission: { step: 1, label: "เกริ่นภารกิจ", icon: "🗺️" },
@@ -77,8 +83,39 @@ function asset(path: string) {
   return `${BASE_PATH}/assets/${path}`;
 }
 
-function resumableStage(stage: Stage): Stage {
-  return stage === "menu" || stage === "overview" || stage === "team" ? "mission" : resumeLabStage(stage);
+function useIpadMiniCanvasScale() {
+  useEffect(() => {
+    const updateScale = () => {
+      const visualViewport = window.visualViewport;
+      const viewportWidth = visualViewport?.width ?? window.innerWidth;
+      const viewportHeight = visualViewport?.height ?? window.innerHeight;
+      const scale = Math.min(
+        1,
+        viewportWidth / IPAD_MINI_CANVAS_WIDTH,
+        viewportHeight / IPAD_MINI_CANVAS_HEIGHT,
+      );
+      document.documentElement.style.setProperty("--ipad-mini-scale", String(Math.max(scale, 0.01)));
+    };
+
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    window.visualViewport?.addEventListener("resize", updateScale);
+    return () => {
+      window.removeEventListener("resize", updateScale);
+      window.visualViewport?.removeEventListener("resize", updateScale);
+    };
+  }, []);
+}
+
+function IpadMiniCanvas({ children }: { children: ReactNode }) {
+  useIpadMiniCanvasScale();
+  return (
+    <main className="app-shell">
+      <section className="game-viewport">
+        <div className="game-frame" aria-live="polite">{children}</div>
+      </section>
+    </main>
+  );
 }
 
 function userFacingError(error: unknown, fallback: string) {
@@ -181,8 +218,32 @@ export function GameApp() {
   const configured = isSupabaseConfigured();
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("preview") === "mission1-complete") {
+    const previewMode = new URLSearchParams(window.location.search).get("preview");
+    if (previewMode === "labs") {
+      setLabPreview(true);
+      setLoaded(true);
+      return;
+    }
+    if (previewMode === "mission1-complete") {
       setSave({ ...EMPTY_SAVE, stage: "mission1Complete", mission1Completed: true, bigQuestionProgress: { mission1: MISSION_ONE_BIG_QUESTION_PROGRESS } });
+      setLoaded(true);
+      return;
+    }
+    if (previewMode === "mission2") {
+      setSave({ ...EMPTY_SAVE, stage: "mission2Intro", mission1Completed: true });
+      setLoaded(true);
+      return;
+    }
+    if (previewMode === "box-mission") {
+      setSave({ ...EMPTY_SAVE, stage: "boxMission" });
+      setLoaded(true);
+      return;
+    }
+    if (previewMode === "mission3") {
+      // Preview mode is for visual QA, so open Mission 3 directly without
+      // touching a live team's Supabase run or competing with another tab.
+      setSelectedMission(3);
+      setSave({ ...EMPTY_SAVE, stage: "mission3Intro", mission2Completed: true });
       setLoaded(true);
       return;
     }
@@ -206,7 +267,7 @@ export function GameApp() {
   }, []);
 
   useEffect(() => {
-    const isPreview = new URLSearchParams(window.location.search).get("preview") === "mission1-complete";
+    const isPreview = Boolean(new URLSearchParams(window.location.search).get("preview"));
     if (loaded && !isPreview) {
       try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); }
       catch { /* continue without local persistence in restricted Safari modes */ }
@@ -244,7 +305,7 @@ export function GameApp() {
     const merged = { ...current, ...next };
     saveRef.current = merged;
     setSave(merged);
-    if (!activeRun || completedRunRef.current === activeRun.id || ["menu", "overview", "team"].includes(merged.stage)) return;
+    if (!activeRun || completedRunRef.current === activeRun.id || ["menu", "team"].includes(merged.stage)) return;
     const events = answerEvents(current, next);
     try {
       queueCheckpoint(activeRun, merged, events, merged.stage === "mission1Complete" || merged.stage === "summary");
@@ -287,7 +348,12 @@ export function GameApp() {
     const run = await startOrResumeRun(attendingTeam);
     const exitTickets = reconcileExitTickets(run.saveState.team ?? [], sessionMembers, run.saveState.exitTickets ?? {});
     const serverState = { ...EMPTY_SAVE, ...run.saveState, team: sessionMembers, exitTickets, stage: run.currentStage };
-    const restored = { ...serverState, stage: selectedMission === 2 ? "mission2Intro" as const : resumableStage(run.currentStage) };
+    const restoredStage: Stage = selectedMission === 1
+      ? "mission"
+      : selectedMission === 2
+        ? "mission2Intro"
+        : "mission3Intro";
+    const restored = { ...serverState, stage: restoredStage };
     setSelectedTeam(team);
     activeRunIdRef.current = run.id;
     setActiveRun({ id: run.id, teamId: run.teamId, revision: run.revision });
@@ -345,6 +411,12 @@ export function GameApp() {
     if (save.stage === "comparison") { go("notebook"); return; }
     if (save.stage === "recap") { go("comparison"); return; }
     if (save.stage === "mission2Complete") { go("overview"); return; }
+    if (save.stage === "mission3Intro") { go("overview"); return; }
+    if (save.stage === "mission3Data") { go("mission3Intro"); return; }
+    if (save.stage === "mission3Materials") { go("mission3Data"); return; }
+    if (save.stage === "mission3Design") { go("mission3Materials"); return; }
+    if (save.stage === "mission3Reason") { go("mission3Design"); return; }
+    if (save.stage === "mission3Complete") { go("overview"); return; }
     if (save.stage === "prediction") { go(LAB_ROOMS_ENABLED ? "recap" : "exitTicket"); return; }
     if (save.stage === "summary") { go(PREDICTION_ENABLED ? "prediction" : "exitTicket"); }
   };
@@ -370,17 +442,18 @@ export function GameApp() {
   };
   const labRoomsPaused = !LAB_ROOMS_ENABLED && DISABLED_LAB_STAGES.has(save.stage);
 
-  if (!loaded) return <main className="loading-screen">กำลังเตรียมห้องทดลอง…</main>;
+  if (!loaded) return <IpadMiniCanvas><div className="screen loading-screen">กำลังเตรียมห้องทดลอง…</div></IpadMiniCanvas>;
   if (labPreview) return <LabPreview audio={save.audio} onClose={() => setLabPreview(false)} />;
 
   return (
-    <main className="app-shell">
+    <IpadMiniCanvas>
       <audio ref={bgmRef} className="game-bgm" src={asset("audio/happy_clappy_loop.ogg")} autoPlay loop muted={!save.audio} />
-      <section className="game-frame" aria-live="polite">
         {save.stage === "menu" && <MainMenu onStart={() => go("overview")} onLabs={() => setLabPreview(true)} />}
-        {save.stage === "overview" && <MissionOverview mission2Unlocked={MISSION_TWO_AVAILABLE} mission3Unlocked={save.mission2Completed} mission1Answer={save.bigQuestionProgress.mission1} animateMission2Unlock={animateMission2Unlock} onUnlockAnimationDone={() => setAnimateMission2Unlock(false)} onBack={() => go("menu")} onSelect={openMission} />}
+        {save.stage === "overview" && <MissionOverview mission2Unlocked={MISSION_TWO_AVAILABLE} mission3Unlocked={MISSION_THREE_AVAILABLE} mission4Unlocked={save.mission3Completed} mission1Answer={save.bigQuestionProgress.mission1} animateMission2Unlock={animateMission2Unlock} onUnlockAnimationDone={() => setAnimateMission2Unlock(false)} onBack={() => go("menu")} onSelect={openMission} />}
         {labRoomsPaused && <LabRoomsPaused onContinue={() => go(PREDICTION_ENABLED ? "prediction" : "summary")} />}
-        {!labRoomsPaused && save.stage === "team" && <TeamSetup initial={save.team} legacyBundle={legacyBundle} legacyAlreadyImported={wasLegacyImported()} onBack={() => go("overview")} onChoose={openTeam} onCreate={createAndOpenTeam} onUpdate={updateExistingTeam} onImport={importAndOpenTeam} onLocalDone={(team) => patch({ ...EMPTY_SAVE, team, audio: save.audio, runId: createRunId(), stage: selectedMission === 2 ? "mission2Intro" : "mission" })} />}
+        {!labRoomsPaused && save.stage === "team" && <TeamSetup initial={save.team} legacyBundle={legacyBundle} legacyAlreadyImported={wasLegacyImported()} onBack={() => go("overview")} onChoose={openTeam} onCreate={createAndOpenTeam} onUpdate={updateExistingTeam} onImport={importAndOpenTeam} onLocalDone={(team) => selectedMission === 3
+          ? patch({ team, runId: save.runId || createRunId(), stage: "mission3Intro" })
+          : patch({ ...EMPTY_SAVE, team, audio: save.audio, runId: createRunId(), stage: selectedMission === 2 ? "mission2Intro" : "mission" })} />}
         {!labRoomsPaused && save.stage === "mission" && <MissionRoute onBack={reset} onDone={() => {
           const firstScene = STORY[save.storyIndex] ?? STORY[0];
           void playStorySound(STORY_SOUND_BY_IMAGE[firstScene[0]], save.audio).then(() => go("story"));
@@ -398,14 +471,14 @@ export function GameApp() {
         {!labRoomsPaused && save.stage === "comparison" && <MaterialComparison save={save} onBack={() => go("notebook")} onDone={() => patch({ stage: "recap", recapIndex: 0 })} />}
         {!labRoomsPaused && save.stage === "recap" && <Recap index={save.recapIndex} answers={save.recapAnswers} onAnswer={(recapAnswers) => patch({ recapAnswers })} onIndex={(recapIndex) => patch({ recapIndex })} onDone={() => go("mission2Complete")} />}
         {!labRoomsPaused && save.stage === "mission2Complete" && <MissionTwoComplete team={save.team} onHome={() => patch({ mission2Completed: true, stage: "overview" })} />}
+        {!["menu", "overview", "team"].includes(save.stage) && ["mission3Intro", "mission3Data", "mission3Materials", "mission3Design", "mission3Reason", "mission3Complete"].includes(save.stage) && <MissionThreeScreen stage={save.stage as MissionThreeStage} save={save} onPatch={patch} onBack={goBack} onNext={(stage) => go(stage)} onComplete={() => patch({ mission3Completed: true, stage: "mission3Complete" })} onFinish={() => patch({ mission3Completed: true, stage: "overview" })} />}
         {!labRoomsPaused && PREDICTION_ENABLED && save.stage === "prediction" && <Prediction labsEnabled={LAB_ROOMS_ENABLED} values={save.predictions} compressionResults={save.compressionResults} absorptionResults={save.absorptionResults} elasticityResults={save.elasticityResults} onChange={(predictions) => patch({ predictions })} onDone={() => go("summary")} />}
         {!labRoomsPaused && save.stage === "summary" && <Summary save={save} onReplay={() => void startNewAttempt()} onReset={reset} />}
         {(save.stage === "story" || save.stage === "inspection") && <button className="back-nav-button" onClick={(event) => { event.stopPropagation(); goBack(); }}>‹ ย้อนกลับ</button>}
-        {MISSION_ONE_PHASES[save.stage] && <MissionOneProgress stage={save.stage} />}
+        {save.stage !== "boxMission" && MISSION_ONE_PHASES[save.stage] && <MissionOneProgress stage={save.stage} />}
         <button className="global-audio-button" aria-label={save.audio ? "ปิดเสียงเพลง" : "เปิดเสียงเพลง"} aria-pressed={save.audio} onClick={(event) => { event.stopPropagation(); toggleAudio(); }}>{save.audio ? "🔊" : "🔇"}</button>
         {configured && activeRun && <SaveStatusBadge status={saveIndicator} />}
-      </section>
-    </main>
+    </IpadMiniCanvas>
   );
 }
 
@@ -465,7 +538,8 @@ function MissionOneComplete({ onHome }: { onHome: () => void }) {
         </div>
         <p className="mission-complete-kicker">เก่งมาก นักสืบกล่องพัสดุ!</p>
         <h1 id="mission-complete-title">ทำภารกิจที่ 1 เสร็จแล้ว</h1>
-        <p className="mission-complete-copy">ทุกคนสืบร่องรอยความเสียหาย สำรวจวัสดุ และตอบคำถามครบแล้ว</p>
+        <p className="mission-complete-copy">ทุกคนสืบร่องรอยความเสียหาย สำรวจวัสดุ และตอบคำถามครบแล้วภายในเวลาที่กำหนด</p>
+        <p className="mission-complete-assessment-note">สถานะ “ทำสำเร็จ” หมายถึงทำกิจกรรมครบภายใน 1 ชั่วโมง ไม่ได้หมายถึง “ผ่านเกณฑ์” การประเมิน ครูใช้รูบริก K–P–A–V พิจารณาแยกต่างหาก</p>
         <div className="mission-complete-reward">
           <span aria-hidden="true">🔓</span>
           <div><b>รางวัลใหม่กำลังรออยู่</b><small>กลับไปที่หน้าภารกิจเพื่อปลดล็อกภารกิจที่ 2</small></div>
@@ -514,8 +588,11 @@ function TeamSetup({
   const [loading, setLoading] = useState(isSupabaseConfigured());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [localFallback, setLocalFallback] = useState(false);
   const configured = isSupabaseConfigured();
-  const validation = validateTeamDraft(teamName, members, configured);
+  // Keep the original team-selection UI visible even when the online request needs a local fallback.
+  const remoteConfigured = configured;
+  const validation = validateTeamDraft(teamName, members, remoteConfigured);
   const valid = validation.valid;
   const update = (index: number, next: Partial<TeamMember>) => setMembers((current) => current.map((m, i) => i === index ? { ...m, ...next } : m));
   const attendanceKey = (member: TeamMember) => member.id ?? `${member.name}|${member.avatar}`;
@@ -564,7 +641,10 @@ function TeamSetup({
     setLoading(true);
     setError("");
     try { setTeams(await listTeams()); }
-    catch (nextError) { setError(userFacingError(nextError, "โหลดรายชื่อทีมไม่สำเร็จ")); }
+    catch {
+      setTeams([]);
+      setLocalFallback(true);
+    }
     finally { setLoading(false); }
   };
   useEffect(() => { void refresh(); }, []);
@@ -575,24 +655,36 @@ function TeamSetup({
     catch (nextError) { setError(userFacingError(nextError, "ทำรายการไม่สำเร็จ")); }
     finally { setBusy(false); }
   };
+  const createOnlineTeam = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await onCreate(teamName.trim(), members);
+    } catch {
+      setLocalFallback(true);
+      setMode("create");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (historyTeam) return <TeamHistory team={historyTeam} onBack={() => setHistoryTeam(null)} />;
   return (
-    <div className={`screen team-screen${configured && mode === "create" ? " team-create-screen" : ""}`}>
+    <div className={`screen team-screen${remoteConfigured && mode === "create" ? " team-create-screen" : ""}`}>
       <img className="soft-bg" src={asset("menu/cover.png")} alt="" />
       <header className="team-header">
         <button className="button button-yellow compact" disabled={busy} onClick={onBack}>‹ กลับหน้าภารกิจ</button>
         <div><h1>เลือกทีมออกแบบกล่อง</h1><p>ทำภารกิจต่อจากเดิม หรือสร้างทีมใหม่ด้วยชื่อเล่นเท่านั้น</p></div>
-        <div className="count-badge">{configured ? `${teams.length} ทีม` : "Local"}</div>
+        <div className="count-badge">{remoteConfigured ? `${teams.length} ทีม` : "Local"}</div>
       </header>
-      {configured && <nav className="team-mode-tabs" aria-label="เลือกวิธีจัดทีม">
+      {remoteConfigured && <nav className="team-mode-tabs" aria-label="เลือกวิธีจัดทีม">
         <button className={mode === "existing" ? "active" : ""} onClick={() => setMode("existing")}>ทีมเดิม</button>
         <button className={mode === "create" ? "active" : ""} onClick={() => setMode("create")}>＋ สร้างทีมใหม่</button>
       </nav>}
       {!configured && <div className="supabase-setup-note">ยังไม่ได้เชื่อม Supabase — เล่นและบันทึกในเครื่องนี้ได้ชั่วคราว</div>}
       {error && <div className="team-error" role="alert">{error}</div>}
 
-      {configured && mode === "existing" ? <section className="existing-team-panel">
+      {remoteConfigured && mode === "existing" ? <section className="existing-team-panel">
         {!legacyAlreadyImported && hasLegacyData(legacyBundle) && <article className="legacy-import-card">
           <div><b>พบข้อมูลการเล่นเดิมในเครื่องนี้</b><span>ตั้งชื่อทีมเพื่อนำความคืบหน้าและประวัติเข้าฐานข้อมูล</span></div>
           <input value={legacyTeamName} maxLength={60} onChange={(event) => setLegacyTeamName(event.target.value)} placeholder="ชื่อทีมสำหรับข้อมูลเดิม" />
@@ -639,7 +731,7 @@ function TeamSetup({
         <footer className="team-footer">
           {members.length < 7 ? <button className="button button-yellow" onClick={() => setMembers([...members, { name: "", avatar: AVATARS[6] }])}>＋ เพิ่มสมาชิกคนที่ 7</button> : <button className="button button-white" onClick={() => setMembers(members.slice(0, 6))}>− ใช้ทีม 6 คน</button>}
           <span>{validation.message}</span>
-          <button className="button button-orange" disabled={!valid || busy || (configured && !teamName.trim())} onClick={() => configured ? void runAction(() => onCreate(teamName.trim(), members)) : onLocalDone(members)}>ทีมพร้อมแล้ว</button>
+          <button className="button button-orange" disabled={!valid || busy || (remoteConfigured && !teamName.trim())} onClick={() => localFallback ? onLocalDone(members) : void createOnlineTeam()}>ทีมพร้อมแล้ว</button>
         </footer>
       </>}
 
@@ -861,7 +953,7 @@ function ComicStory({ index, audio, onIndex, onDone }: { index: number; audio: b
 function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { findings: Record<string, DamageCause>; audio: boolean; onFinding: (findings: Record<string, DamageCause>) => void; onReset: () => void; onDone: () => void }) {
   type ViewerMaterial = { name: string; pbrMetallicRoughness: { setBaseColorFactor: (color: string | number[]) => void } };
   type ViewerElement = HTMLElement & { model?: { materials: ViewerMaterial[] }; src?: string; alt?: string };
-  const inspectionModelSrc = `${asset("models/damaged_box_blender.glb")}?v=blender-sculpt-6`;
+  const inspectionModelSrc = `${asset("models/damaged_box_blender.glb")}?v=blender-normal-box-1`;
   const inspectionModelAlt = "กล่องพัสดุเปิดฝาออกครบทั้งสี่ด้าน เห็นวัสดุกันกระแทกและแก้วด้านในที่แตกร้าวและขอบบิ่น สามารถหมุนตรวจสอบและแตะตอบได้";
 
   const [ready, setReady] = useState(false);
@@ -1034,51 +1126,133 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
   );
 }
 
+const BOX_MISSION_QUESTIONS = [
+  {
+    ...BOX_MISSION_GOALS[0],
+    finding: "พบรอยยุบ",
+    image: "inspection/damaged_box_preview_top.png",
+    imageAlt: "กล่องพัสดุมีรอยยุบอยู่ด้านบน",
+    hint: "ลองคิดถึงรอยยุบ กล่องควรแข็งแรงเรื่องไหนนะ",
+    explanation: "รอยยุบบอกเราว่า โครงกล่องควรไม่ยุบง่ายเมื่อเจอแรงกด",
+  },
+  {
+    ...BOX_MISSION_GOALS[1],
+    finding: "พบแก้วแตกร้าว",
+    image: "cutscene/shot_09_cracked_cup.png",
+    imageAlt: "แก้วในกล่องพัสดุมีรอยแตกร้าว",
+    hint: "ลองดูสิ่งของด้านใน กล่องควรช่วยป้องกันตอนเกิดอะไรขึ้นนะ",
+    explanation: "สิ่งของแตกร้าวบอกเราว่า ภายในกล่องควรช่วยลดความเสียหายจากแรงกระแทก",
+  },
+  {
+    ...BOX_MISSION_GOALS[2],
+    finding: "พบกล่องเปียก",
+    image: "inspection/damaged_box_preview_wet.png",
+    imageAlt: "กล่องพัสดุมีคราบเปียกจากน้ำ",
+    hint: "ลองคิดถึงน้ำฝน กล่องควรช่วยเรื่องไหนนะ",
+    explanation: "คราบเปียกบอกเราว่า กล่องควรช่วยลดการเปียกของพัสดุ",
+  },
+] as const;
+
 function BoxMissionScreen({ values, onBack, onChange, onDone }: {
   values: Record<string, boolean>;
   onBack: () => void;
   onChange: (values: Record<string, boolean>) => void;
   onDone: () => void;
 }) {
-  const selectedCount = BOX_MISSION_GOALS.filter((goal) => values[goal.id]).length;
-  const complete = selectedCount === BOX_MISSION_GOALS.length;
+  const [feedback, setFeedback] = useState<"idle" | "hint" | "correct">("idle");
+  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
+  const [confirmedGoalId, setConfirmedGoalId] = useState<string | null>(null);
+  const selectedCount = BOX_MISSION_QUESTIONS.filter((question) => values[question.id]).length;
+  const firstIncompleteIndex = BOX_MISSION_QUESTIONS.findIndex((question) => !values[question.id]);
+  const confirmedIndex = confirmedGoalId ? BOX_MISSION_QUESTIONS.findIndex((question) => question.id === confirmedGoalId) : -1;
+  const currentIndex = confirmedIndex >= 0 ? confirmedIndex : Math.max(firstIncompleteIndex, 0);
+  const currentQuestion = BOX_MISSION_QUESTIONS[currentIndex];
+  const showDiscussion = selectedCount === BOX_MISSION_QUESTIONS.length && !confirmedGoalId;
+  const coachMessage = showDiscussion
+    ? "ครบ 3 หน้าที่แล้ว! ก่อนทิ้ง ลองคิดด้วยกันว่าวัสดุชิ้นไหนยังใช้ต่อได้บ้าง"
+    : feedback === "correct"
+      ? `เก่งมาก! ${currentQuestion.explanation}`
+      : feedback === "hint"
+        ? currentQuestion.hint
+        : "ดูร่องรอย แล้วเลือกว่ากล่องใบใหม่ควรช่วยเรื่องไหน";
+  const mascotFrame = showDiscussion || feedback === "correct" ? "complete" : feedback === "hint" ? "react" : "think";
+  const chooseGoal = (goalId: string) => {
+    setSelectedOptionId(goalId);
+    if (goalId === currentQuestion.id) {
+      setConfirmedGoalId(goalId);
+      setFeedback("correct");
+      return;
+    }
+    setConfirmedGoalId(null);
+    setFeedback("hint");
+  };
+  const continueToNextQuestion = () => {
+    onChange({ ...values, [currentQuestion.id]: true });
+    setConfirmedGoalId(null);
+    setSelectedOptionId(null);
+    setFeedback("idle");
+  };
+  const returnToPreviousQuestion = () => {
+    const lastQuestion = BOX_MISSION_QUESTIONS[BOX_MISSION_QUESTIONS.length - 1];
+    onChange({ ...values, [lastQuestion.id]: false });
+    setConfirmedGoalId(null);
+    setSelectedOptionId(null);
+    setFeedback("idle");
+  };
   return (
-    <div className="screen box-mission-screen">
+    <div className={`screen box-mission-screen ${showDiscussion ? "is-discussion" : ""}`}>
       <img className="group-design-bg" src={asset("compression/lab_background.png")} alt="" />
-      <button className="button button-white box-mission-back" type="button" onClick={onBack}>‹ กลับไปสำรวจกล่อง</button>
+      {!showDiscussion && <button className="button button-white box-mission-back" type="button" onClick={onBack}>‹ กลับไปหน้าก่อนหน้า</button>}
       <header className="box-mission-header">
-        <span>อภิปรายภารกิจของกล่องพัสดุ</span>
-        <h1>กล่องของเราควรช่วยแก้ปัญหาอะไรบ้าง?</h1>
+        <span>{showDiscussion ? "ชวนกันคิด" : `ข้อ ${currentIndex + 1} จาก ${BOX_MISSION_QUESTIONS.length}`}</span>
+        <h1>{showDiscussion ? "ก่อนทิ้ง ลองคิดด้วยกัน" : "ช่วยเลือกหน้าที่ให้กล่องของเรา"}</h1>
+        <p>{showDiscussion ? "วัสดุที่ยังดีอยู่ อาจช่วยเราได้อีกครั้ง" : "ดูร่องรอย แล้วเลือกคำตอบที่ช่วยกล่องได้"}</p>
       </header>
-      <section className="box-mission-grid" aria-label="ตัวเลือกภารกิจของกล่องพัสดุ">
-        {BOX_MISSION_GOALS.map((goal) => (
-          <button
-            type="button"
-            key={goal.id}
-            aria-pressed={Boolean(values[goal.id])}
-            className={values[goal.id] ? "selected" : ""}
-            onClick={() => onChange({ ...values, [goal.id]: !values[goal.id] })}
-          >
-            <i aria-hidden="true">{goal.icon}</i>
-            <b>{goal.label}</b>
-            <span>{values[goal.id] ? "✓ เลือกแล้ว" : "แตะเพื่อเลือก"}</span>
-          </button>
-        ))}
-      </section>
-      <aside className="box-mission-discussion">
-        <b>💬 ชวนกันอภิปราย</b>
-        <p>วัสดุที่ใช้แล้วแต่ยังมีสภาพเหมาะสม เรานำกลับมาใช้ใหม่ได้หรือไม่ เพราะเหตุใด</p>
-      </aside>
-      <footer className="box-mission-footer">
-        <div className="box-mission-progress">
-          <span aria-live="polite">เลือกแล้ว <strong>{selectedCount}/{BOX_MISSION_GOALS.length}</strong> ข้อ</span>
-          <div role="progressbar" aria-label="ความคืบหน้าการเลือกภารกิจของกล่อง" aria-valuemin={0} aria-valuemax={BOX_MISSION_GOALS.length} aria-valuenow={selectedCount}>
-            <i style={{ width: `${(selectedCount / BOX_MISSION_GOALS.length) * 100}%` }} />
-          </div>
-          <small>{complete ? "ครบแล้ว ไปสำรวจวัสดุกันเลย!" : "เลือกภารกิจของกล่องให้ครบทั้ง 4 ข้อ"}</small>
-        </div>
-        <button className="button button-orange" type="button" disabled={!complete} onClick={onDone}>ไปสำรวจวัสดุ ›</button>
-      </footer>
+      <main className="box-mission-choice-layout">
+        <aside className={`box-mission-coach box-mission-choice-coach ${feedback !== "idle" || showDiscussion ? "is-speaking" : ""}`}>
+          <div className="box-mission-coach-bubble" aria-live="polite"><span>ผู้ช่วยนักสืบกล่อง</span><p>{coachMessage}</p></div>
+          <div className="box-mission-coach-sprite" data-frame={mascotFrame} aria-hidden="true"><img src={asset("mascot/parcel-guide-sprite.png")} alt="" /></div>
+        </aside>
+        {showDiscussion ? (
+          <section className="box-mission-discussion-screen" aria-label="ชวนกันอภิปรายเรื่องการใช้วัสดุซ้ำ">
+            <button className="button button-white box-mission-discussion-back" type="button" onClick={returnToPreviousQuestion}>‹ กลับไปหน้าก่อนหน้า</button>
+            <span className="box-mission-discussion-icon" aria-hidden="true">♻️</span>
+            <p className="box-mission-discussion-kicker">เราช่วยกล่องได้ครบ 3 เรื่องแล้ว</p>
+            <h2>วัสดุที่ใช้แล้ว แต่ยังมีสภาพเหมาะสม<br />นำกลับมาใช้ใหม่ได้ไหม เพราะอะไร?</h2>
+            <div className="box-mission-discussion-ideas" aria-label="ประเด็นชวนคิด">
+              <span>วัสดุยังใช้ได้</span><b aria-hidden="true">→</b><span>ช่วยลดขยะ</span>
+            </div>
+            <p className="box-mission-discussion-teacher">ชวนเพื่อนบอกเหตุผลของตัวเอง แล้วค่อยไปสำรวจวัสดุด้วยกัน</p>
+            <button className="button button-orange box-mission-next" type="button" onClick={onDone}><span>ไปสำรวจวัสดุ</span><b aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></svg></b></button>
+          </section>
+        ) : (
+          <section className="box-mission-question-card" aria-label={`คำถามข้อ ${currentIndex + 1}`}>
+            <div className="box-mission-evidence-card">
+              <span>ร่องรอยที่พบ</span>
+              <img src={asset(currentQuestion.image)} alt={currentQuestion.imageAlt} />
+              <strong>{currentQuestion.finding}</strong>
+            </div>
+            <div className="box-mission-answer-area">
+              <h2>กล่องใบใหม่ควรช่วยเรื่องไหน?</h2>
+              <p>แตะเลือกคำตอบที่ตรงกับร่องรอยนี้</p>
+              <div className="box-mission-answer-options" role="group" aria-label="เลือกหน้าที่ของกล่อง">
+                {BOX_MISSION_QUESTIONS.map((option) => {
+                  const isCorrect = option.id === currentQuestion.id;
+                  const isSelected = selectedOptionId === option.id;
+                  return <button key={option.id} type="button" aria-pressed={isSelected} className={`${isSelected ? "is-selected" : ""} ${feedback === "correct" && isCorrect ? "is-correct" : ""} ${feedback === "hint" && isSelected ? "is-hint" : ""}`} onClick={() => chooseGoal(option.id)}>
+                    <i aria-hidden="true">{option.icon}</i><span>{option.label}</span>{feedback === "correct" && isCorrect && <b aria-hidden="true">✓</b>}
+                  </button>;
+                })}
+              </div>
+              <div className={`box-mission-feedback ${feedback}`} aria-live="polite">
+                {feedback === "correct" && <><strong>เลือกได้ดีมาก!</strong><span>{currentQuestion.explanation}</span></>}
+                {feedback === "hint" && <><strong>ลองคิดอีกนิด</strong><span>{currentQuestion.hint}</span></>}
+              </div>
+              {feedback === "correct" && <button className="button button-orange box-mission-next" type="button" onClick={continueToNextQuestion}><span>ข้อต่อไป</span><b aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></svg></b></button>}
+            </div>
+          </section>
+        )}
+      </main>
     </div>
   );
 }
@@ -1142,7 +1316,7 @@ const CORRUGATED_FEATURES = [
 const CORRUGATED_OVERVIEW = {
   label: "กระดาษลูกฟูกลอน E 3 ชั้น",
   icon: "📦",
-  detail: "กระดาษลูกฟูกมีแผ่นเรียบ 2 แผ่นประกบลอนกระดาษไว้ตรงกลาง ช่องอากาศในลอนช่วยรับแรงกดและลดแรงกระแทก จึงช่วยให้แผ่นวัสดุคงรูปและรับแรงได้ดีขึ้น",
+  detail: "กระดาษลูกฟูกมีแผ่นเรียบ 2 แผ่นประกบลอนกระดาษไว้ตรงกลาง มองเห็นช่องอากาศต่อเนื่องอยู่ระหว่างแผ่นผิว",
 };
 
 type MaterialExplorerFeature = {
@@ -1212,7 +1386,7 @@ const BUBBLE_WRAP_FEATURES = [
   },
   {
     id: "flexible-sheet",
-    label: "แผ่นเดี่ยวโค้งห่อได้",
+    label: "แผ่นเดี่ยวโค้งหรือม้วนได้",
     icon: "⌁",
     detail: "วัสดุเป็นแผ่นเดี่ยวที่มีฟองทั่วทั้งแผ่น เมื่อยกขึ้นสามารถโค้งหรือม้วนได้",
     position: "1.95m 0.04m -0.95m",
@@ -1313,7 +1487,7 @@ const KRAFT_PAPER_FEATURES = [
     id: "flexible-kraft-sheet",
     label: "โค้งงอได้",
     icon: "⌁",
-    detail: "แม้เนื้อกระดาษจะคงรูปเป็นแผ่น แต่ยังโค้ง พับ หรือขยำเพื่อรองและเติมช่องว่างรอบสิ่งของได้",
+    detail: "เนื้อกระดาษคงรูปเป็นแผ่น และสามารถโค้ง พับ หรือขยำได้",
     position: "1.8m 0.24m -1m",
     normal: "0 1 0",
     orbit: "42deg 60deg 6.7m",
@@ -1326,7 +1500,7 @@ const WAX_PAPER_FEATURES = [
     id: "wax-coated-surface",
     label: "ผิวเคลือบไขสองด้าน",
     icon: "◇",
-    detail: "ชั้นไขพาราฟินเคลือบผิวกระดาษทั้งสองด้าน ทำให้ผิวเรียบลื่น มีเงาซาตินเล็กน้อย และช่วยให้น้ำกับไขมันซึมผ่านได้ยาก",
+    detail: "ชั้นไขพาราฟินเคลือบผิวกระดาษทั้งสองด้าน ผิวจึงเรียบลื่นและมีเงาซาตินเล็กน้อย",
     position: "-1.35m 0.25m -0.55m",
     normal: "0 1 0",
     orbit: "28deg 50deg 6.7m",
@@ -1346,7 +1520,7 @@ const WAX_PAPER_FEATURES = [
     id: "very-flexible-sheet",
     label: "แผ่นบางโค้งงอได้มาก",
     icon: "⌁",
-    detail: "กระดาษไขเป็นแผ่นบาง จึงโค้ง พับ หรือห่อรอบสิ่งของได้ง่ายโดยไม่ต้องทำเป็นแผ่นหนา",
+    detail: "กระดาษไขเป็นแผ่นบาง สามารถโค้ง พับ หรือม้วนได้",
     position: "1.8m 0.32m -1m",
     normal: "0 1 0",
     orbit: "42deg 60deg 6.6m",
@@ -1357,7 +1531,7 @@ const WAX_PAPER_FEATURES = [
 const MATERIAL_EXPLORERS = {
   corrugated_cardboard: {
     title: "กระดาษลูกฟูก",
-    description: "ทำจากกระดาษเรียบ 2 ชั้น มีลอนกระดาษและช่องอากาศอยู่ตรงกลาง ลอนช่วยรับแรงกดและลดแรงกระแทก จึงช่วยให้โครงสร้างคงรูปและรับแรงได้ดีขึ้น",
+    description: "ประกอบด้วยกระดาษเรียบ 2 ชั้น มีลอนกระดาษและช่องอากาศอยู่ตรงกลาง",
     model: "models/corrugated_cardboard.glb",
     alt: "โมเดลกระดาษลูกฟูกสามมิติ แสดงแผ่นผิวบน ลอน E และแผ่นผิวล่าง",
     loading: "กำลังประกอบลอนกระดาษ 3 มิติ…",
@@ -1370,7 +1544,7 @@ const MATERIAL_EXPLORERS = {
   },
   pe_sheet: {
     title: "แผ่นพลาสติก PE",
-    description: "เป็นพลาสติกแผ่นบาง ผิวเรียบและโค้งงอได้ น้ำซึมผ่านได้ยาก จึงช่วยห่อสิ่งของและป้องกันความชื้น",
+    description: "เป็นแผ่นพลาสติกบาง ผิวเรียบ ลื่น และโค้งงอได้ มีลักษณะใสขุ่น",
     model: "models/pe_sheet.glb",
     alt: "โมเดลแผ่นพลาสติก PE ใสขุ่นสีขาวน้ำนมแบบแผ่นเดี่ยว ผิวเรียบ บาง และโค้งงอได้",
     loading: "กำลังเตรียมแผ่นฟิล์ม PE 3 มิติ…",
@@ -1383,7 +1557,7 @@ const MATERIAL_EXPLORERS = {
   },
   bubble_wrap: {
     title: "แผ่นพลาสติกกันกระแทกชนิดฟองอากาศ",
-    description: "ฟองอากาศเล็ก ๆ ทำหน้าที่เหมือนเบาะ เมื่อถูกกระแทก อากาศในฟองจะช่วยกระจายแรงและป้องกันสิ่งของ",
+    description: "เป็นแผ่นพลาสติกที่มีฟองอากาศขนาดใกล้เคียงกันเรียงต่อกันทั่วทั้งแผ่น",
     model: "models/bubble_wrap.glb?v=3",
     alt: "โมเดลแผ่นพลาสติกกันกระแทกชนิดฟองอากาศแบบแผ่นเดี่ยว มีฟองอากาศเรียงเป็นแถวเฉพาะด้านบนและด้านล่างเรียบ",
     loading: "กำลังเติมอากาศในฟอง 3 มิติ…",
@@ -1396,7 +1570,7 @@ const MATERIAL_EXPLORERS = {
   },
   closed_cell_pe_foam: {
     title: "แผ่นโฟม EPE",
-    description: "มีช่องอากาศเล็ก ๆ จำนวนมาก เนื้อนุ่ม และช่วยลดแรงกระแทกโดยดูดซับน้ำได้น้อย",
+    description: "เป็นแผ่นสีขาว เนื้อนุ่ม และมีผิวเป็นเซลล์เล็ก ๆ",
     model: "models/pe_foam_sheet.glb",
     alt: "โมเดลแผ่นโฟม EPE สีขาวแบบหนึ่งแผ่น มีความหนาเล็กน้อย ขอบมน และผิวเซลล์ละเอียด",
     loading: "กำลังสร้างเซลล์โฟม EPE 3 มิติ…",
@@ -1409,7 +1583,7 @@ const MATERIAL_EXPLORERS = {
   },
   cardboard: {
     title: "กระดาษหน้าขาวหลังเทา 400 แกรม",
-    description: "มีเนื้อกระดาษแน่น ด้านหน้าสีขาวและด้านหลังสีเทา คำว่า 400 แกรม หมายถึงกระดาษ 1 ตารางเมตรหนัก 400 กรัม",
+    description: "เป็นแผ่นกระดาษเนื้อแน่น ด้านหน้าสีขาว ด้านหลังสีเทา และมีขอบบาง",
     model: "models/cardboard_gray_white_400gsm.glb",
     alt: "โมเดลกระดาษหน้าขาวหลังเทา 400 แกรมแบบหนึ่งแผ่น ด้านหน้าสีขาว ด้านหลังสีเทา และมีขอบบางทึบแสง",
     loading: "กำลังเตรียมกระดาษหน้าขาวหลังเทา 400 แกรมแบบ 3 มิติ…",
@@ -1422,7 +1596,7 @@ const MATERIAL_EXPLORERS = {
   },
   kraft_paper: {
     title: "กระดาษคราฟต์",
-    description: "ทำจากเส้นใยกระดาษที่ยึดเกาะกัน มีสีน้ำตาลและโค้งงอได้ จึงใช้ห่อหรือทำถุงได้",
+    description: "เป็นแผ่นกระดาษสีน้ำตาล มีผิวเป็นเส้นใยละเอียด และโค้งงอได้",
     model: "models/kraft_paper_single_sheet.glb",
     alt: "โมเดลกระดาษคราฟต์สีน้ำตาลแบบหนึ่งแผ่น บาง มีผิวเส้นใยละเอียด และโค้งเป็นคลื่นเล็กน้อย",
     loading: "กำลังเตรียมเส้นใยกระดาษคราฟต์ 3 มิติ…",
@@ -1435,7 +1609,7 @@ const MATERIAL_EXPLORERS = {
   },
   waxed_paper: {
     title: "กระดาษเคลือบไข",
-    description: "เป็นกระดาษบางที่เคลือบไขบนผิว ชั้นไขทำให้น้ำซึมผ่านได้ยากและช่วยป้องกันความชื้น",
+    description: "เป็นแผ่นกระดาษบาง ผิวเรียบ มีชั้นเคลือบสีขาวนวลและมองเห็นแสงผ่านได้บางส่วน",
     model: "models/wax_paper_single_sheet.glb",
     alt: "โมเดลกระดาษไขสีขาวนวลโปร่งแสงแบบหนึ่งแผ่น บางมาก มีผิวเคลือบไขละเอียด และโค้งเป็นคลื่น",
     loading: "กำลังเคลือบผิวกระดาษไข 3 มิติ…",
@@ -1621,8 +1795,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
       <button className="material-guide-back-button" onClick={onBack}>‹ ย้อนกลับ</button>
       <header className="material-guide-header">
         <div>
-          <span className="material-guide-kicker">🔎 ห้องส่องวัสดุแสนสนุก</span>
-          <h1>สำรวจวัสดุ</h1>
+          <h1>ห้องสำรวจวัสดุ</h1>
           <p className="material-guide-intro">เลือกวัสดุ แล้วหมุนดูให้รอบก่อนซูมเข้าไปค้นหาความลับข้างใน!</p>
         </div>
       </header>
@@ -2038,10 +2211,10 @@ function LabPreview({ audio, onClose }: { audio: boolean; onClose: () => void })
   // A separate state tree: the shortcut never overwrites a team checkpoint or sends learning events.
   const [previewSave, setPreviewSave] = useState<GameSave>({ ...EMPTY_SAVE, stage: "testHub", audio });
   const patchPreview = (next: Partial<GameSave>) => setPreviewSave((current) => ({ ...current, ...next }));
-  return <main className="app-shell"><section className="game-frame" aria-live="polite">
+  return <IpadMiniCanvas>
     <LabScreens save={previewSave} onPatch={patchPreview} onBack={onClose} preview />
     <button className="global-audio-button" aria-label={previewSave.audio ? "ปิดเสียงเพลง" : "เปิดเสียงเพลง"} aria-pressed={previewSave.audio} onClick={() => patchPreview({ audio: !previewSave.audio })}>{previewSave.audio ? "🔊" : "🔇"}</button>
-  </section></main>;
+  </IpadMiniCanvas>;
 }
 
 function LabScreens({ save, onPatch, onBack, onComplete, preview = false }: {
@@ -2088,12 +2261,21 @@ function TestHub({ save, onStart, onBack, onComplete, preview }: {
 }
 
 function MissionTwoIntro({ onBack, onStart }: { onBack: () => void; onStart: () => void }) {
-  return <div className="screen mission-two-screen mission-two-intro">
-    <button className="button button-white mission-two-back" onClick={onBack}>‹ กลับเส้นทางภารกิจ</button>
-    <header><span>ภารกิจที่ 2 · นักวิทย์วัสดุ</span><h1>สำรวจ 3 สมบัติลับของวัสดุ</h1><p>วันนี้ทีมจะใช้ผลการทดลองเป็นหลักฐาน ก่อนเลือกวัสดุสำหรับสร้างกล่องพัสดุ</p></header>
-    <section className="mission-two-big-question"><b>💡 คำถามใหญ่ของเรา</b><h2>วัสดุชนิดใดเหมาะกับการรับแรงกด ลดแรงกระแทก และช่วยป้องกันน้ำ?</h2><p>ทดลองภายใต้เงื่อนไขเดียวกัน บันทึกผล แล้วเปรียบเทียบอย่างมีเหตุผล</p></section>
-    <div className="mission-two-route" aria-label="เส้นทางภารกิจที่ 2"><article><i>1</i><b>ทดลอง</b><span>ทดสอบวัสดุ 5 ชนิด</span></article><article><i>2</i><b>บันทึก</b><span>เก็บหลักฐานของทีม</span></article><article><i>3</i><b>เปรียบเทียบ</b><span>อ่านผลจากตาราง</span></article><article><i>4</i><b>สรุป</b><span>ตอบคำถามทบทวน</span></article></div>
-    <button className="button button-orange mission-two-primary" onClick={onStart}>เริ่มสำรวจวัสดุ ›</button>
+  return <div className="screen mission-two-screen mission-two-intro mission-two-welcome-screen">
+    <img className="mission-route-bg" src={asset("menu/cover.png")} alt="" />
+    <button className="mission-briefing-back mission-two-welcome-back" type="button" onClick={onBack}>‹ กลับหน้าภารกิจ</button>
+    <main className="mission-two-welcome-card">
+      <div className="mission-briefing-illustration mission-two-welcome-illustration" aria-hidden="true">
+        <img className="mission-two-welcome-icon" src={asset("menu/mission-2-material-tests.png")} alt="" />
+        <span className="mission-briefing-search">🧪</span>
+      </div>
+      <span className="mission-two-welcome-label">ภารกิจที่ 2 · นักวิทย์วัสดุ</span>
+      <h1>สำรวจ 3 สมบัติลับของวัสดุ</h1>
+      <p className="mission-two-welcome-copy">วันนี้ทีมจะใช้ผลการทดลองเป็นหลักฐาน<br />ก่อนเลือกวัสดุสำหรับสร้างกล่องพัสดุ</p>
+      <section className="mission-two-big-question"><b>💡 คำถามใหญ่ของเรา</b><h2>วัสดุชนิดใดเหมาะกับการรับแรงกด ลดแรงกระแทก และช่วยป้องกันน้ำ?</h2><p>ทดลองภายใต้เงื่อนไขเดียวกัน บันทึกผล แล้วเปรียบเทียบอย่างมีเหตุผล</p></section>
+      <div className="mission-two-route" aria-label="เส้นทางภารกิจที่ 2"><article><i>1</i><b>ทดลอง</b><span>ทดสอบวัสดุ 5 ชนิด</span></article><article><i>2</i><b>บันทึก</b><span>เก็บหลักฐานของทีม</span></article><article><i>3</i><b>เปรียบเทียบ</b><span>อ่านผลจากตาราง</span></article><article><i>4</i><b>สรุป</b><span>ตอบคำถามทบทวน</span></article></div>
+      <button className="button button-orange mission-two-primary" onClick={onStart}>เริ่มสำรวจวัสดุ ›</button>
+    </main>
   </div>;
 }
 

@@ -158,28 +158,8 @@ def add_box_body(cardboard, inside):
 
     grid_surface("RightWall_DentedCorner", 26, 20, right_wall, cardboard, 0.12, 0.015)
 
-    left = cube("LeftWall_Torn", (-1.70, 0, -0.33), (0.14, 2.5, 1.72), cardboard, 0.022)
-    tear_angles = [i / 12 * math.tau for i in range(12)]
-    tear_radii = [0.78, 1.08, 0.84, 1.18, 0.86, 1.05, 0.76, 1.14, 0.90, 1.20, 0.82, 1.04]
-    cutter_verts = []
-    for x in (-1.94, -1.46):
-        for angle, radius in zip(tear_angles, tear_radii):
-            cutter_verts.append((x, 0.02 + math.cos(angle) * 0.48 * radius, -0.32 + math.sin(angle) * 0.38 * radius))
-    cutter_faces = [tuple(range(11, -1, -1)), tuple(range(12, 24))]
-    for i in range(12):
-        j = (i + 1) % 12
-        cutter_faces.append((i, j, 12 + j, 12 + i))
-    cutter_mesh = bpy.data.meshes.new("TearBooleanCutterMesh")
-    cutter_mesh.from_pydata(cutter_verts, [], cutter_faces)
-    cutter = bpy.data.objects.new("TearBooleanCutter", cutter_mesh)
-    bpy.context.collection.objects.link(cutter)
-    boolean = left.modifiers.new("Actual torn hole", "BOOLEAN")
-    boolean.operation = "DIFFERENCE"
-    boolean.solver = "EXACT"
-    boolean.object = cutter
-    apply_modifier(left, boolean.name)
-    bpy.data.objects.remove(cutter, do_unlink=True)
-
+    # Keep the left wall intact; the inspection scene uses other marked damage points.
+    cube("LeftWall", (-1.70, 0, -0.33), (0.14, 2.5, 1.72), cardboard, 0.022)
     cube("InteriorFloor", (0, 0, -1.01), (3.15, 2.25, 0.04), inside, 0.015)
 
 
@@ -201,7 +181,7 @@ def add_flaps(cardboard, crease_mat):
     curve_object("CompressionCrease_C", [(0.28,-1.91,-0.12),(0.55,-1.73,0.02),(0.86,-1.61,0.19)], crease_mat, 0.010)
 
 
-def add_damage_details(wet_mat, dark_mat, fiber_mat):
+def add_damage_details(wet_mat, dark_mat):
     # Bake the stain into the cardboard's own opaque base-color texture. This avoids
     # alpha sorting, raised overlays and dark transparency artifacts in model-viewer.
     texture_path = os.path.join(PROJECT, "public", "assets", "models", "textures", "front_wall_wet_cardboard_procedural.png")
@@ -301,21 +281,8 @@ def add_damage_details(wet_mat, dark_mat, fiber_mat):
     front_wall.data.materials.clear()
     front_wall.data.materials.append(stain_material)
 
-    # Fibrous flaps around the real Boolean opening.
-    for index, points in enumerate([
-        [(-1.77,-0.45,-0.58),(-1.77,-0.10,-0.68),(-2.02,-0.24,-0.46)],
-        [(-1.77,0.22,-0.62),(-1.77,0.46,-0.32),(-2.00,0.33,-0.15)],
-        [(-1.77,0.49,-0.10),(-1.77,0.30,0.10),(-1.98,0.52,0.14)],
-        [(-1.77,-0.46,0.00),(-1.77,-0.48,-0.35),(-1.98,-0.60,-0.16)],
-    ]):
-        mesh = bpy.data.meshes.new(f"TornFiber{index}Mesh")
-        mesh.from_pydata(points, [], [(0,1,2)])
-        obj = bpy.data.objects.new(f"TornFiber{index}", mesh)
-        bpy.context.collection.objects.link(obj)
-        obj.data.materials.append(fiber_mat)
-        mark_export(obj)
-
-    # The corner damage is carried by the cardboard mesh itself; no light-colored overlay strips.
+    # The box's left wall remains a complete, flat cardboard panel. The tear
+    # geometry and loose fiber flaps were intentionally removed from this model.
 
 
 def add_packing(paper_mat):
@@ -424,7 +391,6 @@ clear_scene()
 trace("scene cleared")
 cardboard=material("CardboardFiber",(.63,.31,.105),.92,procedural=True)
 cardboard_inside=material("CardboardInside",(.38,.17,.055),.97,procedural=True)
-fiber=material("TornFiber",(.80,.54,.27),1.0,procedural=True)
 wet=material("WetCardboard",(.12,.045,.015),.38)
 crease_mat=material("CardboardFold",(.46,.21,.065),.96)
 paper=material("PackingPaper",(.88,.82,.68),1.0,procedural=True)
@@ -437,7 +403,7 @@ add_box_body(cardboard,cardboard_inside)
 trace("box body ready")
 add_flaps(cardboard,crease_mat)
 trace("flaps ready")
-add_damage_details(wet,crease_mat,fiber)
+add_damage_details(wet,crease_mat)
 trace("damage details ready")
 add_packing(paper)
 trace("packing ready")
@@ -448,7 +414,6 @@ trace("mug ready")
 for name,location in {
     "Hotspot_Crushed":(0.48,-1.94,.05),
     "Hotspot_Wet":(-1.05,-1.35,-.18),
-    "Hotspot_Torn":(-1.84,.02,-.32),
     "Hotspot_DentedCorner":(1.42,-1.02,-.82),
 }.items():
     empty=bpy.data.objects.new(name,None); empty.location=location; empty["hotspot"]=name; bpy.context.collection.objects.link(empty); mark_export(empty)

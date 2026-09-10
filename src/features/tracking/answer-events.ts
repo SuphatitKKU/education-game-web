@@ -18,6 +18,11 @@ export function answerEvents(current: GameSave, next: Partial<GameSave>): Learni
     ["recapAnswers", "recap_answer_saved", "recap"],
     ["predictions", "material_prediction_changed", "prediction"],
     ["bigQuestionProgress", "big_question_progress_saved", "studyFocus"],
+    ["mission3Selections", "mission3_material_selected", "mission3Materials"],
+    ["mission3Reuse", "mission3_reuse_material_changed", "mission3Materials"],
+    ["mission3Design", "mission3_design_changed", "mission3Design"],
+    ["mission3Alternative", "mission3_alternative_changed", "mission3Reason"],
+    ["mission3Reason", "mission3_reason_changed", "mission3Reason"],
   ] as const;
   for (const [field, eventType, stage] of maps) {
     if (!next[field]) continue;

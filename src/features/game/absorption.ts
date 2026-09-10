@@ -16,12 +16,13 @@ export function absorptionLevelLabel(result?: WaterAbsorptionResult) {
   return labels[absorptionLevel(result.absorbed)];
 }
 
-export function recordAbsorption(material: MaterialDefinition): WaterAbsorptionResult {
+export function recordAbsorption(material: MaterialDefinition, observation?: AbsorptionLevel): WaterAbsorptionResult {
   return {
     materialId: material.id,
     drops: [...material.waterDrops],
     absorbed: material.waterDrops[2],
     summary: material.waterSummary,
+    observation,
     method: "one-side-water-contact-v1",
     conditions: { water: "equal", contactArea: "equal", contactTime: "equal", specimen: "equal-size" },
   };

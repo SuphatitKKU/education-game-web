@@ -1,4 +1,4 @@
-export type Stage = "menu" | "overview" | "team" | "mission" | "story" | "inspection" | "boxMission" | "materials" | "studyFocus" | "exitTicket" | "mission1Complete" | "mission2Intro" | "testHub" | "compression" | "absorption" | "elasticity" | "impact" | "notebook" | "comparison" | "recap" | "mission2Complete" | "prediction" | "summary";
+export type Stage = "menu" | "overview" | "team" | "mission" | "story" | "inspection" | "boxMission" | "materials" | "studyFocus" | "exitTicket" | "mission1Complete" | "mission2Intro" | "testHub" | "compression" | "absorption" | "elasticity" | "impact" | "notebook" | "comparison" | "recap" | "mission2Complete" | "mission3Intro" | "mission3Data" | "mission3Materials" | "mission3Design" | "mission3Reason" | "mission3Complete" | "prediction" | "summary";
 
 export type DamageCause = "แรงกด" | "แรงกระแทก" | "น้ำ";
 
@@ -26,6 +26,7 @@ export type WaterAbsorptionResult = {
   drops: number[];
   absorbed: number;
   summary: string;
+  observation?: "low" | "medium" | "high";
   method?: "one-side-water-contact-v1";
   conditions?: { water: "equal"; contactArea: "equal"; contactTime: "equal"; specimen: "equal-size" };
 };
@@ -45,13 +46,27 @@ export type ImpactResult = {
   simulatedDamage: ImpactDamage;
   method: "egg-drop-v1";
   modelVersion: "illustrative-v1";
-  conditions: { object: "same-model-egg"; height: "fixed"; specimen: "equal-size" };
+  conditions:
+    | { object: "same-model-egg"; height: "fixed"; specimen: "equal-size" }
+    | { eggMassG: 60; eggHeightCm: 5.7; dropHeightCm: 50; specimenWidthCm: 10; specimenLengthCm: 10; initialThicknessMm: 5; dropsPerTrial: 1 };
 };
 
 export type ExitTicket = {
   k: string;
   p: string;
   v: string;
+};
+
+export type MissionThreeDesign = {
+  length: string;
+  width: string;
+  height: string;
+  structure: string;
+  impact: string;
+  water: string;
+  filler: string;
+  joints: string;
+  steps: string;
 };
 
 export const COMPRESSION_FRAME_KEYS = ["idle", "load1", "load2", "load3", "released"] as const;
@@ -108,6 +123,12 @@ export type GameSave = {
   labAnswerDrafts: Record<string, Record<string, string>>;
   mission1Completed: boolean;
   mission2Completed: boolean;
+  mission3Completed: boolean;
+  mission3Selections: Record<string, string>;
+  mission3Reuse: Record<string, boolean>;
+  mission3Alternative: string;
+  mission3Design: MissionThreeDesign;
+  mission3Reason: string;
   predictions: Record<string, string>;
   audio: boolean;
 };
@@ -140,6 +161,22 @@ export const EMPTY_SAVE: GameSave = {
   labAnswerDrafts: {},
   mission1Completed: false,
   mission2Completed: false,
+  mission3Completed: false,
+  mission3Selections: {},
+  mission3Reuse: {},
+  mission3Alternative: "",
+  mission3Design: {
+    length: "12",
+    width: "10",
+    height: "8",
+    structure: "",
+    impact: "",
+    water: "",
+    filler: "",
+    joints: "",
+    steps: "",
+  },
+  mission3Reason: "",
   predictions: {},
   audio: true,
 };
@@ -262,7 +299,7 @@ export const MATERIALS = [
     motion: { loadMs: 220, releaseMs: 380, easing: "cubic-bezier(.15,.9,.2,1)", releaseEffect: "spring" },
   },
   {
-    id: "kraft_paper", name: "กระดาษคราฟต์", image: "kraft_paper_flat.png", guide: "ขยำเพื่อเติมช่องว่าง ลดการขยับของสิ่งของ",
+    id: "kraft_paper", name: "กระดาษคราฟต์", image: "kraft_paper_flat.png", guide: "เป็นแผ่นกระดาษสีน้ำตาล ผิวเป็นเส้นใยละเอียด และโค้งงอได้",
     testFrames: testFrames("kraft_paper"), sag: [6, 12, 18], residual: 14,
     releaseSummary: "คืนเล็กน้อย · รอยยับคงอยู่",
     waterDrops: [3, 7, 12], waterSummary: "เส้นใยกระดาษดูดน้ำเร็วและเสียรูปง่าย",
@@ -270,7 +307,7 @@ export const MATERIALS = [
     motion: { loadMs: 160, releaseMs: 240, easing: "cubic-bezier(.3,.6,.4,1)", releaseEffect: "settle" },
   },
   {
-    id: "waxed_paper", name: "กระดาษเคลือบไข", image: "waxed_paper_clean.png", guide: "ผิวเคลือบช่วยกันละอองน้ำและความชื้น",
+    id: "waxed_paper", name: "กระดาษเคลือบไข", image: "waxed_paper_clean.png", guide: "เป็นแผ่นกระดาษบาง ผิวเรียบ และมีชั้นเคลือบ",
     testFrames: testFrames("waxed_paper"), sag: [5, 10, 16], residual: 11,
     releaseSummary: "คืนเล็กน้อย · รอยพับคมคงอยู่",
     waterDrops: [0, 1, 2], waterSummary: "ไขช่วยชะลอน้ำ แต่รอยพับอาจเป็นทางให้น้ำซึม",

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_SAVE } from "./data";
 import { LAB_MATERIALS, labResultCount, openLabPatch } from "./labs";
-import { IMPACT_OBSERVATIONS, impactDamageFor, impactObservationLabel, recordImpact, resumeLabStage } from "./impact";
+import { IMPACT_CONDITIONS, IMPACT_OBSERVATIONS, impactDamageFor, impactObservationLabel, recordImpact, resumeLabStage } from "./impact";
 
 describe("impact lab: authored egg-drop scenarios", () => {
   it("supports exactly the five active materials with deterministic illustrative outcomes", () => {
@@ -13,10 +13,9 @@ describe("impact lab: authored egg-drop scenarios", () => {
     expect(() => impactDamageFor("kraft_paper")).toThrow();
   });
   it("keeps the same height, object and specimen conditions for every material", () => {
-    const expected = { object: "same-model-egg", height: "fixed", specimen: "equal-size" };
     for (const { id } of LAB_MATERIALS) {
       const result = recordImpact(id, "none");
-      expect(result.conditions).toEqual(expected);
+      expect(result.conditions).toEqual(IMPACT_CONDITIONS);
       expect(result.method).toBe("egg-drop-v1");
       expect(result.modelVersion).toBe("illustrative-v1");
     }

@@ -113,6 +113,13 @@ function requireClient() {
   return client;
 }
 
+function isRosterCompatibilityError(error: unknown) {
+  const message = error && typeof error === "object" && "message" in error
+    ? String((error as { message?: unknown }).message ?? "")
+    : error instanceof Error ? error.message : String(error ?? "");
+  return /is_active|team_members.*column|column .*team_members/i.test(message);
+}
+
 export async function listTeams(): Promise<TeamOverview[]> {
   const client = requireClient();
   const current = await client
@@ -123,7 +130,7 @@ export async function listTeams(): Promise<TeamOverview[]> {
   let data: unknown = current.data;
   let error = current.error;
   // Keep existing classrooms readable while the roster migration is being deployed.
-  if (error && /is_active/i.test(error.message)) {
+  if (error && isRosterCompatibilityError(error)) {
     const legacy = await client
       .from("teams")
       .select("id,name,created_at,updated_at,team_members(id,name,avatar,position),game_runs(id,team_id,status,current_stage,save_state,revision,started_at,updated_at,completed_at,legacy_run_id)")

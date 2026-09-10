@@ -25,9 +25,10 @@ const MISSIONS: Mission[] = [
   { id: 5, title: "พิสูจน์กล่องพัสดุรุ่นปรับปรุง", short: "ทดสอบจริงอีกครั้ง เปรียบเทียบ และสรุปผล", color: "#55a92e", icon: "🏆", outsideSim: true, outsideDescription: "นำกล่องรุ่นปรับปรุงไปทดสอบจริงอีกครั้งด้วยเงื่อนไขเดิม เปรียบเทียบหลักฐานก่อนและหลังการปรับปรุง แล้วสรุปว่ากล่องแข็งแรง ป้องกันสิ่งของ และนำวัสดุที่ใช้แล้วกลับมาใช้ใหม่ได้อย่างเหมาะสมขึ้นอย่างไร" },
 ];
 
-export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission1Answer, animateMission2Unlock, onUnlockAnimationDone, onBack, onSelect }: {
+export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission4Unlocked, mission1Answer, animateMission2Unlock, onUnlockAnimationDone, onBack, onSelect }: {
   mission2Unlocked: boolean;
   mission3Unlocked: boolean;
+  mission4Unlocked: boolean;
   mission1Answer?: string;
   animateMission2Unlock: boolean;
   onUnlockAnimationDone: () => void;
@@ -66,7 +67,8 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission1An
 
         <div className={styles.missions}>
           {MISSIONS.map((mission) => {
-            const unlocked = mission.id === 1 || (mission.id === 2 && mission2Unlocked) || (mission.id === 3 && mission3Unlocked);
+            const unlocked = mission.id === 1 || (mission.id === 2 && mission2Unlocked) || (mission.id === 3 && mission3Unlocked) || (mission.id === 4 && mission4Unlocked);
+            const simulationUnlocked = mission.id <= 3 && unlocked;
             const isUnlocking = mission.id === 2 && animateMission2Unlock;
             return <article
               key={mission.id}
@@ -75,8 +77,8 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission1An
             >
               <button
                 type="button"
-                aria-label={`${unlocked ? "เข้าสู่" : mission.outsideSim ? "ดูคำแนะนำกิจกรรมนอก Simulation" : "ภารกิจถูกล็อก"} ภารกิจที่ ${mission.id} ${mission.title}`}
-                onClick={() => mission.id === 3 && unlocked ? setLockedMission(mission) : unlocked ? onSelect(mission.id as MissionNumber) : setLockedMission(mission)}
+                aria-label={`${simulationUnlocked ? "เข้าสู่" : mission.outsideSim ? (unlocked ? "ดูรายละเอียดภารกิจนอก Simulation" : "ดูคำแนะนำกิจกรรมนอก Simulation") : "ภารกิจถูกล็อก"} ภารกิจที่ ${mission.id} ${mission.title}`}
+                onClick={() => simulationUnlocked ? onSelect(mission.id as MissionNumber) : setLockedMission(mission)}
               >
                 <span className={styles.number}>{mission.id}</span>
                 <span className={styles.picture} aria-hidden="true">
@@ -91,7 +93,7 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission1An
                 <b>ภารกิจที่ {mission.id}</b>
                 <strong>{mission.title}</strong>
                 <small>{mission.short}</small>
-                <span>{isUnlocking ? "ปลดล็อกแล้ว!" : unlocked ? "กดเพื่อเริ่มภารกิจ ›" : mission.outsideSim ? "กิจกรรมนอก Simulation · กดดูรายละเอียด" : "ยังไม่ปลดล็อก"}</span>
+                <span>{isUnlocking ? "ปลดล็อกแล้ว!" : simulationUnlocked ? "กดเพื่อเริ่มภารกิจ ›" : mission.outsideSim ? (unlocked ? "พร้อมลงมือจริง · กดดูรายละเอียด" : "กิจกรรมนอก Simulation · กดดูรายละเอียด") : "ยังไม่ปลดล็อก"}</span>
               </div>
             </article>;
           })}
@@ -99,7 +101,7 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission1An
       </main>
 
       <footer className={styles.footer}>
-        <span><b>{mission2Unlocked ? 2 : 1}</b> ภารกิจพร้อมเล่น</span>
+        <span><b>{mission3Unlocked ? 3 : mission2Unlocked ? 2 : 1}</b> ภารกิจพร้อมเล่น</span>
         <p>ทำภารกิจตามลำดับ เมื่อผ่านแล้วด่านถัดไปจะปลดล็อก!</p>
       </footer>
 
@@ -114,9 +116,9 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission1An
         <div className={styles.modalBackdrop} role="presentation" onClick={() => setLockedMission(null)}>
           <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="locked-title" onClick={(event) => event.stopPropagation()}>
             <div className={lockedMission.outsideSim ? styles.outsideModalIcon : ""} aria-hidden="true">{lockedMission.outsideSim ? "!" : "🔒"}</div>
-            <h2 id="locked-title">{lockedMission.id === 3 && mission3Unlocked ? "ภารกิจที่ 3 ปลดล็อกแล้ว!" : lockedMission.outsideSim ? "ภารกิจนี้ลงมือทำนอก Simulation" : "ภารกิจนี้ยังล็อกอยู่นะ"}</h2>
-            {lockedMission.id === 3 && mission3Unlocked
-              ? <p>ทีมผ่านภารกิจสำรวจวัสดุแล้ว<br /><b>พร้อมเข้าสู่ขั้นออกแบบและสร้างกล่องพัสดุ</b></p>
+            <h2 id="locked-title">{lockedMission.outsideSim && lockedMission.id === 4 && mission4Unlocked ? "ภารกิจที่ 4 พร้อมลงมือจริง!" : lockedMission.outsideSim ? "ภารกิจนี้ลงมือทำนอก Simulation" : "ภารกิจนี้ยังล็อกอยู่นะ"}</h2>
+            {lockedMission.outsideSim && lockedMission.id === 4 && mission4Unlocked
+              ? <p>ทีมออกแบบและวางแผนสร้างกล่องแล้ว<br /><b>นำแบบไปสร้างต้นแบบจริงกับครู แล้วเริ่มทดสอบได้เลย</b></p>
               : lockedMission.outsideSim
               ? <p><b>ภารกิจที่ {lockedMission.id} เป็นการทดสอบกล่องจริงร่วมกับครูและทีม</b><br />{lockedMission.outsideDescription}<br /><small>ทำภารกิจที่ 1–3 ให้เสร็จเพื่อเตรียมความรู้ แบบกล่อง และแผนการทดสอบให้พร้อม</small></p>
               : <p>ต้องผ่าน <b>ภารกิจที่ {lockedMission.id - 1}</b> ก่อน<br />แล้วภารกิจที่ {lockedMission.id} จะปลดล็อกทันที!</p>}
