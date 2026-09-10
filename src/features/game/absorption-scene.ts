@@ -3,9 +3,12 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import type { MaterialDefinition } from "./data";
 import { ABSORPTION_STEP_MS, type AbsorptionPhase } from "./absorption";
 import { createMaterialModelLibrary } from "./material-model-3d";
+import { detectRenderCompatibility, handleWebGLContextLoss, listenToMediaQuery, observeElementResize } from "./browser-compat";
 
 export function createAbsorptionScene(canvas: HTMLCanvasElement, onFailure: () => void) {
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: "low-power" });
+  const compatibility = detectRenderCompatibility();
+  if (compatibility.webglVersion === 0) throw new Error("WebGL is unavailable");
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: compatibility.antialias, precision: compatibility.precision, powerPreference: "low-power" });
   renderer.setClearColor(0xffffff, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -120,7 +123,7 @@ export function createAbsorptionScene(canvas: HTMLCanvasElement, onFailure: () =
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
     if (!width || !height) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+    const dpr = Math.min(window.devicePixelRatio || 1, compatibility.maxDevicePixelRatio);
     const renderWidth = Math.round(width * dpr);
     const renderHeight = Math.round(height * dpr);
     if (canvas.width !== renderWidth || canvas.height !== renderHeight) renderer.setSize(renderWidth, renderHeight, false);
@@ -135,12 +138,11 @@ export function createAbsorptionScene(canvas: HTMLCanvasElement, onFailure: () =
     if ((phase === "wetting" || phase === "wiping") && now - phaseStart < ABSORPTION_STEP_MS) schedule();
   }
   function schedule() { if (!disposed && !frame && !document.hidden) frame = requestAnimationFrame(render); }
-  const resize = new ResizeObserver(schedule);
-  resize.observe(canvas);
+  const stopResize = observeElementResize(canvas, schedule);
   const visibilityChanged = () => { if (document.hidden) { cancelAnimationFrame(frame); frame = 0; } else schedule(); };
-  const contextLost = (event: Event) => { event.preventDefault(); onFailure(); };
+  const contextLost = (event: Event) => handleWebGLContextLoss(event, onFailure, "absorption");
   document.addEventListener("visibilitychange", visibilityChanged);
-  motion.addEventListener("change", schedule);
+  const stopMotion = listenToMediaQuery(motion, schedule);
   canvas.addEventListener("webglcontextlost", contextLost);
 
   return {
@@ -159,9 +161,9 @@ export function createAbsorptionScene(canvas: HTMLCanvasElement, onFailure: () =
     dispose() {
       disposed = true;
       cancelAnimationFrame(frame);
-      resize.disconnect();
+      stopResize();
       document.removeEventListener("visibilitychange", visibilityChanged);
-      motion.removeEventListener("change", schedule);
+      stopMotion();
       canvas.removeEventListener("webglcontextlost", contextLost);
       resources.forEach((resource) => resource.dispose());
       renderer.dispose();

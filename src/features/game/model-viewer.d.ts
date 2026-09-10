@@ -22,6 +22,7 @@ declare module "react" {
         exposure?: string;
         "shadow-intensity"?: string;
         "environment-image"?: string;
+        "minimum-render-scale"?: string;
       };
     }
   }

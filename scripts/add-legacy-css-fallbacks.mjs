@@ -24,6 +24,25 @@ function addFallback(css, unit, convert) {
   });
 }
 
+function expandInset(value) {
+  const parts = value.trim().split(/\s+/);
+  if (parts.length < 1 || parts.length > 4 || parts.some((part) => part.includes("("))) return null;
+  const [top, right = top, bottom = top, left = right] = parts.length === 3
+    ? [parts[0], parts[1], parts[2], parts[1]]
+    : parts;
+  return `top:${top};right:${right};bottom:${bottom};left:${left}`;
+}
+
+function addSafari12PropertyFallbacks(css) {
+  let compatible = css.replace(/(^|[;{])inset:([^;{}]+)(?=[;}])/g, (original, boundary, value) => {
+    const expanded = expandInset(value);
+    return expanded ? `${boundary}${expanded};inset:${value}` : original;
+  });
+  compatible = compatible.replace(/(^|[;{])overflow:clip(?=[;}])/g, "$1overflow:hidden;overflow:clip");
+  compatible = compatible.replace(/(^|[;{])backdrop-filter:([^;{}]+)(?=[;}])/g, "$1-webkit-backdrop-filter:$2;backdrop-filter:$2");
+  return compatible;
+}
+
 async function cssFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const nested = await Promise.all(entries.map((entry) => {
@@ -40,6 +59,7 @@ for (const file of files) {
   const original = await readFile(file, "utf8");
   let compatible = addFallback(original, "cqw", legacyContainerWidth);
   compatible = addFallback(compatible, "dvh", (value) => value.replace(/dvh\b/g, "vh"));
+  compatible = addSafari12PropertyFallbacks(compatible);
   if (compatible !== original) {
     fallbackCount += 1;
     await writeFile(file, compatible);

@@ -47,6 +47,8 @@ import {
   type MaterialScale,
   type MicroscopeFeature,
 } from "./MaterialMicroscope";
+import { detectRenderCompatibility, reportRendererStatus, type RenderCompatibilityProfile } from "./browser-compat";
+import { CompatibilityDiagnostics } from "./CompatibilityDiagnostics";
 
 const SAVE_KEY = "parcel-lab-web-save-v1";
 const STATS_KEY = "parcel-lab-group-design-statistics-v1";
@@ -114,6 +116,7 @@ function IpadMiniCanvas({ children }: { children: ReactNode }) {
       <section className="game-viewport">
         <div className="game-frame" aria-live="polite">{children}</div>
       </section>
+      <CompatibilityDiagnostics />
     </main>
   );
 }
@@ -959,18 +962,26 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
   const [ready, setReady] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [viewerFailed, setViewerFailed] = useState(false);
+  const [renderProfile, setRenderProfile] = useState<RenderCompatibilityProfile | null>(null);
+  const [viewerAttempt, setViewerAttempt] = useState(0);
   const [discoveredIds, setDiscoveredIds] = useState<string[]>(() => DAMAGES.filter((damage) => Boolean(findings[damage.id])).map((damage) => damage.id));
   const [activeDamageId, setActiveDamageId] = useState<string | null>(null);
   const [celebrating, setCelebrating] = useState(false);
   const viewerRef = useRef<ViewerElement | null>(null);
   const celebrationTimerRef = useRef<number | null>(null);
   useEffect(() => {
-    try {
-      const canvas = document.createElement("canvas");
-      if (!canvas.getContext("webgl2")) { setViewerFailed(true); return; }
-    } catch { setViewerFailed(true); return; }
-    void import("@google/model-viewer").then(() => setReady(true)).catch(() => setViewerFailed(true));
-  }, []);
+    const compatibility = detectRenderCompatibility();
+    setRenderProfile(compatibility);
+    reportRendererStatus("inspection", "loading", compatibility.renderer);
+    if (compatibility.webglVersion === 0) {
+      setViewerFailed(true);
+      reportRendererStatus("inspection", "fallback", "WebGL unavailable");
+      return;
+    }
+    void import("@google/model-viewer")
+      .then(() => setReady(true))
+      .catch(() => { setViewerFailed(true); reportRendererStatus("inspection", "fallback", "model-viewer import failed"); });
+  }, [viewerAttempt]);
   useEffect(() => {
     if (!ready || !viewerRef.current) return;
     const viewer = viewerRef.current;
@@ -985,8 +996,9 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
       const cardboard = viewer.model?.materials.find((material) => material.name === "MAT_Cardboard_Fiber");
       cardboard?.pbrMetallicRoughness.setBaseColorFactor("#C9823E");
       setModelLoaded(true);
+      reportRendererStatus("inspection", "ready");
     };
-    const failLoading = () => setViewerFailed(true);
+    const failLoading = () => { setViewerFailed(true); reportRendererStatus("inspection", "fallback", "model load failed"); };
     viewer.addEventListener("load", finishLoading);
     viewer.addEventListener("error", failLoading);
     // React can omit src/alt when a custom element is already registered.
@@ -995,7 +1007,7 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
     viewer.setAttribute("alt", inspectionModelAlt);
     if (viewer.model) finishLoading();
     const fallbackTimer = window.setTimeout(() => {
-      if (!loaded) setViewerFailed(true);
+      if (!loaded) { setViewerFailed(true); reportRendererStatus("inspection", "fallback", "10 second timeout"); }
     }, 10000);
     return () => {
       window.clearTimeout(fallbackTimer);
@@ -1064,6 +1076,7 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
           <div className="inspection-legacy-fallback">
             <img src={asset("inspection/damaged_box_preview.png")} alt="ภาพกล่องพัสดุที่มีร่องรอยความเสียหาย" />
             <p>โหมดภาพสำหรับอุปกรณ์รุ่นเก่า · แตะร่องรอยเพื่อสำรวจ</p>
+            {renderProfile?.webglVersion !== 0 && <button type="button" onClick={() => { setReady(false); setModelLoaded(false); setViewerFailed(false); setViewerAttempt((attempt) => attempt + 1); }}>ลองเปิดโมเดล 3D อีกครั้ง</button>}
             <div>{DAMAGES.map((spot) => {
               const discovered = discoveredIds.includes(spot.id);
               const active = spot.id === activeDamageId;
@@ -1084,7 +1097,8 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
             camera-target="0m -0.08m 0m"
             field-of-view="35deg"
             exposure="1.05"
-            shadow-intensity="1"
+            shadow-intensity={String(renderProfile?.modelViewerShadowScale ?? 1)}
+            minimum-render-scale="0.5"
           >
             {DAMAGES.map((spot) => {
               const discovered = discoveredIds.includes(spot.id);
@@ -1637,6 +1651,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
   };
   const [exploringMaterial, setExploringMaterial] = useState<MaterialExplorerId | null>(null);
   const [viewerReady, setViewerReady] = useState(false);
+  const [renderProfile, setRenderProfile] = useState<RenderCompatibilityProfile | null>(null);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [modelError, setModelError] = useState("");
   const [modelAttempt, setModelAttempt] = useState(0);
@@ -1666,6 +1681,16 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
   useEffect(() => {
     if (!exploring) return;
     let active = true;
+    const compatibility = detectRenderCompatibility();
+    setRenderProfile(compatibility);
+    reportRendererStatus("material-guide", "loading", compatibility.renderer);
+    if (compatibility.webglVersion === 0) {
+      setViewerReady(false);
+      setModelLoaded(false);
+      setModelError("อุปกรณ์นี้ไม่รองรับ WebGL จะแสดงภาพวัสดุแทน");
+      reportRendererStatus("material-guide", "fallback", "WebGL unavailable");
+      return;
+    }
     void import("@google/model-viewer").then(() => {
       if (active) setViewerReady(true);
     }).catch(() => {
@@ -1673,6 +1698,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
       setViewerReady(false);
       setModelLoaded(false);
       setModelError("อุปกรณ์นี้ไม่รองรับโมเดล 3 มิติ จะแสดงภาพวัสดุแทน");
+      reportRendererStatus("material-guide", "fallback", "model-viewer import failed");
     });
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setExploringMaterial(null);
@@ -1692,10 +1718,12 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
       loaded = true;
       setModelError("");
       setModelLoaded(true);
+      reportRendererStatus("material-guide", "ready");
     };
     const failLoading = () => {
       setModelLoaded(false);
       setModelError("ยังเปิดโมเดลไม่ได้ ลองกดโหลดอีกครั้ง");
+      reportRendererStatus("material-guide", "fallback", "model load failed");
     };
     viewer.addEventListener("load", finishLoading);
     viewer.addEventListener("error", failLoading);
@@ -1705,7 +1733,10 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
     viewer.setAttribute("alt", explorer.alt);
     if (viewer.loaded) finishLoading();
     const fallbackTimer = window.setTimeout(() => {
-      if (!loaded) setModelError("โหลดโมเดล 3D ไม่สำเร็จ จะแสดงภาพวัสดุแทน");
+      if (!loaded) {
+        setModelError("โหลดโมเดล 3D ไม่สำเร็จ จะแสดงภาพวัสดุแทน");
+        reportRendererStatus("material-guide", "fallback", "10 second timeout");
+      }
     }, 10000);
     return () => {
       window.clearTimeout(fallbackTimer);
@@ -1874,7 +1905,8 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
                   max-field-of-view="48deg"
                   interpolation-decay="120"
                   exposure={exploringMaterial === "pe_sheet" || exploringMaterial === "bubble_wrap" || exploringMaterial === "waxed_paper" ? "1.22" : "1.08"}
-                  shadow-intensity={exploringMaterial === "pe_sheet" || exploringMaterial === "bubble_wrap" || exploringMaterial === "waxed_paper" ? "0.08" : "1.15"}
+                  shadow-intensity={String((exploringMaterial === "pe_sheet" || exploringMaterial === "bubble_wrap" || exploringMaterial === "waxed_paper" ? .08 : 1.15) * (renderProfile?.modelViewerShadowScale ?? 1))}
+                  minimum-render-scale="0.5"
                   style={{ opacity: continuousModelOpacity, transform: `scale(${1 + Math.min(zoomDepth, 42) * .006})`, transition: "opacity .65s ease, transform .65s ease", pointerEvents: viewScale === "normal" ? "auto" : "none" }}
                 >
                   {explorerFeatures.map((feature, featureIndex) => (

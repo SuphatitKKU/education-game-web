@@ -4,9 +4,12 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { ImpactDamage, MaterialDefinition } from "./data";
 import { IMPACT_DROP_MS, IMPACT_GRIPPER_MS, IMPACT_SETTLE_MS, impactDamageFor, type ImpactPhase } from "./impact";
 import { createMaterialModelLibrary } from "./material-model-3d";
+import { detectRenderCompatibility, handleWebGLContextLoss, observeElementResize } from "./browser-compat";
 
 export function createImpactScene(canvas: HTMLCanvasElement, onFailure: () => void) {
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: "low-power" });
+  const compatibility = detectRenderCompatibility();
+  if (compatibility.webglVersion === 0) throw new Error("WebGL is unavailable");
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: compatibility.antialias, precision: compatibility.precision, powerPreference: "low-power" });
   renderer.setClearColor(0xffffff, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -223,7 +226,7 @@ export function createImpactScene(canvas: HTMLCanvasElement, onFailure: () => vo
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
     if (!width || !height) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+    const dpr = Math.min(window.devicePixelRatio || 1, compatibility.maxDevicePixelRatio);
     const renderWidth = Math.round(width * dpr);
     const renderHeight = Math.round(height * dpr);
     if (canvas.width !== renderWidth || canvas.height !== renderHeight) renderer.setSize(renderWidth, renderHeight, false);
@@ -239,10 +242,9 @@ export function createImpactScene(canvas: HTMLCanvasElement, onFailure: () => vo
     if (duration && now - phaseStart < duration) schedule();
   }
   function schedule() { if (!disposed && !frame && !document.hidden) frame = requestAnimationFrame(render); }
-  const resize = new ResizeObserver(schedule);
-  resize.observe(canvas);
+  const stopResize = observeElementResize(canvas, schedule);
   const visibilityChanged = () => { if (document.hidden) { cancelAnimationFrame(frame); frame = 0; } else schedule(); };
-  const contextLost = (event: Event) => { event.preventDefault(); onFailure(); };
+  const contextLost = (event: Event) => handleWebGLContextLoss(event, onFailure, "impact");
   document.addEventListener("visibilitychange", visibilityChanged);
   canvas.addEventListener("webglcontextlost", contextLost);
 
@@ -262,7 +264,7 @@ export function createImpactScene(canvas: HTMLCanvasElement, onFailure: () => vo
     dispose() {
       disposed = true;
       cancelAnimationFrame(frame);
-      resize.disconnect();
+      stopResize();
       document.removeEventListener("visibilitychange", visibilityChanged);
       canvas.removeEventListener("webglcontextlost", contextLost);
       resources.forEach((resource) => resource.dispose());

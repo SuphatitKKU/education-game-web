@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   output: "export",
   images: { unoptimized: true },
   trailingSlash: true,
+  transpilePackages: ["@google/model-viewer", "lit", "lit-html", "@lit/reactive-element"],
   basePath,
   assetPrefix: basePath || undefined,
   env: { NEXT_PUBLIC_BASE_PATH: basePath },
