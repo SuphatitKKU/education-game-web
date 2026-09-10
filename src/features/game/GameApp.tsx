@@ -49,6 +49,7 @@ import {
 } from "./MaterialMicroscope";
 import { detectRenderCompatibility, installModelViewerInputFallback, reportRendererStatus, type RenderCompatibilityProfile } from "./browser-compat";
 import { CompatibilityDiagnostics } from "./CompatibilityDiagnostics";
+import { LegacyGlbViewer, type LegacyGlbViewerHandle } from "./LegacyGlbViewer";
 
 const SAVE_KEY = "parcel-lab-web-save-v1";
 const STATS_KEY = "parcel-lab-group-design-statistics-v1";
@@ -239,6 +240,16 @@ export function GameApp() {
     }
     if (previewMode === "box-mission") {
       setSave({ ...EMPTY_SAVE, stage: "boxMission" });
+      setLoaded(true);
+      return;
+    }
+    if (previewMode === "inspection") {
+      setSave({ ...EMPTY_SAVE, stage: "inspection" });
+      setLoaded(true);
+      return;
+    }
+    if (previewMode === "materials") {
+      setSave({ ...EMPTY_SAVE, stage: "materials" });
       setLoaded(true);
       return;
     }
@@ -978,12 +989,16 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
       reportRendererStatus("inspection", "fallback", "WebGL unavailable");
       return;
     }
+    if (compatibility.webglVersion === 1) {
+      setReady(true);
+      return;
+    }
     void import("@google/model-viewer")
       .then(() => setReady(true))
       .catch(() => { setViewerFailed(true); reportRendererStatus("inspection", "fallback", "model-viewer import failed"); });
   }, [viewerAttempt]);
   useEffect(() => {
-    if (!ready || !viewerRef.current) return;
+    if (!ready || renderProfile?.webglVersion === 1 || !viewerRef.current) return;
     const viewer = viewerRef.current;
     const cleanupLegacyInput = installModelViewerInputFallback(viewer);
     const hideInternalFocusFrame = () => {
@@ -1016,7 +1031,7 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
       viewer.removeEventListener("error", failLoading);
       cleanupLegacyInput();
     };
-  }, [ready, inspectionModelSrc, inspectionModelAlt]);
+  }, [ready, renderProfile, inspectionModelSrc, inspectionModelAlt]);
   useEffect(() => {
     setDiscoveredIds((current) => {
       const savedIds = DAMAGES.filter((damage) => Boolean(findings[damage.id])).map((damage) => damage.id);
@@ -1036,8 +1051,8 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
   const activeDamage = DAMAGES.find((damage) => damage.id === activeDamageId) ?? null;
   const selectedCause = activeDamage ? findings[activeDamage.id] : undefined;
   const answerRequired = Boolean(activeDamage && !selectedCause);
-  const locateDamage = (damageId: string, event: React.MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
+  const locateDamage = (damageId: string, event?: React.MouseEvent<HTMLButtonElement>) => {
+    event?.stopPropagation();
     if (answerRequired && damageId !== activeDamageId) return;
     const isNew = !discoveredIds.includes(damageId);
     setActiveDamageId(damageId);
@@ -1085,6 +1100,31 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
               return <button key={spot.id} type="button" data-damage={spot.id} disabled={answerRequired && !active} className={discovered ? "is-solved" : ""} onClick={(event) => locateDamage(spot.id, event)}>{discovered ? "✓ " : ""}{spot.label}</button>;
             })}</div>
           </div>
+        ) : ready && renderProfile?.webglVersion === 1 ? (
+          <LegacyGlbViewer
+            key={viewerAttempt}
+            src={inspectionModelSrc}
+            alt={inspectionModelAlt}
+            poster={asset("inspection/damaged_box_preview.png")}
+            orbit="24deg 48deg 7.8m"
+            target="0m -0.08m 0m"
+            hotspots={DAMAGES.map((spot) => {
+              const discovered = discoveredIds.includes(spot.id);
+              const active = spot.id === activeDamageId;
+              return {
+                id: spot.id,
+                position: spot.position,
+                className: `damage-target ${discovered ? "is-solved" : ""} ${active ? "is-active" : ""}`,
+                ariaLabel: discovered ? `ตรวจสอบ${spot.label}อีกครั้ง` : "ตรวจสอบบริเวณนี้",
+                disabled: answerRequired && !active,
+                dataDamage: spot.id,
+                content: discovered ? <span className="damage-marker-label">{spot.label}</span> : undefined,
+                onClick: () => locateDamage(spot.id),
+              };
+            })}
+            onLoad={() => { setModelLoaded(true); reportRendererStatus("inspection", "ready", "three-webgl1"); }}
+            onError={() => { setViewerFailed(true); reportRendererStatus("inspection", "fallback", "Three.js GLB load failed"); }}
+          />
         ) : ready && (
           <model-viewer
             ref={viewerRef}
@@ -1663,6 +1703,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
   const [selectedFeature, setSelectedFeature] = useState<string>("overview");
   const [expandedFeature, setExpandedFeature] = useState<string | null>(null);
   const materialViewerRef = useRef<MaterialViewerElement | null>(null);
+  const legacyMaterialViewerRef = useRef<LegacyGlbViewerHandle | null>(null);
   const exploring = exploringMaterial !== null;
   const explorer = MATERIAL_EXPLORERS[exploringMaterial ?? "corrugated_cardboard"];
   const explorerImage = MATERIALS.find((material) => material.id === exploringMaterial)?.image ?? "corrugated_cardboard.png";
@@ -1692,17 +1733,19 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
       setModelLoaded(false);
       setModelError("อุปกรณ์นี้ไม่รองรับ WebGL จะแสดงภาพวัสดุแทน");
       reportRendererStatus("material-guide", "fallback", "WebGL unavailable");
-      return;
+    } else if (compatibility.webglVersion === 1) {
+      setViewerReady(true);
+    } else {
+      void import("@google/model-viewer").then(() => {
+        if (active) setViewerReady(true);
+      }).catch(() => {
+        if (!active) return;
+        setViewerReady(false);
+        setModelLoaded(false);
+        setModelError("อุปกรณ์นี้ไม่รองรับโมเดล 3 มิติ จะแสดงภาพวัสดุแทน");
+        reportRendererStatus("material-guide", "fallback", "model-viewer import failed");
+      });
     }
-    void import("@google/model-viewer").then(() => {
-      if (active) setViewerReady(true);
-    }).catch(() => {
-      if (!active) return;
-      setViewerReady(false);
-      setModelLoaded(false);
-      setModelError("อุปกรณ์นี้ไม่รองรับโมเดล 3 มิติ จะแสดงภาพวัสดุแทน");
-      reportRendererStatus("material-guide", "fallback", "model-viewer import failed");
-    });
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setExploringMaterial(null);
     };
@@ -1714,7 +1757,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
   }, [exploring]);
 
   useEffect(() => {
-    if (!exploring || !viewerReady || !materialViewerRef.current) return;
+    if (!exploring || !viewerReady || renderProfile?.webglVersion === 1 || !materialViewerRef.current) return;
     const viewer = materialViewerRef.current;
     const cleanupLegacyInput = installModelViewerInputFallback(viewer);
     let loaded = false;
@@ -1748,7 +1791,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
       viewer.removeEventListener("error", failLoading);
       cleanupLegacyInput();
     };
-  }, [exploring, viewerReady, modelAttempt, viewScale, materialModelSrc, explorer.alt]);
+  }, [exploring, viewerReady, renderProfile, modelAttempt, viewScale, materialModelSrc, explorer.alt]);
 
   const openExplorer = (materialId: MaterialExplorerId) => {
     setViewScale("normal");
@@ -1768,6 +1811,10 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
   const focusFeature = (feature: MaterialExplorerFeature) => {
     setSelectedFeature(feature.id);
     setExpandedFeature(feature.id);
+    if (renderProfile?.webglVersion === 1) {
+      legacyMaterialViewerRef.current?.setOrbit(feature.orbit, feature.target);
+      return;
+    }
     const viewer = materialViewerRef.current;
     if (!viewer) return;
     viewer.cameraOrbit = feature.orbit;
@@ -1777,6 +1824,10 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
   const resetExplorer = () => {
     setSelectedFeature("overview");
     setExpandedFeature(null);
+    if (renderProfile?.webglVersion === 1) {
+      legacyMaterialViewerRef.current?.setOrbit(explorer.orbit, explorer.target);
+      return;
+    }
     const viewer = materialViewerRef.current;
     if (!viewer) return;
     viewer.cameraOrbit = explorer.orbit;
@@ -1892,7 +1943,29 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
                 {isFoamContinuousZoom && <FoamContinuousZoom depth={zoomDepth} level={viewScale} selectedId={selectedFeature} onSelect={focusCorrugatedZoomFeature} />}
                 {isPeSheetContinuousZoom && <PeSheetContinuousZoom depth={zoomDepth} level={viewScale} selectedId={selectedFeature} onSelect={focusCorrugatedZoomFeature} />}
               </div>}
-              {(viewScale === "normal" || isContinuousZoomMaterial) && viewerReady && (
+              {(viewScale === "normal" || isContinuousZoomMaterial) && viewerReady && renderProfile?.webglVersion === 1 && (
+                <LegacyGlbViewer
+                  key={modelAttempt}
+                  viewerRef={legacyMaterialViewerRef}
+                  src={materialModelSrc}
+                  alt={explorer.alt}
+                  poster={asset(`materials/${explorerImage}`)}
+                  orbit={explorer.orbit}
+                  target={explorer.target}
+                  hotspots={explorerFeatures.map((feature) => ({
+                    id: feature.id,
+                    position: feature.position,
+                    className: `material-3d-hotspot ${selectedFeature === feature.id ? "is-active" : ""}`,
+                    ariaLabel: feature.label,
+                    content: <><b>{feature.icon}</b><span>{feature.label}</span></>,
+                    onClick: () => focusFeature(feature),
+                  }))}
+                  style={{ opacity: continuousModelOpacity, transform: `scale(${1 + Math.min(zoomDepth, 42) * .006})`, transition: "opacity .65s ease, transform .65s ease", pointerEvents: viewScale === "normal" ? "auto" : "none" }}
+                  onLoad={() => { setModelError(""); setModelLoaded(true); reportRendererStatus("material-guide", "ready", "three-webgl1"); }}
+                  onError={() => { setModelLoaded(false); setModelError("โหลดโมเดล 3D ไม่สำเร็จ จะแสดงภาพวัสดุแทน"); reportRendererStatus("material-guide", "fallback", "Three.js GLB load failed"); }}
+                />
+              )}
+              {(viewScale === "normal" || isContinuousZoomMaterial) && viewerReady && renderProfile?.webglVersion !== 1 && (
                 <model-viewer
                   key={modelAttempt}
                   ref={materialViewerRef}

@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { detectRenderCompatibility, readRendererStatuses, type RenderCompatibilityProfile, type RendererStatusRecord } from "./browser-compat";
 
-const BUILD_VERSION = "ipad-mini2-webgl1-touchfix-20260911";
-const CACHE_VERSION = "parcel-lab-shell-v7-ipad-mini2-touchfix";
+const BUILD_VERSION = "ipad-mini2-webgl1-directglb-20260911";
+const CACHE_VERSION = "parcel-lab-shell-v8-ipad-mini2-directglb";
 
 export function CompatibilityDiagnostics() {
   const [visible, setVisible] = useState(false);
@@ -13,7 +13,8 @@ export function CompatibilityDiagnostics() {
   const [viewport, setViewport] = useState("");
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("compat") !== "1") return;
+    const compatMode = new URLSearchParams(window.location.search).get("compat");
+    if (compatMode !== "1" && compatMode !== "webgl1") return;
     const refresh = () => {
       setProfile(detectRenderCompatibility());
       setStatuses(readRendererStatuses());

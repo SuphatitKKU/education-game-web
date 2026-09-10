@@ -32,10 +32,11 @@ export function detectRenderCompatibility(): RenderCompatibilityProfile {
 
   const canvas = document.createElement("canvas");
   const attributes: WebGLContextAttributes = { alpha: true, antialias: false, powerPreference: "low-power" };
+  const forceWebGL1 = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("compat") === "webgl1";
   let context: WebGLRenderingContext | WebGL2RenderingContext | null = null;
   let webglVersion: WebGLVersion = 0;
   try {
-    context = canvas.getContext("webgl2", attributes) as WebGL2RenderingContext | null;
+    context = forceWebGL1 ? null : canvas.getContext("webgl2", attributes) as WebGL2RenderingContext | null;
     if (context) webglVersion = 2;
     else {
       context = (canvas.getContext("webgl", attributes) || canvas.getContext("experimental-webgl", attributes)) as WebGLRenderingContext | null;

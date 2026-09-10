@@ -1,4 +1,4 @@
-const CACHE_NAME = "parcel-lab-shell-v7-ipad-mini2-touchfix";
+const CACHE_NAME = "parcel-lab-shell-v8-ipad-mini2-directglb";
 const APP_SHELL = ["./", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
