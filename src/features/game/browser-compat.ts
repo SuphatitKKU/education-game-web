@@ -163,3 +163,49 @@ export function installOrbitDrag(canvas: HTMLCanvasElement, onRotate: (delta: nu
   }
   return () => cleanups.forEach((cleanup) => cleanup());
 }
+
+type LegacyModelViewerElement = HTMLElement & {
+  cameraOrbit?: string;
+  getCameraOrbit?: () => { theta: number; phi: number; radius: number };
+  jumpCameraToGoal?: () => void;
+};
+
+export function installModelViewerInputFallback(element: LegacyModelViewerElement) {
+  if (typeof PointerEvent !== "undefined") return () => undefined;
+
+  const tracker = createOrbitDragTracker((deltaX) => {
+    const orbit = element.getCameraOrbit?.();
+    if (!orbit) return;
+    const nextOrbit = `${orbit.theta - deltaX * .01}rad ${orbit.phi}rad ${orbit.radius}m`;
+    element.cameraOrbit = nextOrbit;
+    element.setAttribute("camera-orbit", nextOrbit);
+    element.jumpCameraToGoal?.();
+  });
+  const cleanups: Array<() => void> = [];
+  const on = (target: HTMLElement | Window, type: string, listener: EventListener, options?: AddEventListenerOptions | boolean) => {
+    target.addEventListener(type, listener, options);
+    cleanups.push(() => target.removeEventListener(type, listener, options));
+  };
+
+  on(element, "touchstart", ((event: TouchEvent) => {
+    const touch = event.changedTouches[0];
+    if (touch) tracker.start(touch.identifier, touch.clientX);
+  }) as EventListener, { passive: true });
+  on(element, "touchmove", ((event: TouchEvent) => {
+    for (let index = 0; index < event.changedTouches.length; index += 1) {
+      const touch = event.changedTouches[index];
+      if (tracker.move(touch.identifier, touch.clientX)) { event.preventDefault(); break; }
+    }
+  }) as EventListener, { passive: false });
+  const finishTouch = ((event: TouchEvent) => {
+    for (let index = 0; index < event.changedTouches.length; index += 1) tracker.finish(event.changedTouches[index].identifier);
+  }) as EventListener;
+  on(element, "touchend", finishTouch);
+  on(element, "touchcancel", finishTouch);
+  on(element, "mousedown", ((event: MouseEvent) => {
+    if (event.button === 0) tracker.start("model-viewer-mouse", event.clientX);
+  }) as EventListener);
+  on(window, "mousemove", ((event: MouseEvent) => { tracker.move("model-viewer-mouse", event.clientX); }) as EventListener);
+  on(window, "mouseup", (() => tracker.finish("model-viewer-mouse")) as EventListener);
+  return () => cleanups.forEach((cleanup) => cleanup());
+}

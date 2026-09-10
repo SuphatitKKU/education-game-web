@@ -11,6 +11,7 @@ declare module "react" {
         "disable-pan"?: boolean;
         "disable-zoom"?: boolean;
         "touch-action"?: string;
+        "interaction-prompt"?: string;
         "camera-orbit"?: string;
         "camera-target"?: string;
         "min-camera-orbit"?: string;

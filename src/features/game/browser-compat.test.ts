@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createOrbitDragTracker, handleWebGLContextLoss, listenToMediaQuery, observeElementResize, readRendererStatuses, selectRenderCompatibility } from "./browser-compat";
+import { createOrbitDragTracker, handleWebGLContextLoss, installModelViewerInputFallback, listenToMediaQuery, observeElementResize, readRendererStatuses, selectRenderCompatibility } from "./browser-compat";
 
 describe("browser compatibility profiles", () => {
   it("keeps the modern WebGL 2 quality cap", () => {
@@ -52,6 +52,34 @@ describe("legacy browser event fallbacks", () => {
     expect(tracker.move(7, 111)).toBe(true);
     expect(tracker.finish(7)).toBe(true);
     expect(deltas).toEqual([16, -5]);
+  });
+
+  it("installs native touch controls for model-viewer when Pointer Events are missing", () => {
+    const listeners: Record<string, EventListener> = {};
+    const attributes = new Map<string, string>();
+    const element = {
+      addEventListener: vi.fn((type: string, listener: EventListener) => { listeners[type] = listener; }),
+      removeEventListener: vi.fn(),
+      setAttribute: vi.fn((name: string, value: string) => attributes.set(name, value)),
+      getCameraOrbit: () => ({ theta: 1, phi: .8, radius: 4 }),
+      jumpCameraToGoal: vi.fn(),
+    };
+    const windowListeners: Record<string, EventListener> = {};
+    vi.stubGlobal("window", {
+      addEventListener: vi.fn((type: string, listener: EventListener) => { windowListeners[type] = listener; }),
+      removeEventListener: vi.fn(),
+    });
+    vi.stubGlobal("PointerEvent", undefined);
+    const cleanup = installModelViewerInputFallback(element as unknown as HTMLElement);
+    listeners.touchstart({ changedTouches: [{ identifier: 5, clientX: 100 }] } as unknown as Event);
+    const move = { changedTouches: [{ identifier: 5, clientX: 120 }], preventDefault: vi.fn() };
+    listeners.touchmove(move as unknown as Event);
+    expect(attributes.get("camera-orbit")).toBe("0.8rad 0.8rad 4m");
+    expect(move.preventDefault).toHaveBeenCalledOnce();
+    expect(element.jumpCameraToGoal).toHaveBeenCalledOnce();
+    cleanup();
+    expect(window.removeEventListener).toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 
   it("prevents context-loss teardown and records diagnostics", () => {

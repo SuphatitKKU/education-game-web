@@ -47,7 +47,7 @@ import {
   type MaterialScale,
   type MicroscopeFeature,
 } from "./MaterialMicroscope";
-import { detectRenderCompatibility, reportRendererStatus, type RenderCompatibilityProfile } from "./browser-compat";
+import { detectRenderCompatibility, installModelViewerInputFallback, reportRendererStatus, type RenderCompatibilityProfile } from "./browser-compat";
 import { CompatibilityDiagnostics } from "./CompatibilityDiagnostics";
 
 const SAVE_KEY = "parcel-lab-web-save-v1";
@@ -985,6 +985,7 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
   useEffect(() => {
     if (!ready || !viewerRef.current) return;
     const viewer = viewerRef.current;
+    const cleanupLegacyInput = installModelViewerInputFallback(viewer);
     const hideInternalFocusFrame = () => {
       viewer.shadowRoot?.querySelector<HTMLElement>(".userInput")?.style.setProperty("outline", "none");
     };
@@ -1013,6 +1014,7 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
       window.clearTimeout(fallbackTimer);
       viewer.removeEventListener("load", finishLoading);
       viewer.removeEventListener("error", failLoading);
+      cleanupLegacyInput();
     };
   }, [ready, inspectionModelSrc, inspectionModelAlt]);
   useEffect(() => {
@@ -1093,6 +1095,7 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
             disable-pan
             disable-zoom
             touch-action="none"
+            interaction-prompt="none"
             camera-orbit="24deg 48deg 7.8m"
             camera-target="0m -0.08m 0m"
             field-of-view="35deg"
@@ -1713,6 +1716,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
   useEffect(() => {
     if (!exploring || !viewerReady || !materialViewerRef.current) return;
     const viewer = materialViewerRef.current;
+    const cleanupLegacyInput = installModelViewerInputFallback(viewer);
     let loaded = false;
     const finishLoading = () => {
       loaded = true;
@@ -1742,6 +1746,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
       window.clearTimeout(fallbackTimer);
       viewer.removeEventListener("load", finishLoading);
       viewer.removeEventListener("error", failLoading);
+      cleanupLegacyInput();
     };
   }, [exploring, viewerReady, modelAttempt, viewScale, materialModelSrc, explorer.alt]);
 
@@ -1895,6 +1900,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
                   alt={explorer.alt}
                   poster={asset(`materials/${explorerImage}`)}
                   camera-controls
+                  interaction-prompt="none"
                   touch-action="pan-y"
                   camera-orbit={explorer.orbit}
                   camera-target={explorer.target}
