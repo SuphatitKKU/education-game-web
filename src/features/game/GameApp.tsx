@@ -89,9 +89,9 @@ function IpadMiniCanvas({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const userAgent = window.navigator.userAgent;
-    // iPadOS 13+ reports itself as MacIntel, so retain the touch-point check.
-    const ipadOs = window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1;
-    setIsAppleMobile(/iPad|iPhone|iPod/.test(userAgent) || ipadOs);
+    // Only target Apple mobile user agents. Some desktop and embedded browsers
+    // report MacIntel with touch points, which must not trigger the iPad lock.
+    setIsAppleMobile(/iPad|iPhone|iPod/.test(userAgent));
     setIsStandalonePwa(
       window.matchMedia("(display-mode: standalone)").matches
       || (window.navigator as Navigator & { standalone?: boolean }).standalone === true,

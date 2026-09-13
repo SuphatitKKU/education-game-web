@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { detectRenderCompatibility, readRendererStatuses, type RenderCompatibilityProfile, type RendererStatusRecord } from "./browser-compat";
 
-const BUILD_VERSION = "standalone-fill-available-20260913";
-const CACHE_VERSION = "parcel-lab-shell-v16-standalone-fill-available";
+const BUILD_VERSION = "gpt-desktop-orientation-20260913";
+const CACHE_VERSION = "parcel-lab-shell-v17-gpt-desktop-orientation";
 
 export function CompatibilityDiagnostics() {
   const [visible, setVisible] = useState(false);

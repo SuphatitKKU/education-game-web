@@ -1,4 +1,4 @@
-const CACHE_NAME = "parcel-lab-shell-v16-standalone-fill-available";
+const CACHE_NAME = "parcel-lab-shell-v17-gpt-desktop-orientation";
 const APP_SHELL = ["./", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
