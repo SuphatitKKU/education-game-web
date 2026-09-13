@@ -1,4 +1,4 @@
-const CACHE_NAME = "parcel-lab-shell-v17-gpt-desktop-orientation";
+const CACHE_NAME = "parcel-lab-shell-v18-safari12-card-colors";
 const APP_SHELL = ["./", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
