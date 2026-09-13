@@ -1133,5 +1133,6 @@ body{overscroll-behavior:none;background:#d9f1ff}
 .mission-two-welcome-card>.mission-two-route article,.mission-two-welcome-card>.mission-two-route article:nth-child(2),.mission-two-welcome-card>.mission-two-route article:nth-child(3),.mission-two-welcome-card>.mission-two-route article:nth-child(4){border-color:#f2a33b;background:linear-gradient(160deg,#fffdf5,#fff3d5);box-shadow:0 .42cqw 0 #dfaa3f,0 .8cqw 1.15cqw #7d421f20}
 .mission-two-welcome-card>.mission-two-route article:hover{border-color:#ed8c21;box-shadow:0 .42cqw 0 #d78b24,0 .8cqw 1.15cqw #7d421f20}
 
-/* iPad Safari applies native button padding; remove it so the SVG remains centered. */
-.global-audio-button{padding:0;line-height:0;-webkit-appearance:none;appearance:none}.global-audio-button>.app-icon{display:block;width:2.1cqw;height:2.1cqw;margin:0;vertical-align:0}
+/* iPad Safari applies native button metrics; use flex to keep the SVG centered. */
+.global-audio-button{display:flex;align-items:center;justify-content:center;padding:0!important;line-height:0;text-align:center;font-size:0;-webkit-appearance:none;appearance:none}
+.global-audio-button>.app-icon{display:block;flex:0 0 auto;width:2.1cqw;height:2.1cqw;margin:0!important;padding:0;vertical-align:0}

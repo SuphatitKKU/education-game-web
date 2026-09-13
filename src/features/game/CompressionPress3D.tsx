@@ -7,8 +7,11 @@ import type { CompressionScene } from "./compression-scene";
 import styles from "./CompressionLab.module.css";
 import { installOrbitDrag, reportRendererStatus } from "./browser-compat";
 
-export function CompressionPress3D({ material, phase, children }: {
-  material: MaterialDefinition; phase: CompressionPhase; children: ReactNode;
+type CompressionDisplayMode = "before" | "after";
+
+export function CompressionPress3D({ material, phase, displayMode, onDisplayModeChange, children }: {
+  material: MaterialDefinition; phase: CompressionPhase; displayMode: CompressionDisplayMode;
+  onDisplayModeChange: (mode: CompressionDisplayMode) => void; children: ReactNode;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<CompressionScene | null>(null);
@@ -31,6 +34,7 @@ export function CompressionPress3D({ material, phase, children }: {
       sceneRef.current = createCompressionScene(canvasRef.current, fail);
       // Preserve the selected camera if a visual update recreates the renderer.
       sceneRef.current.setView(view);
+      sceneRef.current.setDisplayMode(displayMode);
       const current = inputRef.current;
       sceneRef.current.update(current.material, current.phase, current.startedAt);
       setStatus("ready");
@@ -51,23 +55,25 @@ export function CompressionPress3D({ material, phase, children }: {
     sceneRef.current?.update(material, phase, startedAt);
   }, [material, phase]);
 
+  useEffect(() => { sceneRef.current?.setDisplayMode(displayMode); }, [displayMode]);
+
   const changeView = (next: "front" | "perspective") => { setView(next); sceneRef.current?.setView(next); };
   const running = phase === "lifting" || phase === "approach" || phase === "pressing";
 
   return <div className={styles.press3D} data-renderer={status}>
-    <div className={styles.sceneLabels} hidden={status !== "ready"} aria-hidden="true">
-      <span>ก่อนกด</span><span>ขณะรับแรงกด</span>
+    <div className={styles.sceneLabels} hidden={status !== "ready"} role="group" aria-label="เลือกโมเดลการทดลอง">
+      <button type="button" aria-pressed={displayMode === "before"} onClick={() => onDisplayModeChange("before")}>ก่อนกด</button>
+      <button type="button" aria-pressed={displayMode === "after"} onClick={() => onDisplayModeChange("after")}>ขณะรับแรงกด</button>
     </div>
     <div className={styles.sceneViewport} hidden={status !== "ready"}>
       <canvas ref={canvasRef} className={styles.sceneCanvas} tabIndex={status === "ready" ? 0 : -1}
-        role="img" aria-label={`เครื่องกด 3 มิติ ${material.name} เปรียบเทียบก่อนกดและ${phase === "idle" ? "พร้อมทดสอบ" : phase === "lifting" ? "กำลังยกแท่นเพื่อเริ่มใหม่" : running ? "กำลังกด" : "หลังรับแรงกด"} ใช้ปุ่มลูกศรซ้ายขวาเพื่อหมุนมุมมอง`}
+        role="img" aria-label={`เครื่องกด 3 มิติ ${material.name} ${displayMode === "before" ? "ก่อนกด" : phase === "idle" ? "หลังรับแรงกด" : phase === "lifting" ? "กำลังยกแท่นเพื่อเริ่มใหม่" : running ? "กำลังกด" : "หลังรับแรงกด"} ใช้ปุ่มลูกศรซ้ายขวาเพื่อหมุนมุมมอง`}
         onKeyDown={(event) => {
           if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
           event.preventDefault();
           sceneRef.current?.rotate(event.key === "ArrowLeft" ? -.12 : .12);
           setView("perspective");
         }} />
-      <span className={styles.sceneCompareArrow} aria-hidden="true">···➜</span>
     </div>
     {status !== "ready" && children}
     <div className={styles.sceneTools}>

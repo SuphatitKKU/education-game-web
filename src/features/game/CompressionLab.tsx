@@ -9,6 +9,7 @@ import styles from "./CompressionLab.module.css";
 
 const asset = (path: string) => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/assets/${path}`;
 type Phase = CompressionPhase;
+type CompressionDisplayMode = "before" | "after";
 type IconName = "flask" | "scale" | "clock" | "layers" | "home" | "save" | "book" | "chart" | "arrow" | "play" | "size";
 
 function Icon({ name }: { name: IconName }) {
@@ -114,6 +115,7 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
   const materialIndex = Math.max(0, Math.min(save.compressionIndex, LAB_MATERIALS.length - 1));
   const material = LAB_MATERIALS[materialIndex];
   const [phase, setPhase] = useState<Phase>("idle");
+  const [displayMode, setDisplayMode] = useState<CompressionDisplayMode>("before");
   const [observation, setObservation] = useState<CompressionObservation | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const [showRecords, setShowRecords] = useState(false);
@@ -140,7 +142,7 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
   useEffect(() => { if (showRecords) recordsRef.current?.showModal(); else recordsRef.current?.close(); }, [showRecords]);
   useEffect(() => { if (pendingAction) confirmRef.current?.showModal(); else confirmRef.current?.close(); }, [pendingAction]);
 
-  const reset = () => { setPhase("idle"); setObservation(null); setJustSaved(false); };
+  const reset = () => { setPhase("idle"); setDisplayMode("before"); setObservation(null); setJustSaved(false); };
   const guard = (action: () => void) => { if (dirty) setPendingAction(() => action); else action(); };
   const selectMaterial = (index: number) => {
     if (running || index === materialIndex) return;
@@ -149,6 +151,7 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
   const start = () => guard(() => {
     setObservation(null);
     setJustSaved(false);
+    setDisplayMode("after");
     setPhase(phase === "done" ? "lifting" : "approach");
   });
   const record = () => {
@@ -178,13 +181,11 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
       </div>
     </aside>
 
-    <section className={`${styles.panel} ${styles.experiment}`} aria-label="การทดลองเปรียบเทียบก่อนและขณะรับแรงกด">
+    <section className={`${styles.panel} ${styles.experiment}`} aria-label="การทดลองแสดงโมเดลก่อนและขณะรับแรงกด">
       <PanelTitle icon="flask">การทดลอง</PanelTitle>
-      <CompressionPress3D material={material} phase={phase}>
-      <div className={styles.machines}>
-        <figure><figcaption>ก่อนกด</figcaption><PressMachine material={material} baseline /></figure>
-        <span className={styles.compareArrow} aria-hidden="true">···➜</span>
-        <figure><figcaption className={styles.loadedLabel}>ขณะรับแรงกด</figcaption><PressMachine material={material} phase={phase} /></figure>
+      <CompressionPress3D material={material} phase={phase} displayMode={displayMode} onDisplayModeChange={setDisplayMode}>
+      <div className={styles.machineFallback}>
+        <PressMachine material={material} phase={displayMode === "before" ? "idle" : phase === "idle" ? "done" : phase} baseline={displayMode === "before"} />
       </div>
       </CompressionPress3D>
       <div className={styles.experimentMeasurements} role="status" aria-live="polite">

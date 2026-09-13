@@ -5,7 +5,7 @@ import { APPROACH_DURATION_MS, LIFT_DURATION_MS, PRESS_DURATION_MS, PRESS_GEOMET
 import { createMaterialModelLibrary } from "./material-model-3d";
 import { detectRenderCompatibility, handleWebGLContextLoss, listenToMediaQuery, observeElementResize } from "./browser-compat";
 
-/** A single WebGL context renders both comparison views, only when something changes. */
+/** A single WebGL context renders one selected press view, only when something changes. */
 export function createCompressionScene(canvas: HTMLCanvasElement, onFailure: () => void) {
   const compatibility = detectRenderCompatibility();
   if (compatibility.webglVersion === 0) throw new Error("WebGL is unavailable");
@@ -92,14 +92,11 @@ export function createCompressionScene(canvas: HTMLCanvasElement, onFailure: () 
   const shadow = mesh(machine, new THREE.PlaneGeometry(4.3, 3), track(new THREE.MeshBasicMaterial({ map: shadowTexture, transparent: true, depthWrite: false })), 0, .02, 0);
   shadow.rotation.x = -Math.PI / 2;
 
-  const baseline = machine.clone(true);
-  scene.add(baseline, machine);
-  const beforeSpecimen = baseline.getObjectByName("specimen")!;
-  const beforePlaten = baseline.getObjectByName("platen")!;
-  const beforePiston = baseline.getObjectByName("piston")!;
+  scene.add(machine);
 
   let selected: MaterialDefinition | undefined;
   let phase: CompressionPhase = "idle";
+  let displayMode: "before" | "after" = "before";
   let phaseStart = 0;
   let frame = 0;
   let disposed = false;
@@ -118,8 +115,9 @@ export function createCompressionScene(canvas: HTMLCanvasElement, onFailure: () 
     if (disposed || !selected || document.hidden) return;
     const duration = phase === "lifting" ? LIFT_DURATION_MS : phase === "approach" ? APPROACH_DURATION_MS : PRESS_DURATION_MS;
     const progress = motion.matches ? 1 : Math.min(1, (now - phaseStart) / duration);
-    applyPose(beforeSpecimen, beforePlaten, beforePiston, compressionPose(selected, "idle"));
-    applyPose(specimen, platen, piston, compressionPose(selected, phase, progress));
+    const displayedPhase = displayMode === "before" ? "idle" : phase === "idle" ? "done" : phase;
+    const displayedProgress = displayMode === "before" ? 1 : progress;
+    applyPose(specimen, platen, piston, compressionPose(selected, displayedPhase, displayedProgress));
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
     if (!width || !height) return;
@@ -127,9 +125,8 @@ export function createCompressionScene(canvas: HTMLCanvasElement, onFailure: () 
     const renderWidth = Math.round(width * dpr);
     const renderHeight = Math.round(height * dpr);
     if (canvas.width !== renderWidth || canvas.height !== renderHeight) renderer.setSize(renderWidth, renderHeight, false);
-    const viewWidth = Math.floor(renderWidth * .475);
-    const aspect = viewWidth / renderHeight;
-    // Zoom the straight-on view; leave space for the corners when rotating.
+    const aspect = renderWidth / renderHeight;
+    // Zoom the straight-on view while leaving space for the corners when rotating.
     const verticalFit = angle === 0 ? 1.65 : 1.8 + .16 * Math.abs(Math.sin(angle));
     const halfHeight = Math.max(verticalFit, 1.9 / aspect);
     camera.left = -halfHeight * aspect;
@@ -141,14 +138,9 @@ export function createCompressionScene(canvas: HTMLCanvasElement, onFailure: () 
       renderer.setScissorTest(false);
       renderer.clear();
       renderer.setScissorTest(true);
-      for (const before of [true, false]) {
-        baseline.visible = before;
-        machine.visible = !before;
-        const x = before ? 0 : renderWidth - viewWidth;
-        renderer.setViewport(x, 0, viewWidth, renderHeight);
-        renderer.setScissor(x, 0, viewWidth, renderHeight);
-        renderer.render(scene, camera);
-      }
+      renderer.setViewport(0, 0, renderWidth, renderHeight);
+      renderer.setScissor(0, 0, renderWidth, renderHeight);
+      renderer.render(scene, camera);
     } catch {
       onFailure();
       return;
@@ -167,13 +159,15 @@ export function createCompressionScene(canvas: HTMLCanvasElement, onFailure: () 
     update(material: MaterialDefinition, nextPhase: CompressionPhase, startedAt: number) {
       if (selected?.id !== material.id) {
         specimen.clear();
-        beforeSpecimen.clear();
         specimen.add(materialModels.get(material.id));
-        beforeSpecimen.add(materialModels.get(material.id));
       }
       selected = material;
       phase = nextPhase;
       phaseStart = startedAt;
+      schedule();
+    },
+    setDisplayMode(value: "before" | "after") {
+      displayMode = value;
       schedule();
     },
     setView(value: "front" | "perspective") { angle = value === "front" ? 0 : .3; pointCamera(); schedule(); },

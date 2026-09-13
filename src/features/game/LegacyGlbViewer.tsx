@@ -78,7 +78,7 @@ export function LegacyGlbViewer({ src, alt, poster, orbit, target, hotspots = []
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    return installOrbitDrag(canvas, (delta) => sceneRef.current?.rotate(delta), () => undefined);
+    return installOrbitDrag(canvas, (deltaTheta, deltaPhi) => sceneRef.current?.rotate(deltaTheta, deltaPhi), () => undefined);
   }, []);
 
   return <div className={`${styles.viewer} ${className ?? ""}`} style={style} data-ready={ready ? "true" : "false"}>

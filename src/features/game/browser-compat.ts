@@ -102,15 +102,17 @@ export function readRendererStatuses() {
   return { ...rendererStatuses };
 }
 
-export function createOrbitDragTracker(onDelta: (deltaX: number) => void) {
+export function createOrbitDragTracker(onDelta: (deltaX: number, deltaY: number) => void) {
   let activeId: number | string | null = null;
   let previousX = 0;
+  let previousY = 0;
   return {
-    start(id: number | string, x: number) { activeId = id; previousX = x; },
-    move(id: number | string, x: number) {
+    start(id: number | string, x: number, y = 0) { activeId = id; previousX = x; previousY = y; },
+    move(id: number | string, x: number, y = 0) {
       if (activeId !== id) return false;
-      onDelta(x - previousX);
+      onDelta(x - previousX, y - previousY);
       previousX = x;
+      previousY = y;
       return true;
     },
     finish(id: number | string) {
@@ -121,8 +123,8 @@ export function createOrbitDragTracker(onDelta: (deltaX: number) => void) {
   };
 }
 
-export function installOrbitDrag(canvas: HTMLCanvasElement, onRotate: (delta: number) => void, onPerspective: () => void) {
-  const tracker = createOrbitDragTracker((deltaX) => { onRotate(deltaX * .006); onPerspective(); });
+export function installOrbitDrag(canvas: HTMLCanvasElement, onRotate: (deltaTheta: number, deltaPhi: number) => void, onPerspective: () => void) {
+  const tracker = createOrbitDragTracker((deltaX, deltaY) => { onRotate(deltaX * .006, deltaY * .006); onPerspective(); });
   const cleanups: Array<() => void> = [];
   const on = <K extends keyof HTMLElementEventMap>(target: HTMLElement | Window, type: K, listener: EventListener, options?: AddEventListenerOptions | boolean) => {
     target.addEventListener(type, listener, options);
@@ -132,10 +134,10 @@ export function installOrbitDrag(canvas: HTMLCanvasElement, onRotate: (delta: nu
   if (typeof PointerEvent !== "undefined") {
     on(canvas, "pointerdown", ((event: PointerEvent) => {
       if (event.button !== 0) return;
-      tracker.start(event.pointerId, event.clientX);
+      tracker.start(event.pointerId, event.clientX, event.clientY);
       canvas.setPointerCapture?.(event.pointerId);
     }) as EventListener);
-    on(canvas, "pointermove", ((event: PointerEvent) => { tracker.move(event.pointerId, event.clientX); }) as EventListener);
+    on(canvas, "pointermove", ((event: PointerEvent) => { tracker.move(event.pointerId, event.clientX, event.clientY); }) as EventListener);
     const finish = ((event: PointerEvent) => {
       tracker.finish(event.pointerId);
       if (canvas.hasPointerCapture?.(event.pointerId)) canvas.releasePointerCapture?.(event.pointerId);
@@ -145,12 +147,12 @@ export function installOrbitDrag(canvas: HTMLCanvasElement, onRotate: (delta: nu
   } else {
     on(canvas, "touchstart", ((event: TouchEvent) => {
       const touch = event.changedTouches[0];
-      if (touch) tracker.start(touch.identifier, touch.clientX);
+      if (touch) tracker.start(touch.identifier, touch.clientX, touch.clientY);
     }) as EventListener, { passive: true });
     on(canvas, "touchmove", ((event: TouchEvent) => {
       for (let index = 0; index < event.changedTouches.length; index += 1) {
         const touch = event.changedTouches[index];
-        if (tracker.move(touch.identifier, touch.clientX)) { event.preventDefault(); break; }
+        if (tracker.move(touch.identifier, touch.clientX, touch.clientY)) { event.preventDefault(); break; }
       }
     }) as EventListener, { passive: false });
     const touchFinish = ((event: TouchEvent) => {
@@ -158,8 +160,8 @@ export function installOrbitDrag(canvas: HTMLCanvasElement, onRotate: (delta: nu
     }) as EventListener;
     on(canvas, "touchend", touchFinish);
     on(canvas, "touchcancel", touchFinish);
-    on(canvas, "mousedown", ((event: MouseEvent) => { if (event.button === 0) tracker.start("mouse", event.clientX); }) as EventListener);
-    on(window, "mousemove", ((event: MouseEvent) => { tracker.move("mouse", event.clientX); }) as EventListener);
+    on(canvas, "mousedown", ((event: MouseEvent) => { if (event.button === 0) tracker.start("mouse", event.clientX, event.clientY); }) as EventListener);
+    on(window, "mousemove", ((event: MouseEvent) => { tracker.move("mouse", event.clientX, event.clientY); }) as EventListener);
     on(window, "mouseup", (() => tracker.finish("mouse")) as EventListener);
   }
   return () => cleanups.forEach((cleanup) => cleanup());
@@ -174,10 +176,11 @@ type LegacyModelViewerElement = HTMLElement & {
 export function installModelViewerInputFallback(element: LegacyModelViewerElement) {
   if (typeof PointerEvent !== "undefined") return () => undefined;
 
-  const tracker = createOrbitDragTracker((deltaX) => {
+  const tracker = createOrbitDragTracker((deltaX, deltaY) => {
     const orbit = element.getCameraOrbit?.();
     if (!orbit) return;
-    const nextOrbit = `${orbit.theta - deltaX * .01}rad ${orbit.phi}rad ${orbit.radius}m`;
+    const nextPhi = Math.min(Math.PI - .08, Math.max(.08, orbit.phi + deltaY * .01));
+    const nextOrbit = `${orbit.theta - deltaX * .01}rad ${nextPhi}rad ${orbit.radius}m`;
     element.cameraOrbit = nextOrbit;
     element.setAttribute("camera-orbit", nextOrbit);
     element.jumpCameraToGoal?.();
@@ -190,12 +193,12 @@ export function installModelViewerInputFallback(element: LegacyModelViewerElemen
 
   on(element, "touchstart", ((event: TouchEvent) => {
     const touch = event.changedTouches[0];
-    if (touch) tracker.start(touch.identifier, touch.clientX);
+    if (touch) tracker.start(touch.identifier, touch.clientX, touch.clientY);
   }) as EventListener, { passive: true });
   on(element, "touchmove", ((event: TouchEvent) => {
     for (let index = 0; index < event.changedTouches.length; index += 1) {
       const touch = event.changedTouches[index];
-      if (tracker.move(touch.identifier, touch.clientX)) { event.preventDefault(); break; }
+      if (tracker.move(touch.identifier, touch.clientX, touch.clientY)) { event.preventDefault(); break; }
     }
   }) as EventListener, { passive: false });
   const finishTouch = ((event: TouchEvent) => {
@@ -204,9 +207,9 @@ export function installModelViewerInputFallback(element: LegacyModelViewerElemen
   on(element, "touchend", finishTouch);
   on(element, "touchcancel", finishTouch);
   on(element, "mousedown", ((event: MouseEvent) => {
-    if (event.button === 0) tracker.start("model-viewer-mouse", event.clientX);
+    if (event.button === 0) tracker.start("model-viewer-mouse", event.clientX, event.clientY);
   }) as EventListener);
-  on(window, "mousemove", ((event: MouseEvent) => { tracker.move("model-viewer-mouse", event.clientX); }) as EventListener);
+  on(window, "mousemove", ((event: MouseEvent) => { tracker.move("model-viewer-mouse", event.clientX, event.clientY); }) as EventListener);
   on(window, "mouseup", (() => tracker.finish("model-viewer-mouse")) as EventListener);
   return () => cleanups.forEach((cleanup) => cleanup());
 }

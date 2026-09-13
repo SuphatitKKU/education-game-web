@@ -54,6 +54,15 @@ describe("legacy browser event fallbacks", () => {
     expect(deltas).toEqual([16, -5]);
   });
 
+  it("tracks vertical drag deltas for full-orbit camera controls", () => {
+    const deltas: Array<[number, number]> = [];
+    const tracker = createOrbitDragTracker((deltaX, deltaY) => deltas.push([deltaX, deltaY]));
+    tracker.start(7, 100, 40);
+    expect(tracker.move(7, 116, 54)).toBe(true);
+    expect(tracker.move(7, 111, 48)).toBe(true);
+    expect(deltas).toEqual([[16, 14], [-5, -6]]);
+  });
+
   it("installs native touch controls for model-viewer when Pointer Events are missing", () => {
     const listeners: Record<string, EventListener> = {};
     const attributes = new Map<string, string>();
@@ -71,10 +80,10 @@ describe("legacy browser event fallbacks", () => {
     });
     vi.stubGlobal("PointerEvent", undefined);
     const cleanup = installModelViewerInputFallback(element as unknown as HTMLElement);
-    listeners.touchstart({ changedTouches: [{ identifier: 5, clientX: 100 }] } as unknown as Event);
-    const move = { changedTouches: [{ identifier: 5, clientX: 120 }], preventDefault: vi.fn() };
+    listeners.touchstart({ changedTouches: [{ identifier: 5, clientX: 100, clientY: 100 }] } as unknown as Event);
+    const move = { changedTouches: [{ identifier: 5, clientX: 120, clientY: 120 }], preventDefault: vi.fn() };
     listeners.touchmove(move as unknown as Event);
-    expect(attributes.get("camera-orbit")).toBe("0.8rad 0.8rad 4m");
+    expect(attributes.get("camera-orbit")).toBe("0.8rad 1rad 4m");
     expect(move.preventDefault).toHaveBeenCalledOnce();
     expect(element.jumpCameraToGoal).toHaveBeenCalledOnce();
     cleanup();

@@ -65,15 +65,14 @@
 .conditionList > section p { font-size: 1.2cqw; }
 .conditionList > section small { font-size: .95cqw; }
 .experiment .panelTitle { color: #28763b; border-color: #d2e5d7; background: linear-gradient(120deg, #eaf5eb, #f4faf5); }
-.machines { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 3.3cqw minmax(0, 1fr); gap: 0; align-items: center; padding: 1.5cqw .4cqw .1cqw; }
-.machines figure { margin: 0; min-width: 0; display: flex; flex-direction: column; align-items: center; }
-.machines figcaption { padding: .6cqw 1.5cqw; width: 78%; border: .1cqw solid #a8c9ff; border-radius: 2cqw; background: #edf3ff; font-size: 1.35cqw; text-align: center; margin-bottom: .2cqw; }
-.machines .loadedLabel { border-color: #b1dabb; background: #edf7ef; color: #29783c; }
+.machineFallback { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 1.5cqw .4cqw .1cqw; }
+.machineFallback .machine { width: min(100%, 42cqw); max-height: 100%; }
 .machine { display: block; width: 100%; overflow: visible; }
 .press3D { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.sceneLabels { display: grid; grid-template-columns: 1fr 1fr; gap: 5%; padding: .8cqw 1.2cqw 0; flex-shrink: 0; }
-.sceneLabels span { justify-self: center; width: 83%; padding: .55cqw .6cqw; border: .1cqw solid #a8c9ff; border-radius: 2cqw; background: #edf3ff; font-size: 1.35cqw; text-align: center; }
-.sceneLabels span:last-child { border-color: #b1dabb; background: #edf7ef; color: #29783c; }
+.sceneLabels { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 5%; padding: .8cqw 1.2cqw 0; flex-shrink: 0; }
+.sceneLabels button { justify-self: center; width: 83%; padding: .55cqw .6cqw; border: .1cqw solid #a8c9ff; border-radius: 2cqw; background: #edf3ff; color: #214a84; font-size: 1.35cqw; text-align: center; }
+.sceneLabels button:last-child { border-color: #b1dabb; background: #edf7ef; color: #29783c; }
+.sceneLabels button[aria-pressed="true"] { box-shadow: 0 .25cqw .5cqw #17324d20; }
 .sceneViewport { flex: 1; min-height: 0; position: relative; margin: .25cqw .65cqw 0; background: linear-gradient(180deg, #e2edf5 0%, #c9dce9 55%, #b5ccdd 100%); border: .08cqw solid #afc7d9; border-radius: 1cqw; overflow: hidden; }
 .sceneCanvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: pan-y; cursor: grab; }
 .sceneCanvas:active { cursor: grabbing; }

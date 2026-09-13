@@ -4,7 +4,7 @@ import { detectRenderCompatibility, handleWebGLContextLoss, observeElementResize
 
 export type LegacyHotspotPosition = { left: number; top: number; visible: boolean };
 export type LegacyGlbScene = {
-  rotate: (delta: number) => void;
+  rotate: (deltaTheta: number, deltaPhi?: number) => void;
   setOrbit: (orbit: string, target?: string) => void;
   dispose: () => void;
 };
@@ -152,8 +152,9 @@ export function createLegacyGlbScene(canvas: HTMLCanvasElement, options: {
   }, undefined, options.onFailure);
 
   return {
-    rotate(delta) {
-      orbit.theta -= delta;
+    rotate(deltaTheta, deltaPhi = 0) {
+      orbit.theta -= deltaTheta;
+      orbit.phi = THREE.MathUtils.clamp(orbit.phi + deltaPhi, THREE.MathUtils.degToRad(8), THREE.MathUtils.degToRad(172));
       updateCamera();
       render();
     },
