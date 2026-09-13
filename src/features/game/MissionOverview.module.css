@@ -28,3 +28,6 @@
 @keyframes mission-spark{0%{opacity:0;transform:scale(.2) rotate(0)}45%{opacity:1;transform:translateY(-1cqw) scale(1.25) rotate(25deg)}100%{opacity:0;transform:translateY(-2cqw) scale(.6) rotate(55deg)}}
 @keyframes unlock-banner{0%{opacity:0;transform:translate(-50%,-35%) scale(.55)}12%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}20%,72%{opacity:1;transform:translate(-50%,-50%) scale(1)}88%{opacity:1;transform:translate(-50%,-56%) scale(.98)}100%{opacity:0;transform:translate(-50%,-70%) scale(.9)}}
 @keyframes decor-pop{0%,100%{transform:scale(.9) rotate(-5deg)}50%{transform:scale(1.16) rotate(7deg)}}
+
+/* Keep the five mission icons readable without crowding their circular stops. */
+.picture :global(.app-icon){width:6.1cqw;height:6.1cqw}
