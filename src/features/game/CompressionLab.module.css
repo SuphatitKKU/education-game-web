@@ -90,6 +90,8 @@
 .experimentMeasurements { flex-shrink: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 5%; margin: 0 1.6cqw .5cqw; min-height: 1.6cqw; font-size: 1.05cqw; line-height: 1.25; }
 .experimentMeasurements p { margin: 0; text-align: center; color: #3a6592; }
 .experimentMeasurements p:last-child { color: #497a59; }
+.experimentMeasurements .stopwatch { display: inline-flex; align-items: center; justify-content: center; gap: .3cqw; font-variant-numeric: tabular-nums; }
+.experimentMeasurements .stopwatch svg { width: 1.15cqw; height: 1.15cqw; }
 .progressTrack { height: .35cqw; margin: 0 2cqw 1cqw; border-radius: 1cqw; background: #edf4f0; overflow: hidden; flex-shrink: 0; }
 .progressTrack i { display: block; height: 100%; width: 0; background: #67b887; }
 .progressTrack .progressRunning { animation: fillProgress 3s linear forwards; }

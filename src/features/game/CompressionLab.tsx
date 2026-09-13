@@ -33,6 +33,14 @@ function PanelTitle({ icon, children }: { icon: IconName; children: ReactNode })
   return <h2 className={styles.panelTitle}><Icon name={icon} />{children}</h2>;
 }
 
+function formatElapsed(ms: number) {
+  const totalTenths = Math.max(0, Math.floor(ms / 100));
+  const minutes = Math.floor(totalTenths / 600);
+  const seconds = Math.floor(totalTenths / 10) % 60;
+  const tenths = totalTenths % 10;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${tenths}`;
+}
+
 /** The result choices use the same code-native material cues as the 3D specimen. */
 function CompressionSampleArt({ material, observation }: { material: MaterialDefinition; observation: CompressionObservation }) {
   const choice = COMPRESSION_OBSERVATIONS.find((item) => item.id === observation)!;
@@ -116,6 +124,7 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
   const material = LAB_MATERIALS[materialIndex];
   const [phase, setPhase] = useState<Phase>("idle");
   const [displayMode, setDisplayMode] = useState<CompressionDisplayMode>("before");
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [observation, setObservation] = useState<CompressionObservation | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const [showRecords, setShowRecords] = useState(false);
@@ -123,6 +132,8 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
   const [pendingAction, setPendingAction] = useState<null | (() => void)>(null);
   const recordsRef = useRef<HTMLDialogElement>(null);
   const confirmRef = useRef<HTMLDialogElement>(null);
+  const timerStartedAtRef = useRef<number | null>(null);
+  const timerIntervalRef = useRef<number | null>(null);
   const running = phase === "lifting" || phase === "approach" || phase === "pressing";
   const dirty = phase === "done" && !justSaved;
   const count = LAB_MATERIALS.filter((item) => save.compressionResults[item.id]).length;
@@ -139,20 +150,49 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
     }, phase === "lifting" ? LIFT_DURATION_MS : phase === "approach" ? APPROACH_DURATION_MS : PRESS_DURATION_MS);
     return () => window.clearTimeout(timer);
   }, [phase]);
+  useEffect(() => {
+    if (timerIntervalRef.current !== null) {
+      window.clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    if (phase === "idle") {
+      timerStartedAtRef.current = null;
+      setElapsedMs(0);
+      return;
+    }
+    if (timerStartedAtRef.current === null) timerStartedAtRef.current = performance.now();
+    const tick = () => {
+      if (timerStartedAtRef.current !== null) setElapsedMs(performance.now() - timerStartedAtRef.current);
+    };
+    tick();
+    if (phase === "lifting" || phase === "approach" || phase === "pressing") timerIntervalRef.current = window.setInterval(tick, 100);
+    return () => {
+      if (timerIntervalRef.current !== null) {
+        window.clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    };
+  }, [phase]);
   useEffect(() => { if (showRecords) recordsRef.current?.showModal(); else recordsRef.current?.close(); }, [showRecords]);
   useEffect(() => { if (pendingAction) confirmRef.current?.showModal(); else confirmRef.current?.close(); }, [pendingAction]);
 
-  const reset = () => { setPhase("idle"); setDisplayMode("before"); setObservation(null); setJustSaved(false); };
+  const reset = () => { setPhase("idle"); setDisplayMode("before"); setElapsedMs(0); timerStartedAtRef.current = null; setObservation(null); setJustSaved(false); };
   const guard = (action: () => void) => { if (dirty) setPendingAction(() => action); else action(); };
   const selectMaterial = (index: number) => {
     if (running || index === materialIndex) return;
     guard(() => { reset(); onSave(save.compressionResults, index); });
   };
   const start = () => guard(() => {
+    if (phase === "done") {
+      reset();
+      return;
+    }
     setObservation(null);
     setJustSaved(false);
     setDisplayMode("after");
-    setPhase(phase === "done" ? "lifting" : "approach");
+    timerStartedAtRef.current = performance.now();
+    setElapsedMs(0);
+    setPhase("approach");
   });
   const record = () => {
     if (phase !== "done" || !observation || justSaved) return;
@@ -190,6 +230,7 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
       </CompressionPress3D>
       <div className={styles.experimentMeasurements} role="status" aria-live="polite">
         <p>หนาเริ่มต้น {COMPRESSION_CONDITIONS.initialThicknessMm} มม.</p>
+        <p className={styles.stopwatch} role="timer" aria-label={`เวลาทดลอง ${formatElapsed(elapsedMs)} วินาที`}><Icon name="clock" />เวลา {formatElapsed(elapsedMs)} วินาที</p>
       </div>
       <div className={styles.progressTrack} aria-hidden="true">{phase !== "idle" && <i className={phase === "pressing" ? styles.progressRunning : phase === "done" ? styles.progressDone : ""} />}</div>
     </section>
@@ -203,7 +244,7 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
     </aside>
 
     <section className={`${styles.panel} ${styles.startPanel}`}>
-      <button className={styles.start} disabled={running} onClick={start}><Icon name="play" />{running ? "กำลังทดสอบ…" : phase === "done" ? "ทดสอบอีกครั้ง" : "เริ่มทดสอบ"}</button>
+      <button className={styles.start} disabled={running} onClick={start}><Icon name="play" />{running ? "กำลังทดสอบ…" : phase === "done" ? "เริ่มการทดลองใหม่" : "เริ่มทดสอบ"}</button>
       <button className={styles.conditionToggle} type="button" aria-expanded={showConditions} aria-controls="compression-conditions" onClick={() => setShowConditions((visible) => !visible)}><Icon name="scale" />{showConditions ? "ซ่อนเงื่อนไข" : "ดูเงื่อนไข"}</button>
     </section>
 
