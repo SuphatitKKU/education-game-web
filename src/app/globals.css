@@ -827,7 +827,7 @@ p,small,span,label,input,select,textarea,b,strong{font-family:var(--font-kodchas
 @media (prefers-reduced-motion:reduce){.box-mission-coach-sprite,.box-mission-coach-sprite::before,.box-mission-coach-sprite::after,.box-mission-coach::before,.box-mission-header::before,.box-mission-header::after,.box-mission-grid button.selected{animation:none!important}}
 
 /* Responsive landscape canvas: fill the available viewport instead of letterboxing a fixed 16:9 frame. */
-html,body{width:100%;height:100%;overflow:hidden}
+html,body{position:relative;width:100%;height:100%;overflow:hidden}
 body{overscroll-behavior:none;background:#d9f1ff}
 .app-shell{position:fixed;inset:0;width:100vw;height:100vh;min-height:100vh;padding:max(0px,env(safe-area-inset-top)) max(0px,env(safe-area-inset-right)) max(0px,env(safe-area-inset-bottom)) max(0px,env(safe-area-inset-left));background:#d9f1ff}
 .game-frame{width:100%;height:100%;max-width:none;max-height:none;aspect-ratio:auto;box-shadow:none}
@@ -840,7 +840,7 @@ body{overscroll-behavior:none;background:#d9f1ff}
 
 /* Legacy iPad mini canvas: keep every screen and every child coordinate on one 1024×768 stage. */
 :root{--ipad-mini-width:1024px;--ipad-mini-height:768px;--ipad-mini-scale-x:1;--ipad-mini-scale-y:1}
-.app-shell{position:fixed;inset:0;width:auto;height:auto!important;min-height:0!important;display:block;overflow:hidden;padding:0}
+.app-shell{position:absolute;inset:0;width:auto;height:auto!important;min-height:0!important;display:block;overflow:hidden;padding:0}
 .game-viewport{
   position:absolute;
   inset:0;
