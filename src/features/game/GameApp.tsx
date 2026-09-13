@@ -2255,9 +2255,9 @@ type MatchField = "k" | "p";
 type MatchItem = { id: string; prompt: string; answer: string };
 
 const KNOWLEDGE_MATCHES: MatchItem[] = [
-  { id: "collapsed-box", prompt: "กล่องยุบ สัมพันธ์กับสมบัติ", answer: STUDY_TOPICS[0].title },
-  { id: "impact-damage", prompt: "สิ่งของภายในเสียหายจากแรงกระแทก สัมพันธ์กับสมบัติ", answer: STUDY_TOPICS[1].title },
-  { id: "wet-box", prompt: "กล่องเปียก สัมพันธ์กับสมบัติ", answer: STUDY_TOPICS[2].title },
+  { id: "collapsed-box", prompt: "กล่องยุบ สัมพันธ์กับสมบัติใด", answer: STUDY_TOPICS[0].title },
+  { id: "impact-damage", prompt: "สิ่งของภายในเสียหายจากแรงกระแทก สัมพันธ์กับสมบัติใด", answer: STUDY_TOPICS[1].title },
+  { id: "wet-box", prompt: "กล่องเปียก สัมพันธ์กับสมบัติใด", answer: STUDY_TOPICS[2].title },
 ];
 
 const EXIT_ANSWER_ALIASES: Record<string, string> = {
