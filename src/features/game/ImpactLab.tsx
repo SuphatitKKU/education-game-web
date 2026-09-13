@@ -147,7 +147,6 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
     <section className={`${base.panel} ${base.results} ${styles.results}`} aria-label="บันทึกสิ่งที่สังเกตได้">
       <Title icon="chart">ผลการทดลอง <small>(บันทึกสิ่งที่สังเกตได้)</small></Title>
       {!done ? <div className={base.resultPlaceholder} role="status"><span aria-hidden="true">3</span><b>{running ? "กำลังทดลอง…" : "ทดลองวัสดุก่อน"}</b><small>เมื่อทดลองเสร็จ คำตอบจะปรากฏตรงนี้</small></div> : <>
-        <p className={styles.resultQuestion}>สิ่งของจำลองมีสภาพอย่างไร?</p>
         <div className={styles.observations} role="group" aria-label="สภาพของสิ่งของจำลอง">
           {IMPACT_OBSERVATIONS.map((item) => <button key={item.id} aria-pressed={observation === item.id} onClick={() => { setObservation(item.id); onAnswer?.(material.id, item.id); setAccepted(false); }}>
             <i aria-hidden="true">{observation === item.id ? "✓" : ""}</i><span>{item.label}</span><ImpactEgg damage={item.id} />

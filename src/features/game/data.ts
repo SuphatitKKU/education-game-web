@@ -21,14 +21,29 @@ export type CompressionResult = {
     | { forceN: 200; pressureKPa: 20; durationMs: number; specimenWidthCm: 10; specimenLengthCm: 10; initialThicknessMm: 5 };
 };
 
+export type AbsorptionLevel = "none" | "low" | "medium" | "high";
+export type StripAbsorptionLevel = "none" | "low" | "high";
+
 export type WaterAbsorptionResult = {
   materialId: string;
-  drops: number[];
-  absorbed: number;
+  // Legacy fields remain optional so checkpoints from the weighing activity stay readable.
+  drops?: number[];
+  absorbed?: number;
+  riseCm?: number;
   summary: string;
-  observation?: "low" | "medium" | "high";
-  method?: "one-side-water-contact-v1";
-  conditions?: { water: "equal"; contactArea: "equal"; contactTime: "equal"; specimen: "equal-size" };
+  observation?: AbsorptionLevel;
+  modelLevel?: StripAbsorptionLevel;
+  method?: "one-side-water-contact-v1" | "colored-water-strip-v1";
+  conditions?:
+    | { water: "equal"; contactArea: "equal"; contactTime: "equal"; specimen: "equal-size" }
+    | {
+        specimenWidthCm: 2;
+        specimenLengthCm: 10;
+        dyedWater: true;
+        immersionDepthCm: 1;
+        contactTimeSec: 30;
+        simultaneous: true;
+      };
 };
 
 export type ElasticityResult = {
@@ -81,7 +96,10 @@ export type MaterialDefinition = {
   sag: readonly [number, number, number];
   residual: number;
   releaseSummary: string;
-  waterDrops: readonly [number, number, number];
+  /** Qualitative strip-test model values; these are not measurements of a real specimen. */
+  waterRiseCm: number;
+  waterLevel: StripAbsorptionLevel;
+  waterMark: "none" | "slight" | "clear";
   waterSummary: string;
   elasticityStretch: readonly [number, number, number];
   elasticityResidual: number;
@@ -262,7 +280,7 @@ export const MATERIALS = [
     id: "corrugated_cardboard", name: "กระดาษลูกฟูก", image: "corrugated_cardboard.png", guide: "มีแผ่นผิวเรียบประกบลอนกระดาษอยู่ตรงกลาง",
     testFrames: testFrames("corrugated_cardboard"), sag: [1, 2, 4], residual: 1,
     releaseSummary: "คืนเกือบหมด · ลอนยังบุบเล็กน้อย",
-    waterDrops: [1, 2, 4], waterSummary: "ในแบบจำลอง น้ำซึมเข้าเนื้อกระดาษและเห็นรอยเปียก",
+    waterRiseCm: 6.8, waterLevel: "high", waterMark: "clear", waterSummary: "น้ำสีซึมขึ้นตามเส้นใยและลอนกระดาษ เห็นรอยเปียกชัดเจน",
     elasticityStretch: [1, 2, 3], elasticityResidual: 1, elasticitySummary: "งอได้บ้าง แต่คืนตัวไม่เหมือนยาง",
     motion: { loadMs: 220, releaseMs: 320, easing: "cubic-bezier(.2,.8,.2,1)", releaseEffect: "settle" },
   },
@@ -270,7 +288,7 @@ export const MATERIALS = [
     id: "closed_cell_pe_foam", name: "แผ่นโฟม EPE", image: "closed_cell_pe_foam.png", guide: "แผ่นสีขาว เนื้อนุ่ม มีผิวเซลล์ละเอียด",
     testFrames: testFrames("closed_cell_pe_foam"), sag: [2, 4, 7], residual: 0,
     releaseSummary: "เด้งกลับเต็มที่",
-    waterDrops: [0, 0, 1], waterSummary: "ในแบบจำลอง วัสดุดูดซับน้ำเล็กน้อย น้ำส่วนใหญ่อยู่บนผิว",
+    waterRiseCm: 0, waterLevel: "none", waterMark: "none", waterSummary: "น้ำสีอยู่บนผิวเป็นหลัก ไม่เห็นรอยเปียกไต่ขึ้นในเนื้อโฟมเซลล์ปิด",
     elasticityStretch: [4, 8, 12], elasticityResidual: 1, elasticitySummary: "ยืดและคืนตัวนุ่ม เหลือรอยน้อยมาก",
     motion: { loadMs: 300, releaseMs: 650, easing: "cubic-bezier(.22,.8,.3,1)", releaseEffect: "soft" },
   },
@@ -278,7 +296,7 @@ export const MATERIALS = [
     id: "bubble_wrap", name: "แผ่นพลาสติกกันกระแทกชนิดฟองอากาศ", image: "bubble_wrap.png", guide: "แผ่นพลาสติกใส มีฟองอากาศเรียงต่อกัน",
     testFrames: testFrames("bubble_wrap"), sag: [3, 6, 10], residual: 1,
     releaseSummary: "ฟองอากาศเด้งกลับเกือบหมด",
-    waterDrops: [0, 0, 0], waterSummary: "ในแบบจำลอง น้ำอยู่บนผิว ไม่แสดงการดูดซับเข้าเนื้อวัสดุ",
+    waterRiseCm: 0, waterLevel: "none", waterMark: "none", waterSummary: "น้ำสีเกาะอยู่บนผิวและร่องฟอง ไม่เห็นระดับน้ำซึมขึ้นในเนื้อฟิล์ม",
     elasticityStretch: [5, 10, 16], elasticityResidual: 2, elasticitySummary: "ฟิล์มยืดได้และเด้งกลับเร็ว",
     motion: { loadMs: 180, releaseMs: 420, easing: "cubic-bezier(.2,.9,.25,1)", releaseEffect: "spring" },
   },
@@ -286,7 +304,7 @@ export const MATERIALS = [
     id: "cardboard", name: "กระดาษหน้าขาวหลังเทา 400 แกรม", image: "cardboard.png", guide: "แผ่นกระดาษเนื้อแน่น ด้านหน้าสีขาวและด้านหลังสีเทา",
     testFrames: testFrames("cardboard"), sag: [3, 6, 9], residual: 3,
     releaseSummary: "คืนบางส่วน · มีรอยพับ",
-    waterDrops: [2, 5, 8], waterSummary: "ในแบบจำลอง น้ำซึมเข้าเนื้อกระดาษและรอยเปียกขยายขึ้น",
+    waterRiseCm: 2.1, waterLevel: "low", waterMark: "slight", waterSummary: "เห็นรอยเปียกตื้น ๆ จากขอบน้ำสี แต่ผิวขาวที่เคลือบช่วยชะลอการซึม",
     elasticityStretch: [1, 2, 4], elasticityResidual: 2, elasticitySummary: "แข็งและโก่ง ก่อนเหลือรอยพับ",
     motion: { loadMs: 240, releaseMs: 320, easing: "cubic-bezier(.25,.7,.25,1)", releaseEffect: "settle" },
   },
@@ -294,7 +312,7 @@ export const MATERIALS = [
     id: "pe_sheet", name: "แผ่นพลาสติก PE", image: "pe_sheet.png", guide: "เป็นแผ่นฟิล์มบาง ผิวเรียบ ลื่น และโค้งงอได้",
     testFrames: testFrames("pe_sheet"), sag: [4, 8, 12], residual: 2,
     releaseSummary: "เด้งกลับมาก · เหลือรอยพับเล็กน้อย",
-    waterDrops: [0, 0, 0], waterSummary: "ในแบบจำลอง น้ำเกาะบนผิว ไม่แสดงการดูดซับเข้าเนื้อวัสดุ",
+    waterRiseCm: 0, waterLevel: "none", waterMark: "none", waterSummary: "น้ำสีเกาะบนผิวเรียบ ไม่เห็นรอยน้ำซึมขึ้นในเนื้อฟิล์ม",
     elasticityStretch: [7, 14, 22], elasticityResidual: 3, elasticitySummary: "ยืดได้มากและคืนตัวเร็ว แต่ถ้าดึงแรงจะเหลือรูปยืด",
     motion: { loadMs: 220, releaseMs: 380, easing: "cubic-bezier(.15,.9,.2,1)", releaseEffect: "spring" },
   },
@@ -302,7 +320,7 @@ export const MATERIALS = [
     id: "kraft_paper", name: "กระดาษคราฟต์", image: "kraft_paper_flat.png", guide: "เป็นแผ่นกระดาษสีน้ำตาล ผิวเป็นเส้นใยละเอียด และโค้งงอได้",
     testFrames: testFrames("kraft_paper"), sag: [6, 12, 18], residual: 14,
     releaseSummary: "คืนเล็กน้อย · รอยยับคงอยู่",
-    waterDrops: [3, 7, 12], waterSummary: "เส้นใยกระดาษดูดน้ำเร็วและเสียรูปง่าย",
+    waterRiseCm: 7.4, waterLevel: "high", waterMark: "clear", waterSummary: "เส้นใยกระดาษดูดน้ำเร็วและเสียรูปง่าย",
     elasticityStretch: [2, 5, 8], elasticityResidual: 5, elasticitySummary: "ยืดจากรอยยับได้บ้าง แต่คืนตัวน้อย",
     motion: { loadMs: 160, releaseMs: 240, easing: "cubic-bezier(.3,.6,.4,1)", releaseEffect: "settle" },
   },
@@ -310,7 +328,7 @@ export const MATERIALS = [
     id: "waxed_paper", name: "กระดาษเคลือบไข", image: "waxed_paper_clean.png", guide: "เป็นแผ่นกระดาษบาง ผิวเรียบ และมีชั้นเคลือบ",
     testFrames: testFrames("waxed_paper"), sag: [5, 10, 16], residual: 11,
     releaseSummary: "คืนเล็กน้อย · รอยพับคมคงอยู่",
-    waterDrops: [0, 1, 2], waterSummary: "ไขช่วยชะลอน้ำ แต่รอยพับอาจเป็นทางให้น้ำซึม",
+    waterRiseCm: 1.2, waterLevel: "low", waterMark: "slight", waterSummary: "ไขช่วยชะลอน้ำ แต่รอยพับอาจเป็นทางให้น้ำซึม",
     elasticityStretch: [2, 4, 7], elasticityResidual: 4, elasticitySummary: "ค่อนข้างแข็ง เกิดรอยพับคมและคืนตัวน้อย",
     motion: { loadMs: 200, releaseMs: 280, easing: "cubic-bezier(.3,.65,.35,1)", releaseEffect: "settle" },
   },

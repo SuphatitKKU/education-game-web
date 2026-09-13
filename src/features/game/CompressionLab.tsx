@@ -189,7 +189,6 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
       </CompressionPress3D>
       <div className={styles.experimentMeasurements} role="status" aria-live="polite">
         <p>หนาเริ่มต้น {COMPRESSION_CONDITIONS.initialThicknessMm} มม.</p>
-        <p>{phase === "idle" ? "รอเริ่มทดสอบ" : phase === "lifting" ? "กำลังยกแท่นกด…" : phase === "approach" ? "แท่นกดกำลังเลื่อนลง…" : phase === "pressing" ? "กำลังกดวัสดุ…" : `ยุบ ${formatCompressionMm(materialResult.deformationMm)} มม. · เหลือหนา ${formatCompressionMm(materialResult.loadedThicknessMm)} มม.`}</p>
       </div>
       <div className={styles.progressTrack} aria-hidden="true">{phase !== "idle" && <i className={phase === "pressing" ? styles.progressRunning : phase === "done" ? styles.progressDone : ""} />}</div>
     </section>

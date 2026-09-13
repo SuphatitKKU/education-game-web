@@ -2,13 +2,116 @@
 .welcomeStart:focus-visible { outline: 3px solid #1769ff; outline-offset: 5px; }
 .welcomeScreen .welcomeStart b > span {
   /* Center the visible Itim glyph, including its baseline and side bearing. */
-  transform: translate(-.04cqw, -.34cqw) scaleX(1.2);
+  display: block;
+  font-size: 2.8cqw;
+  font-weight: 400;
+  line-height: .8;
+  transform: translate(0, 0) scaleX(1.15);
 }
+.welcomeScreen .welcomeStart b { display: grid; place-items: center; }
 .welcomeCard {
-  width: 64%;
-  min-height: 62%;
+  width: 70%;
+  min-height: 69%;
   gap: 0;
+  border-color: #ffffff;
+  background: linear-gradient(145deg, #f4fffb 0%, #e0f8ef 58%, #c9eee2 100%);
+  box-shadow: 0 .55cqw 0 #59bfa2, 0 .95cqw 0 #9fdfc9, 0 1.35cqw 2.5cqw #28796538;
 }
+
+.welcomeCard::before { background: #c9f0df; }
+.welcomeCard::after { background: #aee3cf; }
+
+.welcomeMissionBadge {
+  position: relative;
+  top: auto;
+  left: auto;
+  transform: none;
+  margin: 0 0 1.15cqw;
+  border-color: #75c98e;
+  background: linear-gradient(180deg, #f7fff1, #dff7c7);
+  color: #25834d;
+  box-shadow: 0 .22cqw 0 #8bcf72, 0 .32cqw .45cqw #36794a24;
+}
+
+.welcomeScreen .mission-briefing-illustration {
+  margin-top: 0;
+  border-color: #75c98e;
+  background: radial-gradient(circle at 35% 28%, #ffffff 0 24%, #e7fbd1 67%, #bfe8a8 100%);
+  box-shadow: 0 .55cqw 1.05cqw #36794a35;
+}
+
+.welcomeToolIcon {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 6.2cqw;
+  line-height: 1;
+  filter: drop-shadow(0 .25cqw .28cqw #36794a42);
+}
+
+.welcomeCard h1 { color: #287348; }
+.welcomeCopy { color: #466b55; }
+
+.mission3Route {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .7cqw;
+  width: 100%;
+  margin: .55cqw 0 1.05cqw;
+}
+
+.mission3Route article {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: .18cqw;
+  min-height: 6.7cqw;
+  padding: .55cqw .35cqw;
+  border: .15cqw solid #9bdcca;
+  border-radius: 1.15cqw;
+  background: linear-gradient(160deg, #ffffff, #effff9);
+  box-shadow: 0 .28cqw 0 #9bcfbe, 0 .5cqw .75cqw #2879651c;
+  text-align: center;
+}
+
+.mission3Route article:nth-child(2) { border-color: #8ed7c3; background: linear-gradient(160deg, #ffffff, #eafff7); }
+.mission3Route article:nth-child(3) { border-color: #a8dca7; background: linear-gradient(160deg, #ffffff, #f1ffeb); }
+.mission3Route article:nth-child(4) { border-color: #8bcfc0; background: linear-gradient(160deg, #ffffff, #e7fbf4); }
+.mission3Route article:not(:last-child)::after {
+  content: "›";
+  position: absolute;
+  right: -.75cqw;
+  top: 50%;
+  z-index: 2;
+  color: #2aa982;
+  font-size: 2cqw;
+  font-weight: 900;
+  text-shadow: 0 .1cqw 0 #fff;
+  transform: translateY(-50%);
+}
+.mission3Route i {
+  display: grid;
+  place-items: center;
+  width: 2.35cqw;
+  height: 2.35cqw;
+  border-radius: 50%;
+  background: linear-gradient(#45c5a5, #168f7d);
+  color: #fff;
+  font-size: 1.1cqw;
+  font-style: normal;
+  font-weight: 800;
+  box-shadow: 0 .15cqw 0 #147260;
+}
+.mission3Route article:nth-child(1) i { background: linear-gradient(#42bfe7, #217dc3); box-shadow: 0 .15cqw 0 #185e9b; }
+.mission3Route article:nth-child(2) i { background: linear-gradient(#43cda9, #178f7c); box-shadow: 0 .15cqw 0 #147260; }
+.mission3Route article:nth-child(3) i { background: linear-gradient(#ffc04f, #e98227); box-shadow: 0 .15cqw 0 #bd641d; }
+.mission3Route article:nth-child(4) i { background: linear-gradient(#a080e9, #6d54b8); box-shadow: 0 .15cqw 0 #513f91; }
+.mission3Route b { color: #176b57; font-size: .95cqw; line-height: 1.1; }
+.mission3Route span { color: #5c7c71; font-size: .68cqw; line-height: 1.15; }
 
 /* Final visual pass for the Mission 3 evidence board. */
 .dataScreen .dataLayout {
@@ -256,14 +359,14 @@
   color: #1582bc;
   font-size: clamp(14px, 1.45cqw, 22px);
 }
-.welcomeCard h1 { font-size: clamp(26px, 3.05cqw, 46px); line-height: 1.25; }
+.welcomeCard h1 { font-size: clamp(26px, 3.9cqw, 58px); line-height: 1.12; }
 .welcomeCopy {
   position: relative;
   z-index: 1;
   margin: 1.1cqw 0 2cqw;
   color: #4c6879;
-  font-size: clamp(18px, 1.75cqw, 27px);
-  line-height: 1.65;
+  font-size: clamp(18px, 1.85cqw, 29px);
+  line-height: 1.45;
 }
 .welcomeStart {
   min-height: 54px;

@@ -228,6 +228,13 @@ p,small,span,label,input,select,textarea,b,strong{font-family:var(--font-kodchas
 .team-create-screen .team-footer .button{font-size:1.35cqw}
 .team-create-screen .team-footer span{font-size:1.3cqw}
 
+/* Keep the create-team controls below the enlarged team header so the
+   navigation and notice never cover the heading or its subtitle. */
+.team-create-screen .team-mode-tabs{top:10.8cqw}
+.team-create-screen .team-name-field{top:14.9cqw}
+.team-create-screen .team-name-field+.member-grid{top:19.1cqw}
+.team-create-screen>.team-error,.team-create-screen>.supabase-setup-note{top:10.8cqw}
+
 /* Mission 1 briefing: large, easy-to-read entry point for Grade 2. */
 .mission-briefing-back{min-width:17.5cqw;height:5.45cqw;padding:0 1.55cqw;font-size:1.7cqw}
 .mission-briefing-card{width:64%;min-height:63%;padding:3.4cqw 4.5cqw 3.8cqw}
@@ -709,6 +716,13 @@ p,small,span,label,input,select,textarea,b,strong{font-family:var(--font-kodchas
 /* Keep long Thai answer labels inside their fixed answer-bank cells. */
 .matching-kpv-card .answer-bank button{display:flex;align-items:center;justify-content:center;height:100%;min-height:0;padding:.08cqw .2cqw;font-size:.78cqw;line-height:1.05;text-align:center;white-space:normal;overflow:hidden;overflow-wrap:anywhere;word-break:break-word}
 
+/* Grade 2 reading scale: make the answer choices large enough to read before matching. */
+.exit-ticket-layout .matching-kpv-card{grid-template-rows:minmax(0,1.08fr) minmax(0,1.08fr) minmax(0,.7fr) 3.2cqw;row-gap:.7cqw}
+.matching-kpv-card .matching-question{grid-template-rows:auto 4cqw minmax(0,1fr);gap:.3cqw}
+.matching-kpv-card .answer-bank{height:4cqw;padding:.32cqw;gap:.4cqw}
+.matching-kpv-card .answer-bank>b{font-size:1.18cqw}
+.matching-kpv-card .answer-bank button{padding:.18cqw .38cqw;font-size:1.24cqw;line-height:1.13}
+
 /* Box mission — evidence-to-purpose design board for Mission 1. */
 .box-mission-screen{padding:0;background:linear-gradient(145deg,#dff6ff 0%,#f8fcff 52%,#fff4d4 100%);text-align:left;isolation:isolate}
 .box-mission-screen::before{content:"";position:absolute;z-index:0;inset:0;border-radius:0;background-image:radial-gradient(#55b9e51c .12cqw,transparent .12cqw),linear-gradient(110deg,transparent 0 68%,#ffd77825 68% 69%,transparent 69%);background-size:2.1cqw 2.1cqw,100% 100%;pointer-events:none}
@@ -854,6 +868,16 @@ body{overscroll-behavior:none;background:#d9f1ff}
 .game-frame>.loading-screen{min-height:100%;height:100%}
 @supports (height:100dvh){
   .game-viewport{width:min(var(--ipad-mini-width),100vw,133.3333dvh);height:min(var(--ipad-mini-height),75vw,100dvh)}
+}
+
+/* The learning activity is a landscape-only iPad mini 2 experience. */
+.orientation-notice{display:none}
+@media (orientation:portrait){
+  .game-viewport,.compat-diagnostics{visibility:hidden;pointer-events:none}
+  .orientation-notice{position:fixed;z-index:1000;inset:0;display:grid;place-content:center;justify-items:center;gap:1rem;padding:2rem;background:linear-gradient(145deg,#d8f4ff,#fff4c9);color:#17324d;text-align:center}
+  .orientation-notice-icon{display:grid;place-items:center;width:5rem;height:3.75rem;border:.22rem solid currentColor;border-radius:.5rem;font-size:2.5rem;line-height:1;transform:rotate(90deg)}
+  .orientation-notice strong{font-size:clamp(1.5rem,6vw,2.25rem)}
+  .orientation-notice p{max-width:22rem;margin:0;font-size:clamp(1rem,4vw,1.25rem);line-height:1.55}
 }
 
 /* Box mission — compact card board matched to the classroom reference layout. */
@@ -1032,12 +1056,29 @@ body{overscroll-behavior:none;background:#d9f1ff}
 @media (prefers-reduced-motion:reduce){.box-mission-typed-message i{animation:none}}
 
 /* Mission 1 briefing follows the warm orange language of Mission 1 on the route map. */
-.mission-briefing-card{width:64%;min-height:63%;padding:3.4cqw 4.5cqw 3.8cqw;border:.24cqw solid #fff;border-radius:2.7cqw;background:linear-gradient(145deg,#fffdf7 0%,#fff3df 56%,#ffe0ad 100%);box-shadow:0 .55cqw 0 #f28b36,0 .95cqw 0 #ffd34d,0 1.35cqw 2.5cqw #7d421f2d}
+.mission-briefing-card{width:64%;min-height:63%;padding:3.4cqw 4.5cqw 3.8cqw;border:.24cqw solid #fff;border-radius:2.7cqw;background:linear-gradient(145deg,#fffdf7 0%,#fff3df 56%,#ffe0ad 100%);box-shadow:0 .55cqw 0 #f28b36,0 .95cqw 0 #ffd34d,0 1.35cqw 2.5cqw #7d421f2d;will-change:transform,opacity;animation:mission-briefing-pop .56s cubic-bezier(.2,.88,.24,1.2) both}
 .mission-briefing-card::before{background:#ffe6bf}.mission-briefing-card::after{background:#ffd28a}
 .mission-briefing-mission-badge{position:absolute;z-index:2;top:1.85cqw;left:50%;display:inline-flex;align-items:center;justify-content:center;min-width:17.5cqw;padding:.55cqw 1.7cqw;border:.18cqw solid #f0a52e;border-radius:999px;background:linear-gradient(180deg,#fffdf0,#ffedbd);color:#bd5616;font-size:1.65cqw;font-weight:800;box-shadow:0 .22cqw 0 #f3b33d,0 .32cqw .45cqw #7d421f1c;transform:translateX(-50%);white-space:nowrap}
 .mission-briefing-illustration{width:12.2cqw;height:12.2cqw;margin-bottom:1cqw;border:.18cqw solid #f1ad55;background:radial-gradient(circle at 35% 28%,#fffef7 0 24%,#fff2d0 67%,#ffd48d 100%);box-shadow:0 .55cqw 1.05cqw #7d421f2a;overflow:hidden}
 .mission-briefing-box{width:10.9cqw;height:10.9cqw;object-fit:contain;filter:drop-shadow(0 .3cqw .38cqw #60351442)}
 .mission-briefing-search{z-index:1;background:#ff7c2f}.mission-briefing-card h1{font-size:3.9cqw;line-height:1.12;color:#99440f}.mission-briefing-copy{margin:1.05cqw 0 2.5cqw;color:#765342;font-size:1.85cqw;line-height:1.45}
+@keyframes mission-briefing-pop{0%{opacity:0;transform:translateY(3cqw) scale(.78)}68%{opacity:1;transform:translateY(-.45cqw) scale(1.035)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@media (prefers-reduced-motion:reduce){.mission-briefing-card{animation:none}}
+
+/* Mission 1 follows the same four-step roadmap pattern as Missions 2 and 3. */
+.mission-briefing-card{min-height:70%;padding:3.05cqw 4.5cqw 2.8cqw}
+.mission-briefing-illustration{width:10.4cqw;height:10.4cqw;margin-bottom:.55cqw}
+.mission-briefing-box{width:9.2cqw;height:9.2cqw}
+.mission-briefing-card h1{font-size:3.35cqw}
+.mission-briefing-copy{margin:.5cqw 0 1.1cqw;font-size:1.55cqw}
+.mission-one-route{position:relative;z-index:1;width:100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8cqw;margin:0 0 1.45cqw}
+.mission-one-route article{position:relative;min-width:0;min-height:8cqw;display:grid;justify-items:center;align-content:center;gap:.28cqw;padding:.55cqw .35cqw;border:.16cqw solid #f2a33b;border-radius:1.2cqw;background:linear-gradient(160deg,#fffdf5,#fff3d5);box-shadow:0 .3cqw 0 #dfaa3f,0 .55cqw .85cqw #7d421f20;text-align:center}
+.mission-one-route article:not(:last-child)::after{content:"›";position:absolute;right:-.87cqw;top:50%;z-index:2;color:#f28a1f;font-size:2.25cqw;font-weight:900;line-height:1;text-shadow:0 .12cqw 0 #fff;transform:translateY(-50%)}
+.mission-one-route i{display:grid;place-items:center;width:2.6cqw;height:2.6cqw;border-radius:50%;background:linear-gradient(#35bce4,#176fc1);box-shadow:0 .16cqw 0 #135b9b;color:#fff;font-size:1.25cqw;font-style:normal;font-weight:800}
+.mission-one-route b{color:#99440f;font-size:1.38cqw;line-height:1.1}.mission-one-route span{color:#765342;font-size:1cqw;line-height:1.15}
+.mission-one-route article:nth-child(2) i{background:linear-gradient(#36cda7,#178f7c);box-shadow:0 .16cqw 0 #147260}
+.mission-one-route article:nth-child(3) i{background:linear-gradient(#ffbd45,#ed7d25);box-shadow:0 .16cqw 0 #c4651d}
+.mission-one-route article:nth-child(4) i{background:linear-gradient(#9a7be4,#6750b5);box-shadow:0 .16cqw 0 #4e3c94}
 
 .compat-diagnostics{position:fixed;z-index:9999;right:10px;top:10px;width:min(350px,calc(100vw - 20px));max-height:calc(100vh - 20px);overflow:auto;padding:12px;border:2px solid #63c9ef;border-radius:14px;background:#fffffff5;color:#173e59;box-shadow:0 10px 32px #08263d55;font:12px/1.4 system-ui,-apple-system,sans-serif;text-align:left}
 .compat-diagnostics header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.compat-diagnostics header b{font-size:15px}.compat-diagnostics header button{width:28px;height:28px;border:0;border-radius:50%;background:#e5f3fa;color:#173e59;font-size:20px}
@@ -1057,10 +1098,25 @@ body{overscroll-behavior:none;background:#d9f1ff}
 .mission-two-question-backdrop{position:absolute;z-index:30;inset:0;display:grid;place-items:center;padding:4cqw;background:#153b5e80;backdrop-filter:blur(.36cqw);animation:mission-two-question-fade .2s ease-out both}
 .mission-two-question-popup{position:relative;width:min(66cqw,86%);padding:3.2cqw 4.6cqw 3.5cqw;border:.22cqw solid #fff;border-radius:2.25cqw;background:linear-gradient(145deg,#fff8cd 0%,#fffdf3 72%,#fff2bd 100%);box-shadow:0 .6cqw 0 #edb64c,0 1.15cqw 2.4cqw #102f4b55;text-align:center;animation:mission-two-question-pop .3s cubic-bezier(.2,.85,.25,1) both}
 .mission-two-question-popup::before,.mission-two-question-popup::after{content:"✦";position:absolute;color:#ffad32;font-size:1.8cqw;text-shadow:.08cqw .08cqw 0 #fff}.mission-two-question-popup::before{left:1.2cqw;top:1cqw}.mission-two-question-popup::after{right:1.3cqw;bottom:.95cqw;color:#72c9ec}
-.mission-two-question-close{position:absolute;z-index:1;right:1.1cqw;top:1cqw;display:grid;width:2.8cqw;height:2.8cqw;place-items:center;border:.14cqw solid #e4b252;border-radius:50%;background:#fff9df;color:#9b6a16;font:inherit;font-size:1.7cqw;font-weight:800;line-height:1;cursor:pointer}
 .mission-two-question-label{display:inline-flex;padding:.3cqw 1cqw;border-radius:999px;background:linear-gradient(135deg,#ffad35,#ff7b2d);box-shadow:0 .18cqw 0 #d76a25;color:#fff;font-size:1.02cqw;font-weight:800}
 .mission-two-question-popup h2{margin:1cqw 0 .45cqw;color:#713b12;font-size:2.05cqw;line-height:1.25}
 .mission-two-question-popup p{margin:0;color:#745f38;font-size:1.15cqw;line-height:1.45}
 .mission-two-question-start{min-width:21cqw;min-height:5cqw;margin-top:1.55cqw;font-size:1.32cqw}
 @keyframes mission-two-question-fade{from{opacity:0}to{opacity:1}}
 @keyframes mission-two-question-pop{from{opacity:0;transform:translateY(1.5cqw) scale(.9)}to{opacity:1;transform:none}}
+
+/* Match the Mission 1 briefing card: warm frame, prominent mission badge, and three separate lab icons. */
+.mission-two-welcome-card{width:76cqw;height:70%;justify-content:flex-start;padding:0 2.8cqw 2cqw;border:.24cqw solid #f2b33d;border-radius:2.7cqw;background:linear-gradient(145deg,#fffdf7 0%,#fff3df 56%,#ffe0ad 100%);box-shadow:0 .55cqw 0 #e8a332,0 .95cqw 0 #ffd34d,0 1.35cqw 2.5cqw #7d421f2d}
+.mission-two-welcome-card::before{background:#ffe6bf}.mission-two-welcome-card::after{background:#ffd28a}
+.mission-two-welcome-label{position:absolute;z-index:2;top:1.7cqw;left:50%;order:initial;min-width:20cqw;margin:0;padding:.62cqw 1.9cqw;border:.18cqw solid #f0a52e;border-radius:999px;background:linear-gradient(180deg,#fffdf0,#ffedbd);box-shadow:0 .22cqw 0 #f3b33d,0 .32cqw .45cqw #7d421f1c;color:#bd5616;font-size:1.85cqw;font-weight:800;transform:translateX(-50%);white-space:nowrap}
+.mission-two-welcome-illustrations{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:1.05cqw;margin-top:10.7cqw;height:12.2cqw}
+.mission-two-welcome-illustrations>span{display:grid;width:10.2cqw;height:10.2cqw;place-items:center;border:.18cqw solid #f1ad55;border-radius:50%;background:radial-gradient(circle at 35% 28%,#fffef7 0 24%,#fff2d0 67%,#ffd48d 100%);box-shadow:0 .55cqw 1.05cqw #7d421f2a;overflow:hidden}
+.mission-two-welcome-illustrations .mission-two-lab-icon{display:block;width:8.35cqw;height:8.35cqw;object-fit:contain;filter:drop-shadow(0 .3cqw .38cqw #60351442)}
+.mission-two-welcome-card>h1{max-width:74cqw;margin:.55cqw 0 0;color:#99440f;font-size:3.9cqw;line-height:1.14;text-shadow:.1cqw .12cqw 0 #fff}
+.mission-two-welcome-copy{margin:.48cqw 0 .75cqw;color:#765342;font-size:1.85cqw;font-weight:600;line-height:1.45;white-space:normal}
+.mission-two-welcome-card>.mission-two-route{margin:.7cqw 0 1.25cqw}
+.mission-two-welcome-card>.mission-two-primary{min-width:23cqw;min-height:6.3cqw;height:6.3cqw;margin:0;gap:1.15cqw;padding:.6cqw 1.55cqw .6cqw 1.9cqw;border-radius:2.85cqw;font-size:2cqw}
+.mission-two-welcome-card>.mission-two-primary b{display:grid;flex:0 0 3.6cqw;width:3.6cqw;height:3.6cqw;margin:0;place-items:center;border-radius:50%;background:#fff;color:#ff6428;box-shadow:0 .1cqw .25cqw #ba481724}
+.mission-two-welcome-card>.mission-two-primary b>svg{display:block;width:1.7cqw;height:1.7cqw;fill:none;stroke:currentColor;stroke-width:3.25;stroke-linecap:round;stroke-linejoin:round}
+.mission-two-welcome-card>.mission-two-route article,.mission-two-welcome-card>.mission-two-route article:nth-child(2),.mission-two-welcome-card>.mission-two-route article:nth-child(3),.mission-two-welcome-card>.mission-two-route article:nth-child(4){border-color:#f2a33b;background:linear-gradient(160deg,#fffdf5,#fff3d5);box-shadow:0 .42cqw 0 #dfaa3f,0 .8cqw 1.15cqw #7d421f20}
+.mission-two-welcome-card>.mission-two-route article:hover{border-color:#ed8c21;box-shadow:0 .42cqw 0 #d78b24,0 .8cqw 1.15cqw #7d421f20}

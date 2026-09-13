@@ -117,6 +117,11 @@ function IpadMiniCanvas({ children }: { children: ReactNode }) {
       <section className="game-viewport">
         <div className="game-frame" aria-live="polite">{children}</div>
       </section>
+      <aside className="orientation-notice" role="status" aria-live="assertive">
+        <span className="orientation-notice-icon" aria-hidden="true">▭</span>
+        <strong>หมุน iPad เป็นแนวนอน</strong>
+        <p>เกมนี้ออกแบบให้เล่นเต็มจอที่ขนาด iPad mini 2 (1024 × 768)</p>
+      </aside>
       <CompatibilityDiagnostics />
     </main>
   );
@@ -225,6 +230,11 @@ export function GameApp() {
     const previewMode = new URLSearchParams(window.location.search).get("preview");
     if (previewMode === "labs") {
       setLabPreview(true);
+      setLoaded(true);
+      return;
+    }
+    if (previewMode === "mission1") {
+      setSave({ ...EMPTY_SAVE, stage: "mission" });
       setLoaded(true);
       return;
     }
@@ -831,6 +841,12 @@ function MissionRoute({ onBack, onDone }: { onBack: () => void; onDone: () => vo
         </div>
         <h1>ไขปริศนากล่องพัสดุเสียหาย</h1>
         <p className="mission-briefing-copy">ติดตามเส้นทางของกล่อง แล้วค้นหาว่าเกิดความเสียหายอะไรขึ้นบ้าง</p>
+        <div className="mission-one-route" aria-label="ลำดับภารกิจที่ 1">
+          <article><i>1</i><b>ติดตาม</b><span>ดูเส้นทางพัสดุ</span></article>
+          <article><i>2</i><b>สำรวจ</b><span>ค้นหาร่องรอย</span></article>
+          <article><i>3</i><b>กำหนด</b><span>เลือกหน้าที่กล่อง</span></article>
+          <article><i>4</i><b>สรุป</b><span>เลือกสมบัติที่ต้องศึกษา</span></article>
+        </div>
         <button className="button button-orange mission-briefing-start" type="button" onClick={onDone}>
           เริ่มติดตามพัสดุ
           <b aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></svg></b>
@@ -2483,19 +2499,21 @@ function MissionTwoIntro({ onBack, onStart }: { onBack: () => void; onStart: () 
     <button className="mission-briefing-back mission-two-welcome-back" type="button" onClick={onBack}>‹ กลับหน้าภารกิจ</button>
     <main className="mission-two-welcome-card">
       <span className="mission-two-welcome-label">ภารกิจที่ 2</span>
-      <div className="mission-briefing-illustration mission-two-welcome-illustration" aria-hidden="true">
-        <img className="mission-two-lab-icon" src={asset("menu/lab-room-compression.png")} alt="" />
-        <img className="mission-two-lab-icon" src={asset("menu/lab-room-impact.png")} alt="" />
-        <img className="mission-two-lab-icon" src={asset("menu/lab-room-absorption.png")} alt="" />
+      <div className="mission-two-welcome-illustrations" aria-hidden="true">
+        <span><img className="mission-two-lab-icon" src={asset("menu/lab-room-compression.png")} alt="" /></span>
+        <span><img className="mission-two-lab-icon" src={asset("menu/lab-room-impact.png")} alt="" /></span>
+        <span><img className="mission-two-lab-icon" src={asset("menu/lab-room-absorption.png")} alt="" /></span>
       </div>
       <h1>สำรวจ 3 สมบัติลับของวัสดุทั้ง 5 ชนิด</h1>
-      <p className="mission-two-welcome-copy">วันนี้ทีมจะใช้ผลการทดลองเป็นหลักฐาน<br />ก่อนเลือกวัสดุสำหรับสร้างกล่องพัสดุ</p>
+      <p className="mission-two-welcome-copy">ทดลองแรงกด แรงกระแทก และน้ำ</p>
       <div className="mission-two-route" aria-label="เส้นทางภารกิจที่ 2"><article><i>1</i><b>ทดลอง</b><span>ทดสอบวัสดุ 5 ชนิด</span></article><article><i>2</i><b>บันทึก</b><span>เก็บหลักฐานของทีม</span></article><article><i>3</i><b>เปรียบเทียบ</b><span>อ่านผลจากตาราง</span></article><article><i>4</i><b>สรุป</b><span>ตอบคำถามทบทวน</span></article></div>
-      <button className="button button-orange mission-two-primary" type="button" onClick={() => setShowQuestion(true)}>ถัดไป ›</button>
+      <button className="button button-orange mission-briefing-start mission-two-primary" type="button" onClick={() => setShowQuestion(true)}>
+        ถัดไป
+        <b aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></svg></b>
+      </button>
     </main>
-    {showQuestion && <div className="mission-two-question-backdrop" role="presentation">
+    {showQuestion && <div className="mission-two-question-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setShowQuestion(false); }}>
       <section className="mission-two-question-popup" role="dialog" aria-modal="true" aria-labelledby="mission-two-question-title">
-        <button className="mission-two-question-close" type="button" onClick={() => setShowQuestion(false)} aria-label="ย้อนกลับไปหน้าภารกิจที่ 2">‹</button>
         <span className="mission-two-question-label">คำถามสำคัญของภารกิจ</span>
         <h2 id="mission-two-question-title">วัสดุชนิดใดเหมาะกับการรับแรงกด ลดแรงกระแทก และช่วยป้องกันน้ำ?</h2>
         <p>ทดลองภายใต้เงื่อนไขเดียวกัน บันทึกผล แล้วเปรียบเทียบอย่างมีเหตุผล</p>

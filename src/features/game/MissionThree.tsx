@@ -32,7 +32,7 @@ const GOALS = [
   ["♻️", "ใช้วัสดุเก่าให้คุ้มค่า"],
 ] as const;
 
-const STEPS = ["รับภารกิจ", "อ่านหลักฐาน", "เลือกตามหน้าที่", "ออกแบบสามมิติ", "บันทึกเหตุผล", "สรุปและไปทดสอบจริง"] as const;
+const STEPS = ["รับภารกิจ", "อ่านหลักฐาน", "ออกแบบและเลือกวัสดุ", "สรุปและเตรียมสร้างจริง"] as const;
 
 function asset(path: string) {
   const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -53,7 +53,7 @@ function formatImpact(save: GameSave, materialId: string) {
 
 function formatWater(save: GameSave, materialId: string) {
   const result = save.absorptionResults?.[materialId];
-  return result ? `ดูดซับ ${result.absorbed} หน่วย` : "ยังไม่มีผล";
+  return result ? result.riseCm !== undefined ? `รอยเปียก ${result.riseCm.toFixed(1)} ซม. · ${result.modelLevel ?? "ยังไม่จัดกลุ่ม"}` : `ดูดซับ ${result.absorbed ?? 0} หน่วย` : "ยังไม่มีผล";
 }
 
 function evidenceFor(save: GameSave, materialId: string, evidence: (typeof ROLE_DEFINITIONS)[number]["evidence"]) {
@@ -108,13 +108,18 @@ function MissionThreeIntro({ onNext, onBack }: { onNext: () => void; onBack: () 
     <MissionThreeProgress active={1} />
     <main key={showGoals ? "goals" : "welcome"} className={`mission-briefing-card ${styles.welcomeCard} ${showGoals ? styles.goalsCard : ""}`}>
       {!showGoals ? <>
+        <span className={`mission-briefing-mission-badge ${styles.welcomeMissionBadge}`}>ภารกิจที่ 3</span>
         <div className="mission-briefing-illustration" aria-hidden="true">
-          <img className="mission-briefing-box" src={asset("menu/mission-briefing-box.png")} alt="" />
-          <span className="mission-briefing-search">✏️</span>
+          <span className={styles.welcomeToolIcon}>🛠️</span>
         </div>
-        <span className={styles.welcomeLabel}>ภารกิจที่ 3</span>
-        <h1>นักออกแบบกล่องพัสดุ</h1>
-        <p className={styles.welcomeCopy}>มาเลือกวัสดุและออกแบบกล่อง<br />ให้ของข้างในปลอดภัยกัน!</p>
+        <h1>ออกแบบและสร้างกล่องพัสดุ</h1>
+        <p className={styles.welcomeCopy}>มาเลือกวัสดุและออกแบบกล่องพัสดุของเรากัน</p>
+        <div className={styles.mission3Route} aria-label="เส้นทางภารกิจที่ 3">
+          <article><i>1</i><b>รับภารกิจ</b><span>รู้โจทย์ของกล่อง</span></article>
+          <article><i>2</i><b>อ่านหลักฐาน</b><span>ดูผลจากภารกิจที่ 2</span></article>
+          <article><i>3</i><b>ออกแบบ</b><span>เลือกวัสดุและวาดแบบ</span></article>
+          <article><i>4</i><b>สรุป</b><span>เตรียมสร้างจริง</span></article>
+        </div>
         <button className={`button button-orange mission-briefing-start ${styles.welcomeStart}`} type="button" onClick={() => setShowGoals(true)}>รับภารกิจ <b aria-hidden="true"><span>›</span></b></button>
       </> : <>
         <span className={styles.welcomeLabel}>เป้าหมายของทีมเรา</span>
@@ -227,7 +232,7 @@ function MissionThreeDesign({ save, onPatch, onNext, onBack }: { save: GameSave;
   const active = ROLE_DEFINITIONS.find((role) => role.key === activePart) ?? ROLE_DEFINITIONS[0];
   const activeMaterial = materialById(save.mission3Selections?.[active.key]);
   return <div className={`${styles.screen} ${styles.designScreen}`}>
-    <ScreenHeader step={4} title="ออกแบบสามมิติและแผนการสร้าง" subtitle="กำหนดขนาด ระบุตำแหน่งส่วนประกอบ จุดพับ และลำดับการสร้างให้ทีมทำงานตรงกัน" onBack={onBack} />
+    <ScreenHeader step={3} title="ออกแบบสามมิติและแผนการสร้าง" subtitle="กำหนดขนาด ระบุตำแหน่งส่วนประกอบ จุดพับ และลำดับการสร้างให้ทีมทำงานตรงกัน" onBack={onBack} />
     <main className={styles.designLayout}>
       <BoxBlueprint save={save} activePart={activePart} onSelect={setActivePart} />
       <section className={styles.designControls}>
@@ -249,7 +254,7 @@ function MissionThreeReason({ save, onPatch, onComplete, onBack }: { save: GameS
   const ready = reason.trim().length >= 24 && alternative.trim().length >= 12;
   const addEvidence = (text: string) => onPatch({ mission3Reason: reason ? `${reason.trim()} ${text}` : text });
   return <div className={`${styles.screen} ${styles.reasonScreen}`}>
-    <ScreenHeader step={5} title="เหตุผลของทีม" subtitle="บอกให้ชัดว่าเลือกวัสดุอะไร ทำหน้าที่ใด และผลการทดลองข้อใดสนับสนุนการตัดสินใจ" onBack={onBack} />
+    <ScreenHeader step={4} title="เหตุผลของทีม" subtitle="บอกให้ชัดว่าเลือกวัสดุอะไร ทำหน้าที่ใด และผลการทดลองข้อใดสนับสนุนการตัดสินใจ" onBack={onBack} />
     <main className={styles.reasonLayout}>
       <section className={styles.reasonCard}>
         <div className={styles.sectionTitle}><b>บันทึกเสียงของทีมเป็นข้อความ</b><small>เขียนด้วยภาษาของทีมได้เลย</small></div>
