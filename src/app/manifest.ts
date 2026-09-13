@@ -11,7 +11,7 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "เกมเรียนรู้การออกแบบกล่องพัสดุสำหรับเด็ก",
     start_url: `${BASE_PATH}/`,
     scope: `${BASE_PATH}/`,
-    display: "standalone",
+    display: "fullscreen",
     orientation: "landscape",
     background_color: "#d9f1ff",
     theme_color: "#1769ff",

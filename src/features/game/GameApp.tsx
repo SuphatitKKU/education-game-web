@@ -87,33 +87,35 @@ function asset(path: string) {
 }
 
 function useIpadMiniCanvasScale() {
+  const viewportRef = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
     const updateScale = () => {
-      const visualViewport = window.visualViewport;
-      const viewportWidth = visualViewport?.width ?? window.innerWidth;
-      const viewportHeight = visualViewport?.height ?? window.innerHeight;
-      // iPad's installed-web-app viewport is a little shorter than 768px when
-      // the system status area is present. Scale each axis to the available
-      // viewport so the 1024×768 learning canvas reaches every app edge.
+      const bounds = viewportRef.current?.getBoundingClientRect();
+      const viewportWidth = bounds?.width ?? window.innerWidth;
+      const viewportHeight = bounds?.height ?? window.innerHeight;
       document.documentElement.style.setProperty("--ipad-mini-scale-x", String(Math.max(viewportWidth / IPAD_MINI_CANVAS_WIDTH, 0.01)));
       document.documentElement.style.setProperty("--ipad-mini-scale-y", String(Math.max(viewportHeight / IPAD_MINI_CANVAS_HEIGHT, 0.01)));
     };
 
     updateScale();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateScale);
+    if (viewportRef.current) observer?.observe(viewportRef.current);
     window.addEventListener("resize", updateScale);
-    window.visualViewport?.addEventListener("resize", updateScale);
     return () => {
+      observer?.disconnect();
       window.removeEventListener("resize", updateScale);
-      window.visualViewport?.removeEventListener("resize", updateScale);
     };
   }, []);
+
+  return viewportRef;
 }
 
 function IpadMiniCanvas({ children }: { children: ReactNode }) {
-  useIpadMiniCanvasScale();
+  const viewportRef = useIpadMiniCanvasScale();
   return (
     <main className="app-shell">
-      <section className="game-viewport">
+      <section className="game-viewport" ref={viewportRef}>
         <div className="game-frame" aria-live="polite">{children}</div>
       </section>
       <FullscreenInstallHelp />
