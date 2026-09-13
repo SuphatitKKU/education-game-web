@@ -114,6 +114,23 @@
 .mission3Route b { color: #176b57; font-size: 1.18cqw; line-height: 1.1; }
 .mission3Route span { color: #5c7c71; font-size: .86cqw; line-height: 1.15; }
 
+/* Keep the mission route cards consistent with Mission 1's orange activity
+   path while retaining Mission 3's blue/green/purple numbered markers. */
+.mission3Route article,
+.mission3Route article:nth-child(2),
+.mission3Route article:nth-child(3),
+.mission3Route article:nth-child(4) {
+  min-height: 8cqw;
+  padding: .55cqw .35cqw;
+  border-color: #f2a33b;
+  border-radius: 1.2cqw;
+  background: linear-gradient(160deg, #fffdf5, #fff3d5);
+  box-shadow: 0 .3cqw 0 #dfaa3f, 0 .55cqw .85cqw #7d421f20;
+}
+.mission3Route article:not(:last-child)::after { right: -.87cqw; color: #f28a1f; font-size: 2.25cqw; text-shadow: 0 .12cqw 0 #fff; }
+.mission3Route b { color: #99440f; font-size: 1.38cqw; }
+.mission3Route span { color: #765342; font-size: 1cqw; }
+
 /* Final visual pass for the Mission 3 evidence board. */
 .dataScreen .dataLayout {
   height: 64%;
@@ -531,7 +548,7 @@
   z-index: 75;
   top: 1.05cqw;
   right: 6.9cqw;
-  width: 18.5cqw;
+  width: 17.6cqw;
   height: 5.25cqw;
   padding: .62cqw .78cqw .72cqw;
   overflow: hidden;
@@ -563,7 +580,7 @@
 .progressHeading b {
   padding: .17cqw .48cqw;
   border-radius: 999px;
-  background: #18a99e;
+  background: #176fe0;
   color: #fff;
   font-size: .68cqw;
 }

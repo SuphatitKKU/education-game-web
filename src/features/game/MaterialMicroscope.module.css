@@ -86,6 +86,44 @@
 .continuousZoom[data-material="closed-cell-pe-foam"] .note,
 .continuousZoom[data-material="pe-sheet"] .note { left: 1cqw; max-width: calc(100% - 22cqw); transform: none; white-space: normal; line-height: 1.25; }
 
+/* Grade 2 readability: keep every blue callout easy to tap and read on the
+   material close-up views.  The labels are intentionally larger than the
+   surrounding microscope controls because they carry the observation names. */
+.hotspot {
+  gap: .55cqw;
+  min-height: 3.15cqw;
+  padding: .52cqw .92cqw .52cqw .48cqw;
+  border-width: .18cqw;
+  box-shadow: 0 .32cqw .8cqw #001a;
+}
+.hotspot b {
+  width: 2.25cqw;
+  height: 2.25cqw;
+  font-size: 1.18cqw;
+}
+.hotspot span {
+  font-size: 1.12cqw;
+  line-height: 1.15;
+}
+.hotspot::after {
+  width: .2cqw;
+  height: 1.8cqw;
+}
+.hotspot::before {
+  top: calc(100% + 1.62cqw);
+  width: .86cqw;
+  height: .86cqw;
+  border-width: .2cqw;
+}
+.readout { gap: .22cqw; padding: .8cqw 1.05cqw; }
+.readout span { font-size: .95cqw; }
+.readout b { font-size: 1.22cqw; }
+.panControls { gap: .5cqw; padding: .45cqw; }
+.panControls span { font-size: .84cqw; }
+.panControls button { width: 2.35cqw; height: 2.35cqw; font-size: 1.55cqw; }
+.continuousPath { font-size: .78cqw; }
+.note { padding: .62cqw 1.05cqw; font-size: .84cqw; }
+
 @keyframes zoomLayerIn {
   from { opacity: .25; transform: scale(1.06); }
   to { opacity: 1; transform: scale(1); }

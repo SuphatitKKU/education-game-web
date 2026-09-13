@@ -1,7 +1,7 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const CSS_OUTPUT = join(process.cwd(), "out", "_next", "static", "chunks");
+const STATIC_OUTPUT = join(process.cwd(), "out", "_next", "static");
 const HTML_OUTPUT = join(process.cwd(), "out");
 const LEGACY_CANVAS_ASPECT = 4 / 3;
 const LEGACY_GLOBALS_BOOTSTRAP = `<script id="legacy-browser-globals-bootstrap">(function(root){if(typeof root.globalThis === "undefined"){root.globalThis=root;}})(typeof self !== "undefined" ? self : window);</script>`;
@@ -53,7 +53,7 @@ async function cssFiles(directory) {
   return nested.flat();
 }
 
-const files = await cssFiles(CSS_OUTPUT);
+const files = await cssFiles(STATIC_OUTPUT);
 let fallbackCount = 0;
 for (const file of files) {
   const original = await readFile(file, "utf8");

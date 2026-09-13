@@ -40,3 +40,9 @@
 .mission4>button{border:4px solid #8f57db}.mission4 .number,.mission4 .label::before{background:#8f57db}.mission4 .label{border:2px solid #8f57db}.mission4 .label b{color:#7042b1}
 .mission5>button{border:4px solid #55a92e}.mission5 .number,.mission5 .label::before{background:#55a92e}.mission5 .label{border:2px solid #55a92e}.mission5 .label b{color:#438825}
 .locked>button{border-color:#93a1b0}.locked .label{border-color:#aab8c8}.locked .label b{color:#667c90}
+
+/* Compact the overview title card so the heading sits in a tighter frame. */
+.header{left:26%;right:26%;top:2.2%;height:16.5%;padding-top:.6cqw}
+.headerSparkles,.headerPackage{width:2.2cqw;height:2.2cqw}
+.headerSparkles{left:1.8cqw}.headerPackage{right:1.8cqw}
+.header{display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:0}

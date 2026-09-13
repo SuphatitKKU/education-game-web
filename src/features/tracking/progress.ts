@@ -28,6 +28,7 @@ export const ACTIVE_STAGE_ORDER: Stage[] = [
 
 export const STAGE_LABELS: Record<Stage, string> = {
   menu: "หน้าปก",
+  purpose: "คำถามใหญ่และเป้าหมาย",
   overview: "เส้นทาง 5 ภารกิจ",
   team: "จัดทีม",
   mission: "รับภารกิจและติดตามพัสดุ",

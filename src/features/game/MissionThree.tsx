@@ -77,14 +77,14 @@ function MissionThreeProgress({ active }: { active: number }) {
     return () => window.clearTimeout(timer);
   }, [active, expanded]);
 
-  return <aside className={`${styles.missionProgress} ${expanded ? "" : styles.progressCollapsed}`} role="status" aria-label={`ภารกิจที่ 3 ขั้นที่ ${active} จาก ${STEPS.length} ${stepLabel}`}>
+  return <aside className={`${styles.missionProgress} ${expanded ? "" : styles.progressCollapsed}`} role="status" aria-label={`ภารกิจที่ 3 ช่วงที่ ${active} จาก ${STEPS.length} ${stepLabel}`}>
     {expanded ? <div className={styles.progressDetails}>
-      <div className={styles.progressHeading}><span>ภารกิจที่ 3</span><b>ขั้นที่ {active}/{STEPS.length}</b></div>
+      <div className={styles.progressHeading}><span>ภารกิจที่ 3</span><b>ช่วงที่ {active}/{STEPS.length}</b></div>
       <strong><AppIcon name="package" />{stepLabel}</strong>
-      <div className={styles.progressTrack} role="progressbar" aria-label="ความคืบหน้าภารกิจที่ 3" aria-valuemin={1} aria-valuemax={6} aria-valuenow={active}>
+      <div className={styles.progressTrack} role="progressbar" aria-label="ความคืบหน้าภารกิจที่ 3" aria-valuemin={1} aria-valuemax={STEPS.length} aria-valuenow={active}>
         <i style={{ width: `${Math.round((active / STEPS.length) * 100)}%` }} />
       </div>
-    </div> : <button className={styles.progressToggle} type="button" aria-label={`เปิดดูความคืบหน้า ขั้นที่ ${active} จาก ${STEPS.length}`} onClick={() => setExpanded(true)}>
+    </div> : <button className={styles.progressToggle} type="button" aria-label={`เปิดดูความคืบหน้า ช่วงที่ ${active} จาก ${STEPS.length}`} onClick={() => setExpanded(true)}>
       <span aria-hidden="true">•••</span>
     </button>}
   </aside>;

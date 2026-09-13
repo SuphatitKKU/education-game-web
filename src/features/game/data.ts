@@ -1,4 +1,4 @@
-export type Stage = "menu" | "overview" | "team" | "mission" | "story" | "inspection" | "boxMission" | "materials" | "studyFocus" | "exitTicket" | "mission1Complete" | "mission2Intro" | "testHub" | "compression" | "absorption" | "elasticity" | "impact" | "notebook" | "comparison" | "recap" | "mission2Complete" | "mission3Intro" | "mission3Data" | "mission3Materials" | "mission3Design" | "mission3Reason" | "mission3Complete" | "prediction" | "summary";
+export type Stage = "menu" | "purpose" | "overview" | "team" | "mission" | "story" | "inspection" | "boxMission" | "materials" | "studyFocus" | "exitTicket" | "mission1Complete" | "mission2Intro" | "testHub" | "compression" | "absorption" | "elasticity" | "impact" | "notebook" | "comparison" | "recap" | "mission2Complete" | "mission3Intro" | "mission3Data" | "mission3Materials" | "mission3Design" | "mission3Reason" | "mission3Complete" | "prediction" | "summary";
 
 export type DamageCause = "แรงกด" | "แรงกระแทก" | "น้ำ";
 

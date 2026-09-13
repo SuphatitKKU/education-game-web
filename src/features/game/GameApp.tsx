@@ -56,13 +56,6 @@ const SAVE_KEY = "parcel-lab-web-save-v1";
 const STATS_KEY = "parcel-lab-group-design-statistics-v1";
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const PREDICTION_ENABLED = false;
-// Mission 2 is the material-testing workspace. Keep it available from the
-// mission map so teachers can select an existing team and continue working
-// without having to replay mission 1 first.
-const MISSION_TWO_AVAILABLE = true;
-// Keep Mission 3 available from the mission map so teams can enter it
-// directly while the three mission screens are being tested together.
-const MISSION_THREE_AVAILABLE = true;
 const DISABLED_LAB_STAGES = new Set<Stage>(LAB_STAGES);
 const MISSION_ONE_BIG_QUESTION_PROGRESS = "เราทราบแล้วว่าต้องศึกษาสมบัติ 3 ด้าน แต่ยังไม่ทราบว่าวัสดุชนิดใดเหมาะกับแต่ละหน้าที่";
 const MISSION_ONE_PHASES: Partial<Record<Stage, { step: number; label: string; icon: AppIconName }>> = {
@@ -238,10 +231,10 @@ export function GameApp() {
   const [loaded, setLoaded] = useState(false);
   const [labPreview, setLabPreview] = useState(false);
   const [selectedMission, setSelectedMission] = useState<MissionNumber>(1);
-  const [animateMission2Unlock, setAnimateMission2Unlock] = useState(false);
+  const [unlockingMission, setUnlockingMission] = useState<MissionNumber | null>(null);
   const [activeRun, setActiveRun] = useState<ActiveRunRef | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<TeamOverview | null>(null);
-  const [saveIndicator, setSaveIndicator] = useState<SaveIndicator>("idle");
+  const [, setSaveIndicator] = useState<SaveIndicator>("idle");
   const [legacyBundle, setLegacyBundle] = useState<LegacyBundle>({ save: null, statistics: [] });
   const bgmRef = useRef<HTMLAudioElement>(null);
   const activeRunIdRef = useRef<string | null>(null);
@@ -253,6 +246,11 @@ export function GameApp() {
 
   useEffect(() => {
     const previewMode = new URLSearchParams(window.location.search).get("preview");
+    if (previewMode === "purpose") {
+      setSave({ ...EMPTY_SAVE, stage: "purpose" });
+      setLoaded(true);
+      return;
+    }
     if (previewMode === "labs") {
       setLabPreview(true);
       setLoaded(true);
@@ -439,7 +437,8 @@ export function GameApp() {
   };
   const goBack = () => {
     if (labRoomsPaused) { go("exitTicket"); return; }
-    if (save.stage === "overview") { go("menu"); return; }
+    if (save.stage === "purpose") { go("menu"); return; }
+    if (save.stage === "overview") { go("purpose"); return; }
     if (save.stage === "team") { go("overview"); return; }
     if (save.stage === "mission") { leaveRunToTeams(); return; }
     if (save.stage === "story") {
@@ -497,8 +496,9 @@ export function GameApp() {
   return (
     <IpadMiniCanvas>
       <audio ref={bgmRef} className="game-bgm" src={asset("audio/happy_clappy_loop.ogg")} autoPlay loop muted={!save.audio} />
-        {save.stage === "menu" && <MainMenu onStart={() => go("overview")} onLabs={() => setLabPreview(true)} />}
-        {save.stage === "overview" && <MissionOverview mission2Unlocked={MISSION_TWO_AVAILABLE} mission3Unlocked={MISSION_THREE_AVAILABLE} mission4Unlocked={save.mission3Completed} mission1Answer={save.bigQuestionProgress.mission1} animateMission2Unlock={animateMission2Unlock} onUnlockAnimationDone={() => setAnimateMission2Unlock(false)} onBack={() => go("menu")} onSelect={openMission} />}
+        {save.stage === "menu" && <MainMenu onStart={() => go("purpose")} onLabs={() => setLabPreview(true)} />}
+        {save.stage === "purpose" && <MissionPurpose onBack={() => go("menu")} onDone={() => { setUnlockingMission(1); go("overview"); }} />}
+        {save.stage === "overview" && <MissionOverview mission2Unlocked={save.mission1Completed} mission3Unlocked={save.mission2Completed} mission1Answer={save.bigQuestionProgress.mission1} unlockingMission={unlockingMission} onUnlockAnimationDone={() => setUnlockingMission(null)} onBack={() => go("purpose")} onSelect={openMission} />}
         {labRoomsPaused && <LabRoomsPaused onContinue={() => go(PREDICTION_ENABLED ? "prediction" : "summary")} />}
         {!labRoomsPaused && save.stage === "team" && <TeamSetup initial={save.team} legacyBundle={legacyBundle} legacyAlreadyImported={wasLegacyImported()} onBack={() => go("overview")} onChoose={openTeam} onCreate={createAndOpenTeam} onUpdate={updateExistingTeam} onImport={importAndOpenTeam} onLocalDone={(team) => selectedMission === 3
           ? patch({ team, runId: save.runId || createRunId(), stage: "mission3Intro" })
@@ -513,20 +513,19 @@ export function GameApp() {
         {!labRoomsPaused && save.stage === "materials" && <MaterialGuide onBack={() => go("boxMission")} onDone={() => go("studyFocus")} />}
         {!labRoomsPaused && save.stage === "studyFocus" && <StudyFocusScreen values={save.studyFocus} onBack={() => go("materials")} onChange={(studyFocus) => patch({ studyFocus })} onDone={() => patch({ stage: "exitTicket", bigQuestionProgress: { ...save.bigQuestionProgress, mission1: MISSION_ONE_BIG_QUESTION_PROGRESS } })} />}
         {!labRoomsPaused && save.stage === "exitTicket" && <ExitTicketScreen key={save.runId} team={save.team} initial={save.exitTickets} confirmations={save.exitTicketConfirmations} onBack={() => go("studyFocus")} onAnswerChange={persistExitTicketAnswers} onSaveDraft={saveExitTicketDraft} onDone={saveExitTickets} />}
-        {!labRoomsPaused && save.stage === "mission1Complete" && <MissionOneComplete onHome={() => { setAnimateMission2Unlock(true); go("overview"); }} />}
+        {!labRoomsPaused && save.stage === "mission1Complete" && <MissionOneComplete onHome={() => { setUnlockingMission(2); go("overview"); }} />}
         {!labRoomsPaused && save.stage === "mission2Intro" && <MissionTwoIntro onBack={() => go("overview")} onStart={() => go("testHub")} />}
         {!labRoomsPaused && <LabScreens save={save} onPatch={patch} onBack={leaveRunToTeams} onComplete={() => patch({ stage: "notebook" })} />}
         {!labRoomsPaused && save.stage === "notebook" && <TeamNotebook save={save} onBack={() => go("testHub")} onDone={() => go("comparison")} />}
         {!labRoomsPaused && save.stage === "comparison" && <MaterialComparison save={save} onBack={() => go("notebook")} onDone={() => patch({ stage: "recap", recapIndex: 0 })} />}
         {!labRoomsPaused && save.stage === "recap" && <Recap index={save.recapIndex} answers={save.recapAnswers} onAnswer={(recapAnswers) => patch({ recapAnswers })} onIndex={(recapIndex) => patch({ recapIndex })} onDone={() => go("mission2Complete")} />}
-        {!labRoomsPaused && save.stage === "mission2Complete" && <MissionTwoComplete team={save.team} onHome={() => patch({ mission2Completed: true, stage: "overview" })} />}
+        {!labRoomsPaused && save.stage === "mission2Complete" && <MissionTwoComplete team={save.team} onHome={() => { setUnlockingMission(3); patch({ mission2Completed: true, stage: "overview" }); }} />}
         {!["menu", "overview", "team"].includes(save.stage) && ["mission3Intro", "mission3Data", "mission3Materials", "mission3Design", "mission3Reason", "mission3Complete"].includes(save.stage) && <MissionThreeScreen stage={save.stage as MissionThreeStage} save={save} onPatch={patch} onBack={goBack} onNext={(stage) => go(stage)} onComplete={() => patch({ mission3Completed: true, stage: "mission3Complete" })} onFinish={() => patch({ mission3Completed: true, stage: "overview" })} />}
         {!labRoomsPaused && PREDICTION_ENABLED && save.stage === "prediction" && <Prediction labsEnabled={LAB_ROOMS_ENABLED} values={save.predictions} compressionResults={save.compressionResults} absorptionResults={save.absorptionResults} elasticityResults={save.elasticityResults} onChange={(predictions) => patch({ predictions })} onDone={() => go("summary")} />}
         {!labRoomsPaused && save.stage === "summary" && <Summary save={save} onReplay={() => void startNewAttempt()} onReset={reset} />}
         {(save.stage === "story" || save.stage === "inspection") && <button className="back-nav-button" onClick={(event) => { event.stopPropagation(); goBack(); }}>‹ ย้อนกลับ</button>}
         {MISSION_ONE_PHASES[save.stage] && <MissionOneProgress stage={save.stage} />}
         <button className="global-audio-button" aria-label={save.audio ? "ปิดเสียงเพลง" : "เปิดเสียงเพลง"} aria-pressed={save.audio} onClick={(event) => { event.stopPropagation(); toggleAudio(); }}><AppIcon name={save.audio ? "volume" : "volume-off"} /></button>
-        {configured && activeRun && <SaveStatusBadge status={saveIndicator} />}
     </IpadMiniCanvas>
   );
 }
@@ -554,6 +553,30 @@ function MissionOneProgress({ stage }: { stage: Stage }) {
         <span aria-hidden="true">•••</span>
       </button>}
     </aside>
+  );
+}
+
+function MissionPurpose({ onBack, onDone }: { onBack: () => void; onDone: () => void }) {
+  const [showQuestion, setShowQuestion] = useState(false);
+
+  return (
+    <div className="screen mission-purpose-screen">
+      <img className="mission-purpose-bg" src={asset("menu/cover.png")} alt="" />
+      <button className="mission-purpose-back" type="button" onClick={onBack}>‹ กลับหน้าปก</button>
+      <section className="mission-purpose-question" aria-labelledby="purpose-question-title">
+        <div className="mission-purpose-question-icon"><AppIcon name="message" /></div>
+        <div className="mission-purpose-question-content">
+          <h1>ภารกิจกล่องแกร่ง คือการช่วยกันสืบหา ทดลอง และเลือกวัสดุ เพื่อสร้างกล่องพัสดุที่ปกป้องสิ่งของได้ดี และใช้วัสดุอย่างคุ้มค่า</h1>
+          {!showQuestion && <button className="button mission-purpose-question-trigger" type="button" onClick={() => setShowQuestion(true)}>เปิดคำถามใหญ่ <AppIcon name="message" /></button>}
+          {showQuestion && <section className="mission-purpose-popup" aria-labelledby="purpose-question-title" aria-live="polite">
+            <b id="purpose-question-title">คำถามใหญ่ของเรา</b>
+            <p>เราจะเลือกและใช้วัสดุอย่างไร เพื่อสร้างกล่องพัสดุที่แข็งแรง ป้องกันสิ่งของ และนำวัสดุที่ใช้แล้วกลับมาใช้ใหม่อย่างเหมาะสม โดยมีหลักฐานสนับสนุน?</p>
+            <small><AppIcon name="idea" /> ตอนนี้ยังไม่ต้องตอบนะ เราจะค่อย ๆ สะสมหลักฐานทีละภารกิจ</small>
+            <button className="button mission-purpose-start" type="button" onClick={onDone}>ดูเส้นทาง 5 ภารกิจ <AppIcon name="continue" /></button>
+          </section>}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -839,17 +862,6 @@ function TeamHistory({ team, onBack }: { team: TeamOverview; onBack: () => void 
       </> : <div className="team-list-state">ยังไม่มีรอบภารกิจ</div>}</section>
     </div>
   </div>;
-}
-
-function SaveStatusBadge({ status }: { status: SaveIndicator }) {
-  const labels: Record<SaveIndicator, string> = {
-    idle: "พร้อมบันทึก",
-    saving: "กำลังบันทึก…",
-    saved: "✓ บันทึกในฐานข้อมูลแล้ว",
-    offline: "ยังส่งไม่สำเร็จ · รอลองใหม่",
-    conflict: "ข้อมูลชนกับอีกเครื่อง · เก็บคำตอบรอไว้",
-  };
-  return <div className={`save-status-badge ${status}`} role="status">{labels[status]}</div>;
 }
 
 function MissionRoute({ onBack, onDone }: { onBack: () => void; onDone: () => void }) {
