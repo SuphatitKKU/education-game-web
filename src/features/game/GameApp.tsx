@@ -50,6 +50,7 @@ import {
 import { detectRenderCompatibility, installModelViewerInputFallback, reportRendererStatus, type RenderCompatibilityProfile } from "./browser-compat";
 import { CompatibilityDiagnostics } from "./CompatibilityDiagnostics";
 import { LegacyGlbViewer, type LegacyGlbViewerHandle } from "./LegacyGlbViewer";
+import { AppIcon, type AppIconName } from "@/components/AppIcon";
 
 const SAVE_KEY = "parcel-lab-web-save-v1";
 const STATS_KEY = "parcel-lab-group-design-statistics-v1";
@@ -64,15 +65,15 @@ const MISSION_TWO_AVAILABLE = true;
 const MISSION_THREE_AVAILABLE = true;
 const DISABLED_LAB_STAGES = new Set<Stage>(LAB_STAGES);
 const MISSION_ONE_BIG_QUESTION_PROGRESS = "เราทราบแล้วว่าต้องศึกษาสมบัติ 3 ด้าน แต่ยังไม่ทราบว่าวัสดุชนิดใดเหมาะกับแต่ละหน้าที่";
-const MISSION_ONE_PHASES: Partial<Record<Stage, { step: number; label: string; icon: string }>> = {
-  mission: { step: 1, label: "เกริ่นภารกิจ", icon: "🗺️" },
-  story: { step: 2, label: "ติดตามสถานการณ์ 9 ฉาก", icon: "🎬" },
-  inspection: { step: 3, label: "สำรวจร่องรอย", icon: "🔎" },
-  boxMission: { step: 4, label: "กำหนดภารกิจของกล่อง", icon: "🎯" },
-  materials: { step: 5, label: "สำรวจวัสดุ", icon: "🧱" },
-  studyFocus: { step: 6, label: "เลือกสมบัติที่ต้องศึกษา", icon: "⭐" },
-  exitTicket: { step: 7, label: "คำถามรายบุคคล", icon: "✏️" },
-  mission1Complete: { step: 8, label: "ทำภารกิจสำเร็จ", icon: "🎉" },
+const MISSION_ONE_PHASES: Partial<Record<Stage, { step: number; label: string; icon: AppIconName }>> = {
+  mission: { step: 1, label: "เกริ่นภารกิจ", icon: "map" },
+  story: { step: 2, label: "ติดตามสถานการณ์ 9 ฉาก", icon: "movie" },
+  inspection: { step: 3, label: "สำรวจร่องรอย", icon: "search" },
+  boxMission: { step: 4, label: "กำหนดภารกิจของกล่อง", icon: "target" },
+  materials: { step: 5, label: "สำรวจวัสดุ", icon: "brick" },
+  studyFocus: { step: 6, label: "เลือกสมบัติที่ต้องศึกษา", icon: "star" },
+  exitTicket: { step: 7, label: "คำถามรายบุคคล", icon: "pencil" },
+  mission1Complete: { step: 8, label: "ทำภารกิจสำเร็จ", icon: "party" },
 };
 
 function createRunId() {
@@ -81,6 +82,11 @@ function createRunId() {
 
 function asset(path: string) {
   return `${BASE_PATH}/assets/${path}`;
+}
+
+function MaterialIcon({ icon }: { icon: string }) {
+  if (icon === "package" || icon === "bubbles") return <AppIcon name={icon} />;
+  return <>{icon}</>;
 }
 
 function IpadMiniCanvas({ children }: { children: ReactNode }) {
@@ -105,7 +111,7 @@ function IpadMiniCanvas({ children }: { children: ReactNode }) {
       </section>
       <FullscreenInstallHelp />
       <aside className="orientation-notice" role="status" aria-live="assertive">
-        <span className="orientation-notice-icon" aria-hidden="true">▭</span>
+        <AppIcon className="orientation-notice-icon" name="expand" />
         <strong>หมุน iPad เป็นแนวนอน</strong>
         <p>เกมนี้ออกแบบให้เล่นเต็มจอที่ขนาด iPad mini 2 (1024 × 768)</p>
       </aside>
@@ -128,11 +134,11 @@ function FullscreenInstallHelp() {
   if (!isIosSafari) return null;
 
   return <>
-    <button className="pwa-install-button" type="button" onClick={() => setOpen(true)}>▣ เปิดเต็มจอ</button>
+    <button className="pwa-install-button" type="button" onClick={() => setOpen(true)}><AppIcon name="expand" /> เปิดเต็มจอ</button>
     {open && <div className="pwa-install-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
       <section className="pwa-install-card" role="dialog" aria-modal="true" aria-labelledby="pwa-install-title">
-        <button className="pwa-install-close" type="button" onClick={() => setOpen(false)} aria-label="ปิดคำแนะนำ">×</button>
-        <span aria-hidden="true">⛶</span>
+        <button className="pwa-install-close" type="button" onClick={() => setOpen(false)} aria-label="ปิดคำแนะนำ"><AppIcon name="x" /></button>
+        <AppIcon name="expand" />
         <h2 id="pwa-install-title">เปิดเกมแบบเต็มจอ</h2>
         <p>Safari บน iPad mini 2 ซ่อนแถบด้านบนไม่ได้ขณะเปิดผ่านเว็บ ให้เพิ่มเกมเป็นแอปก่อนหนึ่งครั้ง</p>
         <ol>
@@ -519,7 +525,7 @@ export function GameApp() {
         {!labRoomsPaused && save.stage === "summary" && <Summary save={save} onReplay={() => void startNewAttempt()} onReset={reset} />}
         {(save.stage === "story" || save.stage === "inspection") && <button className="back-nav-button" onClick={(event) => { event.stopPropagation(); goBack(); }}>‹ ย้อนกลับ</button>}
         {MISSION_ONE_PHASES[save.stage] && <MissionOneProgress stage={save.stage} />}
-        <button className="global-audio-button" aria-label={save.audio ? "ปิดเสียงเพลง" : "เปิดเสียงเพลง"} aria-pressed={save.audio} onClick={(event) => { event.stopPropagation(); toggleAudio(); }}>{save.audio ? "🔊" : "🔇"}</button>
+        <button className="global-audio-button" aria-label={save.audio ? "ปิดเสียงเพลง" : "เปิดเสียงเพลง"} aria-pressed={save.audio} onClick={(event) => { event.stopPropagation(); toggleAudio(); }}><AppIcon name={save.audio ? "volume" : "volume-off"} /></button>
         {configured && activeRun && <SaveStatusBadge status={saveIndicator} />}
     </IpadMiniCanvas>
   );
@@ -540,7 +546,7 @@ function MissionOneProgress({ stage }: { stage: Stage }) {
     <aside className={`mission-one-progress mission-one-progress-${stage} ${expanded ? "is-expanded" : "is-collapsed"}`} role="status" aria-label={`ภารกิจที่ 1 ช่วงที่ ${phase.step} จาก 8 ${phase.label}`}>
       {expanded ? <div className="mission-one-progress-details">
         <div className="mission-one-progress-heading"><span>ภารกิจที่ 1</span><b>ช่วงที่ {phase.step}/8</b></div>
-        <strong><span aria-hidden="true">{phase.icon}</span>{phase.label}</strong>
+        <strong><AppIcon name={phase.icon} />{phase.label}</strong>
         <div className="mission-one-progress-track" role="progressbar" aria-label="ความคืบหน้าภารกิจที่ 1" aria-valuemin={1} aria-valuemax={8} aria-valuenow={phase.step}>
           <i style={{ width: `${percent}%` }} />
         </div>
@@ -559,8 +565,8 @@ function MainMenu({ onStart, onLabs }: { onStart: () => void; onLabs: () => void
         <p className="menu-kicker">ภารกิจนักออกแบบ</p>
         <h1>กล่องแกร่ง</h1>
         <p>คิด ทดลอง สร้างให้แกร่ง!</p>
-        <button className="button button-orange menu-play" onClick={onStart}><span>▶</span> เริ่มภารกิจ</button>
-        <a className="teacher-entry-link" href={`${BASE_PATH}/teacher/`}>▣ Dashboard สำหรับครู</a>
+        <button className="button button-orange menu-play" onClick={onStart}><AppIcon name="play" /> เริ่มภารกิจ</button>
+        <a className="teacher-entry-link" href={`${BASE_PATH}/teacher/`}><AppIcon name="box" /> Dashboard สำหรับครู</a>
       </div>
     </div>
   );
@@ -582,7 +588,7 @@ function MissionOneComplete({ onHome }: { onHome: () => void }) {
         <h1 id="mission-complete-title">ทำภารกิจที่ 1 เสร็จแล้ว</h1>
         <p className="mission-complete-copy">ทุกคนสืบร่องรอยความเสียหาย สำรวจวัสดุ และตอบคำถามครบแล้วภายในเวลาที่กำหนด</p>
         <div className="mission-complete-reward">
-          <span aria-hidden="true">🔓</span>
+          <AppIcon name="unlock" />
           <div><b>รางวัลใหม่กำลังรออยู่</b><small>กลับไปที่หน้าภารกิจเพื่อปลดล็อกภารกิจที่ 2</small></div>
         </div>
         <button className="button button-orange mission-complete-home" type="button" onClick={onHome}>
@@ -747,9 +753,9 @@ function TeamSetup({
               <small>{run ? `${STAGE_LABELS[run.currentStage]} · อัปเดต ${new Date(run.updatedAt).toLocaleString("th-TH")}` : "ยังไม่เคยทำภารกิจ"}</small>
               {run && <small className="team-card-answer-summary">คำตอบจากกล่อง 3 มิติ {findingCount}/{DAMAGES.length} ร่องรอย</small>}
               <footer>
-                <button className="manage-team-button" disabled={busy} onClick={() => openRosterEditor(team)}>⚙ จัดการสมาชิก</button>
+                <button className="manage-team-button" disabled={busy} onClick={() => openRosterEditor(team)}><AppIcon name="settings" /> จัดการสมาชิก</button>
                 <button className="history-button" disabled={!team.runs.length} onClick={() => setHistoryTeam(team)}>ดูคำตอบ ({team.runs.length})</button>
-                <button className="resume-button" disabled={busy || presentCount === 0} onClick={() => void runAction(() => onChoose(sessionTeam))}>{active ? "▶ ทำภารกิจต่อ" : "เริ่มภารกิจใหม่"}</button>
+                <button className="resume-button" disabled={busy || presentCount === 0} onClick={() => void runAction(() => onChoose(sessionTeam))}>{active ? <><AppIcon name="play" /> ทำภารกิจต่อ</> : "เริ่มภารกิจใหม่"}</button>
               </footer>
             </article>;
           })}
@@ -780,7 +786,7 @@ function TeamSetup({
         <div className="team-editor-backdrop" role="presentation" onClick={() => !busy && setEditingTeam(null)}>
           <section className="team-editor-modal" role="dialog" aria-modal="true" aria-labelledby="team-editor-title" onClick={(event) => event.stopPropagation()}>
             <header>
-              <div><span>👥 ทีมเดิม</span><h2 id="team-editor-title">จัดการสมาชิก · {editingTeam.name}</h2><p>แก้ไขสมาชิก 6–7 คน และเลือกผู้ที่มาเรียนวันนี้</p></div>
+              <div><span><AppIcon name="users" /> ทีมเดิม</span><h2 id="team-editor-title">จัดการสมาชิก · {editingTeam.name}</h2><p>แก้ไขสมาชิก 6–7 คน และเลือกผู้ที่มาเรียนวันนี้</p></div>
               <button type="button" aria-label="ปิดหน้าจัดการสมาชิก" disabled={busy} onClick={() => setEditingTeam(null)}>×</button>
             </header>
             {editingTeam.activeRun && <div className="team-editor-notice">แก้ไขรายชื่อได้เลย คำตอบที่บันทึกไว้ของสมาชิกเดิมจะยังอยู่</div>}
@@ -797,7 +803,7 @@ function TeamSetup({
                   </label>
                   <label className="team-editor-name"><span>ชื่อเล่น</span><input maxLength={20} value={member.name} disabled={busy} onChange={(event) => updateRosterDraft(member.draftKey, { name: event.target.value })} /></label>
                   <button type="button" className={`attendance-toggle ${member.present ? "present" : "absent"}`} aria-pressed={member.present} disabled={busy} onClick={() => updateRosterDraft(member.draftKey, { present: !member.present })}><i>{member.present ? "✓" : "×"}</i><span>{member.present ? "มาเรียน" : "ไม่มา"}</span></button>
-                  <button type="button" className="remove-roster-member" aria-label={`ลบ ${member.name || `สมาชิก ${index + 1}`}`} disabled={busy || rosterDraft.length <= 6} onClick={() => setRosterDraft((current) => current.filter((item) => item.draftKey !== member.draftKey))}>🗑 ลบ</button>
+                  <button type="button" className="remove-roster-member" aria-label={`ลบ ${member.name || `สมาชิก ${index + 1}`}`} disabled={busy || rosterDraft.length <= 6} onClick={() => setRosterDraft((current) => current.filter((item) => item.draftKey !== member.draftKey))}><AppIcon name="trash" /> ลบ</button>
                 </article>
               ))}
             </div>
@@ -856,7 +862,7 @@ function MissionRoute({ onBack, onDone }: { onBack: () => void; onDone: () => vo
         <span className="mission-briefing-mission-badge">ภารกิจที่ 1</span>
         <div className="mission-briefing-illustration" aria-hidden="true">
           <img className="mission-briefing-box" src={asset("inspection/mission-1-damaged-parcel-cartoon.png")} alt="" />
-          <span className="mission-briefing-search">🔎</span>
+          <AppIcon className="mission-briefing-search" name="search" />
         </div>
         <h1>ไขปริศนากล่องพัสดุเสียหาย</h1>
         <p className="mission-briefing-copy">ติดตามเส้นทางของกล่อง แล้วค้นหาว่าเกิดความเสียหายอะไรขึ้นบ้าง</p>
@@ -1218,8 +1224,8 @@ function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { fin
 }
 
 const BOX_MISSION_DECOYS = [
-  { id: "make-box-pretty", label: "ทำให้กล่องมีสีสวยที่สุด", icon: "🎨" },
-  { id: "deliver-faster", label: "ช่วยให้พัสดุถึงบ้านเร็วขึ้น", icon: "🚚" },
+  { id: "make-box-pretty", label: "ทำให้กล่องมีสีสวยที่สุด", icon: "palette" },
+  { id: "deliver-faster", label: "ช่วยให้พัสดุถึงบ้านเร็วขึ้น", icon: "truck" },
 ] as const;
 
 const BOX_MISSION_OPTIONS = [
@@ -1414,7 +1420,7 @@ function BoxMissionScreen({ values, onBack, onChange, onDone }: {
               const decoy = BOX_MISSION_DECOYS.some((item) => item.id === option.id);
               const selected = !decoy && Boolean(values[option.id]);
               return <button key={option.id} type="button" aria-pressed={selected} className={`${selected ? "is-selected" : ""} ${decoy ? "is-decoy" : ""} ${feedback === "decoy" && option.id === hintedDecoyId ? "is-hint" : ""}`} onClick={() => chooseGoal(option.id)}>
-                <i aria-hidden="true">{option.icon}</i><span>{option.label}</span>{selected && <b aria-hidden="true">✓</b>}
+                <i aria-hidden="true"><AppIcon name={option.icon as AppIconName} /></i><span>{option.label}</span>{selected && <b aria-hidden="true">✓</b>}
               </button>;
             })}
           </div>
@@ -1502,7 +1508,7 @@ const CORRUGATED_FEATURES = [
 
 const CORRUGATED_OVERVIEW = {
   label: "กระดาษลูกฟูกลอน E 3 ชั้น",
-  icon: "📦",
+  icon: "package",
   detail: "กระดาษลูกฟูกมีแผ่นเรียบ 2 แผ่นประกบลอนกระดาษไว้ตรงกลาง มองเห็นช่องอากาศต่อเนื่องอยู่ระหว่างแผ่นผิว",
 };
 
@@ -1748,7 +1754,7 @@ const MATERIAL_EXPLORERS = {
     model: "models/bubble_wrap.glb?v=3",
     alt: "โมเดลแผ่นพลาสติกกันกระแทกชนิดฟองอากาศแบบแผ่นเดี่ยว มีฟองอากาศเรียงเป็นแถวเฉพาะด้านบนและด้านล่างเรียบ",
     loading: "กำลังเติมอากาศในฟอง 3 มิติ…",
-    overview: { label: "แผ่นพลาสติกที่มีฟองอากาศ", icon: "🫧", detail: "แผ่นฟิล์มเดี่ยวมีฟองอากาศขนาดใกล้เคียงกันเรียงต่อกันทั่วทั้งแผ่น" },
+    overview: { label: "แผ่นพลาสติกที่มีฟองอากาศ", icon: "bubbles", detail: "แผ่นฟิล์มเดี่ยวมีฟองอากาศขนาดใกล้เคียงกันเรียงต่อกันทั่วทั้งแผ่น" },
     features: BUBBLE_WRAP_FEATURES,
     orbit: "34deg 58deg 6.9m",
     target: "0m 0.08m 0.25m",
@@ -2039,7 +2045,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
         })}
       </section>
       <footer className="material-guide-footer">
-        <div className="material-guide-helper"><span aria-hidden="true">🔬</span><p><b>เลือกวัสดุที่อยากรู้จักได้เลย!</b><small>แตะการ์ดเพื่อหมุน ซูม และดูโครงสร้างใกล้ ๆ</small></p></div>
+        <div className="material-guide-helper"><AppIcon name="microscope" /><p><b>เลือกวัสดุที่อยากรู้จักได้เลย!</b><small>แตะการ์ดเพื่อหมุน ซูม และดูโครงสร้างใกล้ ๆ</small></p></div>
         <button className="button button-orange" onClick={onDone}>ไปช่วงถัดไป ›</button>
       </footer>
       {exploring && (
@@ -2054,7 +2060,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
           <div className="material-3d-layout">
             <div className={`material-3d-stage is-dark-material-stage ${viewScale !== "normal" ? "is-microscope-stage" : ""} ${isContinuousZoomMaterial ? "is-continuous-zoom-stage" : ""}`}>
               <div className="material-zoom-control">
-                <div><span aria-hidden="true">🔎</span><b>ลากเพื่อซูมลึกเข้าไปในวัสดุ</b><output>{zoomDepth}%</output></div>
+                <div><AppIcon name="search" /><b>ลากเพื่อซูมลึกเข้าไปในวัสดุ</b><output>{zoomDepth}%</output></div>
                 <div className="material-zoom-slider-row">
                   <button type="button" aria-label="ซูมออก" disabled={zoomDepth === 0} onClick={() => changeZoomDepth(zoomDepth - 10)}><span aria-hidden="true">−</span></button>
                   <input type="range" min="0" max="100" step="1" value={zoomDepth} aria-label="ระดับการซูมเข้าไปในวัสดุ" onChange={(event) => changeZoomDepth(Number(event.currentTarget.value))} />
@@ -2087,7 +2093,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
                     position: feature.position,
                     className: `material-3d-hotspot ${selectedFeature === feature.id ? "is-active" : ""}`,
                     ariaLabel: feature.label,
-                    content: <><b>{feature.icon}</b><span>{feature.label}</span></>,
+                    content: <><b><MaterialIcon icon={feature.icon} /></b><span>{feature.label}</span></>,
                     onClick: () => focusFeature(feature),
                   }))}
                   style={{ opacity: continuousModelOpacity, transform: `scale(${1 + Math.min(zoomDepth, 42) * .006})`, transition: "opacity .65s ease, transform .65s ease", pointerEvents: viewScale === "normal" ? "auto" : "none" }}
@@ -2131,7 +2137,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
                       aria-pressed={selectedFeature === feature.id}
                       onClick={(event) => { event.stopPropagation(); focusFeature(feature); }}
                     >
-                      <b>{feature.icon}</b><span>{feature.label}</span>
+                      <b><MaterialIcon icon={feature.icon} /></b><span>{feature.label}</span>
                     </button>
                   ))}
                 </model-viewer>
@@ -2142,7 +2148,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
               {!isContinuousZoomMaterial && viewScale !== "normal" && <MaterialMicroscope key={`${microscopeMaterialId}-${viewScale}`} materialId={microscopeMaterialId} level={viewScale} selectedId={selectedFeature} zoomProgress={viewScale === "micro" ? (zoomDepth - 34) / 33 : (zoomDepth - 68) / 32} onSelect={focusMicroscopeFeature} />}
             </div>
             <aside className="material-3d-info" aria-live="polite">
-              <div className="material-3d-info-icon">{selected.icon}</div>
+              <div className="material-3d-info-icon"><MaterialIcon icon={selected.icon} /></div>
               <h2>{selected.label}</h2>
               <p className="material-3d-material-summary">{explorer.description}</p>
               <div className="material-3d-part-buttons" aria-label={`เลือกส่วนของ${explorer.title}`}>
@@ -2151,7 +2157,7 @@ function MaterialGuide({ onBack, onDone }: { onBack: () => void; onDone: () => v
                   const panelId = `material-detail-${feature.id}`;
                   return <div key={feature.id} className={`material-3d-accordion-item ${expanded ? "is-open" : ""}`}>
                     <button type="button" className={selectedFeature === feature.id ? "is-active" : ""} aria-expanded={expanded} aria-controls={panelId} onClick={() => toggleFeatureDetails(feature)}>
-                      <span>{feature.icon}</span><b>{feature.label}</b><i aria-hidden="true">⌄</i>
+                      <span><MaterialIcon icon={feature.icon} /></span><b>{feature.label}</b><i aria-hidden="true">⌄</i>
                     </button>
                     {expanded && <div id={panelId} className="material-3d-accordion-panel">{feature.detail}</div>}
                   </div>;
@@ -2195,7 +2201,7 @@ function StudyFocusScreen({ values, onBack, onChange, onDone }: { values: Record
       <button className="material-guide-back-button" onClick={onBack}>‹ ย้อนกลับ</button>
       <header className="study-focus-header">
         <div className="study-focus-question">
-          <span>🔎 คำถามนำภารกิจที่ 1</span>
+          <span><AppIcon name="search" /> คำถามนำภารกิจที่ 1</span>
           <h1>เมื่อกล่องพัสดุต้องเจอแรงกด แรงกระแทก และฝน เราควรศึกษาสมบัติใดของวัสดุบ้าง เพราะเหตุใด?</h1>
         </div>
       </header>
@@ -2225,7 +2231,7 @@ function StudyFocusScreen({ values, onBack, onChange, onDone }: { values: Record
       {showStudySummary && <div className="study-focus-summary-overlay" role="dialog" aria-modal="true" aria-labelledby="study-focus-summary-title">
         <section className="study-focus-summary-card">
           <div className="study-focus-summary-mascot" aria-hidden="true" style={{ backgroundImage: `url(${asset("mascot/parcel-guide-sprite.png")})` }} />
-          <span>🎉 วันนี้เราค้นพบแล้ว!</span>
+          <span><AppIcon name="party" /> วันนี้เราค้นพบแล้ว!</span>
           <h2 id="study-focus-summary-title">กล่องพัสดุต้องศึกษาสมบัติของวัสดุ 3 ด้าน</h2>
           <div className="study-focus-summary-findings" aria-label="สมบัติของวัสดุที่ค้นพบ">
             <b><i aria-hidden="true">✓</i> ความต้านทานแรงกดทับ</b>
@@ -2423,14 +2429,14 @@ function ExitTicketScreen({ team, initial, confirmations, onBack, onAnswerChange
       </header>
       <section className="exit-ticket-layout">
         <aside className="student-tabs" aria-label="รายชื่อนักเรียน">
-          <h2>👥 เลือกชื่อนักเรียน</h2>
+          <h2><AppIcon name="users" /> เลือกชื่อนักเรียน</h2>
           {team.map((member, index) => {
             const key = exitTicketKey(member, index);
             const done = isTicketComplete(savedValues[key]) && exitTicketsAreEqual(values[key], savedValues[key]);
             return <button key={`${index}-${member.name}`} className={activeIndex === index ? "active" : ""} onClick={() => { setActiveIndex(index); setSelectedAnswers({ k: "", p: "" }); }}><strong>{index + 1}</strong><img src={asset(`profiles/${member.avatar}.png`)} alt="" /><span>{member.name}</span><i>{done ? "✓" : ""}</i></button>;
           })}
           <div className="system-record-card">
-            <b>▣ การยืนยันคำตอบ</b>
+            <b><AppIcon name="box" /> การยืนยันคำตอบ</b>
             <p>{complete ? "ยืนยันครบทุกคนแล้ว ไปต่อได้เลย" : `ยืนยันแล้ว ${completedCount}/${team.length} คน`}</p>
             <span>{complete ? "✓" : `${completedCount}/${team.length}`}</span>
           </div>
@@ -2464,7 +2470,7 @@ function LabPreview({ audio, onClose }: { audio: boolean; onClose: () => void })
   const patchPreview = (next: Partial<GameSave>) => setPreviewSave((current) => ({ ...current, ...next }));
   return <IpadMiniCanvas>
     <LabScreens save={previewSave} onPatch={patchPreview} onBack={onClose} preview />
-    <button className="global-audio-button" aria-label={previewSave.audio ? "ปิดเสียงเพลง" : "เปิดเสียงเพลง"} aria-pressed={previewSave.audio} onClick={() => patchPreview({ audio: !previewSave.audio })}>{previewSave.audio ? "🔊" : "🔇"}</button>
+    <button className="global-audio-button" aria-label={previewSave.audio ? "ปิดเสียงเพลง" : "เปิดเสียงเพลง"} aria-pressed={previewSave.audio} onClick={() => patchPreview({ audio: !previewSave.audio })}><AppIcon name={previewSave.audio ? "volume" : "volume-off"} /></button>
   </IpadMiniCanvas>;
 }
 
@@ -2557,7 +2563,7 @@ function TeamNotebook({ save, onBack, onDone }: { save: GameSave; onBack: () => 
   return <div className="screen mission-two-screen mission-two-report">
     <button className="button button-white mission-two-back" onClick={onBack}>‹ กลับห้องทดลอง</button>
     <header><span>ภารกิจที่ 2 · ขั้นที่ 2/5</span><h1>สมุดบันทึกผลของทีม</h1><p>หลักฐานที่ทีมบันทึกจากการทดลองภายใต้เงื่อนไขเดียวกัน</p></header>
-    <section className="material-notebook"><div className="notebook-heading"><b>📒 ผลการทดลองของทีม</b><span>วัสดุ 5 ชนิด · 3 สมบัติ</span></div><div className="notebook-grid">{LAB_MATERIALS.map((material) => { const result = materialResults(save, material.id); return <article key={material.id}><img src={asset(`materials/${material.image}`)} alt="" /><h2>{material.name}</h2><p><b>แรงกด</b><span>ยุบ {result.compression}</span></p><p><b>แรงกระแทก</b><span>{result.impact}</span></p><p><b>การดูดซับน้ำ</b><span>{result.water}</span></p></article>; })}</div></section>
+    <section className="material-notebook"><div className="notebook-heading"><b><AppIcon name="notebook" /> ผลการทดลองของทีม</b><span>วัสดุ 5 ชนิด · 3 สมบัติ</span></div><div className="notebook-grid">{LAB_MATERIALS.map((material) => { const result = materialResults(save, material.id); return <article key={material.id}><img src={asset(`materials/${material.image}`)} alt="" /><h2>{material.name}</h2><p><b>แรงกด</b><span>ยุบ {result.compression}</span></p><p><b>แรงกระแทก</b><span>{result.impact}</span></p><p><b>การดูดซับน้ำ</b><span>{result.water}</span></p></article>; })}</div></section>
     <footer><p>✓ บันทึกผลของทีมครบแล้ว · ใช้ตารางถัดไปช่วยอ่านและเปรียบเทียบหลักฐาน</p><button className="button button-orange" onClick={onDone}>ดูตารางเปรียบเทียบ ›</button></footer>
   </div>;
 }
@@ -2567,13 +2573,13 @@ function MaterialComparison({ save, onBack, onDone }: { save: GameSave; onBack: 
     <button className="button button-white mission-two-back" onClick={onBack}>‹ กลับสมุดบันทึก</button>
     <header><span>ภารกิจที่ 2 · ขั้นที่ 3/5</span><h1>ตารางเปรียบเทียบวัสดุ</h1><p>ตัวเลขและหลักฐานช่วยให้ทีมอธิบายการเลือกวัสดุได้ชัดเจนขึ้น</p></header>
     <section className="comparison-table-wrap"><table><thead><tr><th>วัสดุ</th><th>รับแรงกด<br /><small>ยุบตัวน้อยดีกว่า</small></th><th>ลดแรงกระแทก</th><th>ดูดซับน้ำ<br /><small>ซึมน้อยดีกว่า</small></th></tr></thead><tbody>{LAB_MATERIALS.map((material) => { const result = materialResults(save, material.id); return <tr key={material.id}><th><img src={asset(`materials/${material.image}`)} alt="" />{material.name}</th><td>{result.compression}</td><td>{result.impact}</td><td>{result.water}</td></tr>; })}</tbody></table></section>
-    <aside className="comparison-tip"><b>🔍 วิธีอ่านหลักฐาน</b><span>เปรียบเทียบเฉพาะวัสดุที่ทดสอบด้วยเงื่อนไขเดียวกัน แล้วใช้ผลทั้ง 3 ด้านร่วมกันก่อนตัดสินใจ</span></aside>
+    <aside className="comparison-tip"><b><AppIcon name="search" /> วิธีอ่านหลักฐาน</b><span>เปรียบเทียบเฉพาะวัสดุที่ทดสอบด้วยเงื่อนไขเดียวกัน แล้วใช้ผลทั้ง 3 ด้านร่วมกันก่อนตัดสินใจ</span></aside>
     <footer><button className="button button-orange" onClick={onDone}>ตอบคำถามทบทวน ›</button></footer>
   </div>;
 }
 
 function MissionTwoComplete({ team, onHome }: { team: TeamMember[]; onHome: () => void }) {
-  return <div className="screen mission-two-screen mission-two-complete"><div className="mission-two-medal">🧪</div><span>ภารกิจที่ 2 สำเร็จ</span><h1>ทีมอ่านผลการทดลองได้แล้ว!</h1><p>{team.map((member) => member.name).join(" · ")}</p><section><b>สิ่งที่ทีมทำสำเร็จ</b><p>ทดลอง บันทึกผล เปรียบเทียบวัสดุ และใช้หลักฐานตอบคำถามทั้ง 3 ข้อ</p></section><div className="mission-three-unlock">🔓 <b>ปลดล็อกภารกิจที่ 3</b><span>ออกแบบและสร้างกล่องพัสดุ</span></div><button className="button button-orange" onClick={onHome}>กลับสู่เส้นทางภารกิจ ›</button></div>;
+  return <div className="screen mission-two-screen mission-two-complete"><div className="mission-two-medal"><AppIcon name="flask" /></div><span>ภารกิจที่ 2 สำเร็จ</span><h1>ทีมอ่านผลการทดลองได้แล้ว!</h1><p>{team.map((member) => member.name).join(" · ")}</p><section><b>สิ่งที่ทีมทำสำเร็จ</b><p>ทดลอง บันทึกผล เปรียบเทียบวัสดุ และใช้หลักฐานตอบคำถามทั้ง 3 ข้อ</p></section><div className="mission-three-unlock"><AppIcon name="unlock" /> <b>ปลดล็อกภารกิจที่ 3</b><span>ออกแบบและสร้างกล่องพัสดุ</span></div><button className="button button-orange" onClick={onHome}>กลับสู่เส้นทางภารกิจ ›</button></div>;
 }
 
 function Recap({ index, answers, onAnswer, onIndex, onDone }: { index: number; answers: Record<string, number[]>; onAnswer: (answers: Record<string, number[]>) => void; onIndex: (n: number) => void; onDone: () => void }) {
@@ -2616,7 +2622,7 @@ function Summary({ save, onReplay, onReset }: { save: GameSave; onReplay: () => 
   const names = save.team.map((m) => m.name).join(" · ");
   const labsComplete = allLabsComplete(save);
   return <div className="screen summary-screen"><div className="summary-card">
-    <div className="step-pill">{labsComplete ? "จบภารกิจทดลองวัสดุ" : "จบกิจกรรมคาบที่ 1"}</div><div className="medal">🔎</div>
+    <div className="step-pill">{labsComplete ? "จบภารกิจทดลองวัสดุ" : "จบกิจกรรมคาบที่ 1"}</div><div className="medal"><AppIcon name="search" /></div>
     <h1>{labsComplete ? "บันทึกกิจกรรมทดลองที่เปิดใช้ครบแล้ว!" : "วิเคราะห์ปัญหาและกำหนดสมบัติที่ต้องศึกษาเรียบร้อยแล้ว"}</h1><p>{names}</p>
     <section className="summary-next-lesson"><span>{labsComplete ? "สิ่งที่ได้สังเกต" : "คาบต่อไป"}</span><h2>{labsComplete ? "ความต้านทานแรงกดทับ การลดความเสียหายจากแรงกระแทก และการดูดซับน้ำ" : "เราจะทดสอบสมบัติของวัสดุทั้ง 3 ด้าน"}</h2>{labsComplete && <p>นำสิ่งที่สังเกตจากแบบจำลองมาเปรียบเทียบและอภิปรายร่วมกัน</p>}</section>
     <div className="summary-actions"><button className="button button-yellow" onClick={onReplay}>เริ่มภารกิจรอบใหม่</button><button className="button button-white" onClick={onReset}>กลับหน้าปก</button></div>

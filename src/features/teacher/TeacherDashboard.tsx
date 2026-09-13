@@ -8,6 +8,7 @@ import { deleteTeam, getTeacherTeamDetail, listTeams } from "@/features/tracking
 import type { TeacherTeamDetail, TeamOverview } from "@/features/tracking/types";
 import { studyTopicLabel } from "@/features/game/learning-topics";
 import { BOX_MISSION_GOALS, RECAP } from "@/features/game/data";
+import { AppIcon } from "@/components/AppIcon";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 // Convenience access for the classroom device. This is intentionally a simple
@@ -208,18 +209,18 @@ export function TeacherDashboard() {
 
   return <main className="teacher-dashboard-shell">
     <aside className="teacher-sidebar">
-      <a className="teacher-brand" href={`${BASE_PATH}/`}><span>▣</span><div><b>กล่องแกร่ง</b><small>Teacher Dashboard</small></div></a>
+      <a className="teacher-brand" href={`${BASE_PATH}/`}><AppIcon name="box" /><div><b>กล่องแกร่ง</b><small>Teacher Dashboard</small></div></a>
       <nav><button className="active">⌂ ภาพรวมชั้นเรียน</button><button onClick={() => document.getElementById("teacher-team-list")?.scrollIntoView({ behavior: "smooth" })}>♟ ทีมทั้งหมด</button></nav>
       <div className="teacher-privacy-note"><b>ข้อมูลเปิดในหน้าเกม</b><span>โปรดใช้ชื่อเล่นของนักเรียนเท่านั้น</span></div>
       <div className="teacher-account"><span>{quickAccess ? "รหัสครูแบบเร็ว · โหมดดูข้อมูล" : session?.user.email}</span><button onClick={() => { if (quickAccess) { clearRememberedQuickAccess(); setQuickAccess(false); setAuthState("signed_out"); } else { void getSupabaseClient()?.auth.signOut(); } }}>ออกจากระบบ</button></div>
     </aside>
     <section className="teacher-main">
-      <header className="teacher-topbar"><div><p>ภาพรวมการเรียนรู้</p><h1>สวัสดีคุณครู 👋</h1><span>ติดตามสิ่งที่เด็ก ๆ กำลังคิด ทดลอง และบันทึก</span></div><button className="teacher-refresh" onClick={() => void refresh()} disabled={loadingData}>{loadingData ? "กำลังอัปเดต…" : "↻ อัปเดตข้อมูล"}</button></header>
+      <header className="teacher-topbar"><div><p>ภาพรวมการเรียนรู้</p><h1>สวัสดีคุณครู</h1><span>ติดตามสิ่งที่เด็ก ๆ กำลังคิด ทดลอง และบันทึก</span></div><button className="teacher-refresh" onClick={() => void refresh()} disabled={loadingData}>{loadingData ? "กำลังอัปเดต…" : <><AppIcon name="refresh" /> อัปเดตข้อมูล</>}</button></header>
       {error && <div className="teacher-error" role="alert">{error}</div>}
       <div className="teacher-kpi-grid">
         <article><i className="blue">♟</i><div><span>ทีมทั้งหมด</span><b>{teams.length}</b></div></article>
-        <article><i className="orange">▶</i><div><span>กำลังทำภารกิจ</span><b>{teams.filter((team) => team.activeRun).length}</b></div></article>
-        <article><i className="green">✓</i><div><span>สำเร็จวันนี้</span><b>{completedToday}</b></div></article>
+        <article><i className="orange"><AppIcon name="play" /></i><div><span>กำลังทำภารกิจ</span><b>{teams.filter((team) => team.activeRun).length}</b></div></article>
+        <article><i className="green"><AppIcon name="check" /></i><div><span>สำเร็จวันนี้</span><b>{completedToday}</b></div></article>
         <article><i className="pink">◷</i><div><span>อัปเดตล่าสุด</span><b className="kpi-time">{latestUpdate ? new Date(latestUpdate).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</b></div></article>
       </div>
       <section className="teacher-teams-section" id="teacher-team-list">
@@ -261,7 +262,7 @@ function TeacherDetailPanel({ team, detail, loading, onClose }: { team: TeamOver
   const events = detail?.events.filter((event) => event.runId === run?.id) ?? [];
   const responses = detail?.responses.filter((response) => response.runId === run?.id) ?? [];
   return <div className="teacher-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="teacher-detail-panel" aria-label={`รายละเอียด ${team.name}`}>
-    <header><div><span>รายละเอียดทีม</span><h2>{team.name}</h2><p>{team.members.map((member) => member.name).join(" · ")}</p></div><button aria-label="ปิด" onClick={onClose}>×</button></header>
+    <header><div><span>รายละเอียดทีม</span><h2>{team.name}</h2><p>{team.members.map((member) => member.name).join(" · ")}</p></div><button aria-label="ปิด" onClick={onClose}><AppIcon name="x" /></button></header>
     <label className="teacher-run-picker">รอบภารกิจ<select value={runId} onChange={(event) => setRunId(event.target.value)}>{team.runs.map((item, index) => <option value={item.id} key={item.id}>{item.status === "in_progress" ? "รอบปัจจุบัน" : `ประวัติรอบ ${team.runs.length - index}`} · {new Date(item.startedAt).toLocaleString("th-TH")}</option>)}</select></label>
     {loading && !detail ? <div className="teacher-empty">กำลังโหลดรายละเอียด…</div> : run ? <div className="teacher-detail-content">
       <div className="teacher-detail-summary"><div><span>สถานะ</span><b>{run.status === "in_progress" ? "กำลังทำ" : "สำเร็จแล้ว"}</b></div><div><span>ขั้นล่าสุด</span><b>{STAGE_LABELS[run.currentStage]}</b></div><div><span>เวลา</span><b>{formatDuration(run.startedAt, run.completedAt)}</b></div></div>
@@ -296,7 +297,7 @@ function TeacherLogin({ onQuickAccess }: { onQuickAccess: () => void }) {
     if (quickCode.trim().toLowerCase() !== TEACHER_QUICK_ACCESS_CODE) return;
     onQuickAccess();
   };
-  return <main className="teacher-auth-page"><div className="teacher-auth-card"><a href={`${BASE_PATH}/`}>← กลับไปหน้าเกม</a><div className="teacher-auth-icon">▣</div><p>ภารกิจกล่องแกร่ง</p><h1>Dashboard สำหรับครู</h1><span>ติดตามสิ่งที่เด็ก ๆ กำลังคิด ทดลอง และบันทึก</span><section className="teacher-quick-login"><h2>เข้าด้วยรหัสครูแบบเร็ว</h2><p>เหมาะสำหรับเครื่องประจำห้องเรียน ระบบจะจำสิทธิ์ไว้ในเครื่องนี้</p><form onSubmit={submitQuick}><label>รหัสครู<input type="password" inputMode="text" autoComplete="current-password" placeholder="เช่น box1234" required value={quickCode} onChange={(event) => setQuickCode(event.target.value)} /></label>{quickError && <div role="alert">{quickError}</div>}<button>เข้าสู่ Dashboard</button></form></section><details className="teacher-account-login"><summary>ใช้บัญชี Supabase แทน</summary><form onSubmit={submit}><label>อีเมล<input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>รหัสผ่าน<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>{error && <div role="alert">{error}</div>}<button disabled={busy}>{busy ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ Dashboard"}</button></form></details></div></main>;
+  return <main className="teacher-auth-page"><div className="teacher-auth-card"><a href={`${BASE_PATH}/`}>← กลับไปหน้าเกม</a><div className="teacher-auth-icon"><AppIcon name="box" /></div><p>ภารกิจกล่องแกร่ง</p><h1>Dashboard สำหรับครู</h1><span>ติดตามสิ่งที่เด็ก ๆ กำลังคิด ทดลอง และบันทึก</span><section className="teacher-quick-login"><h2>เข้าด้วยรหัสครูแบบเร็ว</h2><p>เหมาะสำหรับเครื่องประจำห้องเรียน ระบบจะจำสิทธิ์ไว้ในเครื่องนี้</p><form onSubmit={submitQuick}><label>รหัสครู<input type="password" inputMode="text" autoComplete="current-password" placeholder="เช่น box1234" required value={quickCode} onChange={(event) => setQuickCode(event.target.value)} /></label>{quickError && <div role="alert">{quickError}</div>}<button>เข้าสู่ Dashboard</button></form></section><details className="teacher-account-login"><summary>ใช้บัญชี Supabase แทน</summary><form onSubmit={submit}><label>อีเมล<input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>รหัสผ่าน<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>{error && <div role="alert">{error}</div>}<button disabled={busy}>{busy ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ Dashboard"}</button></form></details></div></main>;
 }
 
 function TeacherDenied({ email, onSignOut }: { email: string; onSignOut: () => void }) {
@@ -304,7 +305,7 @@ function TeacherDenied({ email, onSignOut }: { email: string; onSignOut: () => v
 }
 
 function TeacherSetupRequired() {
-  return <main className="teacher-auth-page"><div className="teacher-auth-card teacher-denied"><div className="teacher-auth-icon">⚙</div><h1>ยังไม่ได้เชื่อมฐานข้อมูล</h1><span>กำหนด NEXT_PUBLIC_SUPABASE_URL และ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ก่อนเปิด Dashboard</span><a href={`${BASE_PATH}/`}>กลับไปหน้าเกม</a></div></main>;
+  return <main className="teacher-auth-page"><div className="teacher-auth-card teacher-denied"><div className="teacher-auth-icon"><AppIcon name="settings" /></div><h1>ยังไม่ได้เชื่อมฐานข้อมูล</h1><span>กำหนด NEXT_PUBLIC_SUPABASE_URL และ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ก่อนเปิด Dashboard</span><a href={`${BASE_PATH}/`}>กลับไปหน้าเกม</a></div></main>;
 }
 
 function TeacherLoading() {

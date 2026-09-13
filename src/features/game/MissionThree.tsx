@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { GameSave, MissionThreeDesign } from "./data";
 import { LAB_MATERIALS } from "./labs";
 import styles from "./MissionThree.module.css";
+import { AppIcon, type AppIconName } from "@/components/AppIcon";
 
 export type MissionThreeStage = "mission3Intro" | "mission3Data" | "mission3Materials" | "mission3Design" | "mission3Reason" | "mission3Complete";
 
@@ -18,18 +19,18 @@ type MissionThreeProps = {
 };
 
 const ROLE_DEFINITIONS = [
-  { key: "structure", label: "โครงกล่อง", icon: "▦", color: "blue", hint: "รับแรงกด ไม่ยุบง่าย", evidence: "compression" },
-  { key: "impact", label: "วัสดุกันกระแทก", icon: "🥚", color: "purple", hint: "ลดความเสียหายของสิ่งของ", evidence: "impact" },
-  { key: "water", label: "ชั้นป้องกันน้ำ", icon: "💧", color: "cyan", hint: "ลดการเปียกและการซึม", evidence: "water" },
-  { key: "filler", label: "วัสดุเติมช่องว่าง", icon: "✦", color: "yellow", hint: "ลดการเคลื่อนที่ของของด้านใน", evidence: "impact" },
-  { key: "joints", label: "จุดเชื่อมต่อ/ปิดฝากล่อง", icon: "⌁", color: "green", hint: "ยึดส่วนประกอบให้คงรูป", evidence: "compression" },
+  { key: "structure", label: "โครงกล่อง", icon: "package", color: "blue", hint: "รับแรงกด ไม่ยุบง่าย", evidence: "compression" },
+  { key: "impact", label: "วัสดุกันกระแทก", icon: "egg", color: "purple", hint: "ลดความเสียหายของสิ่งของ", evidence: "impact" },
+  { key: "water", label: "ชั้นป้องกันน้ำ", icon: "drop", color: "cyan", hint: "ลดการเปียกและการซึม", evidence: "water" },
+  { key: "filler", label: "วัสดุเติมช่องว่าง", icon: "sparkles", color: "yellow", hint: "ลดการเคลื่อนที่ของของด้านใน", evidence: "impact" },
+  { key: "joints", label: "จุดเชื่อมต่อ/ปิดฝากล่อง", icon: "waves", color: "green", hint: "ยึดส่วนประกอบให้คงรูป", evidence: "compression" },
 ] as const;
 
 const GOALS = [
-  ["📦", "กล่องไม่ยุบง่าย"],
-  ["🛡️", "ช่วยกันกระแทก"],
-  ["💧", "ช่วยกันเปียก"],
-  ["♻️", "ใช้วัสดุเก่าให้คุ้มค่า"],
+  ["package", "กล่องไม่ยุบง่าย"],
+  ["shield", "ช่วยกันกระแทก"],
+  ["drop", "ช่วยกันเปียก"],
+  ["recycle", "ใช้วัสดุเก่าให้คุ้มค่า"],
 ] as const;
 
 const STEPS = ["รับภารกิจ", "อ่านหลักฐาน", "ออกแบบและเลือกวัสดุ", "สรุปและเตรียมสร้างจริง"] as const;
@@ -79,7 +80,7 @@ function MissionThreeProgress({ active }: { active: number }) {
   return <aside className={`${styles.missionProgress} ${expanded ? "" : styles.progressCollapsed}`} role="status" aria-label={`ภารกิจที่ 3 ขั้นที่ ${active} จาก 6 ${stepLabel}`}>
     {expanded ? <div className={styles.progressDetails}>
       <div className={styles.progressHeading}><span>ภารกิจที่ 3</span><b>ขั้นที่ {active}/6</b></div>
-      <strong><span aria-hidden="true">📦</span>{stepLabel}</strong>
+      <strong><AppIcon name="package" />{stepLabel}</strong>
       <div className={styles.progressTrack} role="progressbar" aria-label="ความคืบหน้าภารกิจที่ 3" aria-valuemin={1} aria-valuemax={6} aria-valuenow={active}>
         <i style={{ width: `${Math.round((active / STEPS.length) * 100)}%` }} />
       </div>
@@ -110,7 +111,7 @@ function MissionThreeIntro({ onNext, onBack }: { onNext: () => void; onBack: () 
       {!showGoals ? <>
         <span className={`mission-briefing-mission-badge ${styles.welcomeMissionBadge}`}>ภารกิจที่ 3</span>
         <div className="mission-briefing-illustration" aria-hidden="true">
-          <span className={styles.welcomeToolIcon}>🛠️</span>
+          <AppIcon className={styles.welcomeToolIcon} name="hammer" />
         </div>
         <h1>ออกแบบและสร้างกล่องพัสดุ</h1>
         <p className={styles.welcomeCopy}>มาเลือกวัสดุและออกแบบกล่องพัสดุของเรากัน</p>
@@ -124,7 +125,7 @@ function MissionThreeIntro({ onNext, onBack }: { onNext: () => void; onBack: () 
       </> : <>
         <span className={styles.welcomeLabel}>เป้าหมายของทีมเรา</span>
         <h1>กล่องของเราต้องช่วยอะไรบ้าง?</h1>
-        <div className={styles.goalTiles}>{GOALS.map(([icon, label]) => <div key={label}><span aria-hidden="true">{icon}</span><b>{label}</b></div>)}</div>
+        <div className={styles.goalTiles}>{GOALS.map(([icon, label]) => <div key={label}><AppIcon name={icon as AppIconName} /><b>{label}</b></div>)}</div>
         <p className={styles.firstAction}>เริ่มจากดูผลทดลองของทีม<br />แล้วค่อยเลือกวัสดุมาออกแบบกล่อง</p>
         <button className={`button button-orange mission-briefing-start ${styles.welcomeStart}`} type="button" onClick={onNext}>ไปดูผลทดลอง <b aria-hidden="true"><span>›</span></b></button>
         <p className={styles.buildLater}>ออกแบบในเกม แล้วนำไปสร้างกล่องจริงกับครู</p>
@@ -153,18 +154,18 @@ function MissionThreeData({ save, onNext, onBack }: { save: GameSave; onNext: ()
       </aside>
       <section className={styles.tableCard} aria-label="ตารางผลการทดลองจากภารกิจที่ 2">
         <div className={styles.tableTitle}>
-          <div><span className={styles.boardKicker}>🔬 ผลจากห้องทดลอง</span><b>สมุดหลักฐานของทีม</b><small>ดูผล → คุยกัน → เลือกวัสดุ</small></div>
+          <div><span className={styles.boardKicker}><AppIcon name="microscope" /> ผลจากห้องทดลอง</span><b>สมุดหลักฐานของทีม</b><small>ดูผล → คุยกัน → เลือกวัสดุ</small></div>
           <div className={styles.resultBadge}><b>{LAB_MATERIALS.length}</b><span>วัสดุให้เลือก</span></div>
         </div>
         <div className={styles.dataLegend} aria-label="วิธีอ่านหัวตาราง">
-          <span className={styles.legendBlue}>▦ <b>กด</b><small>โครงกล่อง</small></span>
-          <span className={styles.legendPurple}>🥚 <b>ตก</b><small>กันกระแทก</small></span>
-          <span className={styles.legendCyan}>💧 <b>น้ำ</b><small>กันเปียก</small></span>
+          <span className={styles.legendBlue}><AppIcon name="package" /> <b>กด</b><small>โครงกล่อง</small></span>
+          <span className={styles.legendPurple}><AppIcon name="egg" /> <b>ตก</b><small>กันกระแทก</small></span>
+          <span className={styles.legendCyan}><AppIcon name="drop" /> <b>น้ำ</b><small>กันเปียก</small></span>
         </div>
-        <div className={styles.tableScroll}><table><thead><tr><th>วัสดุ</th><th><span>▦</span> กด<small>ยุบตัวน้อยดีกว่า</small></th><th><span>🥚</span> ตก<small>เสียหายน้อยดีกว่า</small></th><th><span>💧</span> น้ำ<small>ซึมน้อยดีกว่า</small></th></tr></thead><tbody>{LAB_MATERIALS.map((material) => <tr key={material.id}>
+        <div className={styles.tableScroll}><table><thead><tr><th>วัสดุ</th><th><AppIcon name="package" /> กด<small>ยุบตัวน้อยดีกว่า</small></th><th><AppIcon name="egg" /> ตก<small>เสียหายน้อยดีกว่า</small></th><th><AppIcon name="drop" /> น้ำ<small>ซึมน้อยดีกว่า</small></th></tr></thead><tbody>{LAB_MATERIALS.map((material) => <tr key={material.id}>
           <th><img src={asset(`materials/${material.image}`)} alt="" /><span>{material.name}</span></th><td>{resultState(formatCompression(save, material.id))}</td><td>{resultState(formatImpact(save, material.id))}</td><td>{resultState(formatWater(save, material.id))}</td>
         </tr>)}</tbody></table></div>
-        <div className={styles.tableCaption}><strong>💡 ภารกิจตอนนี้</strong><span>หาหลักฐานมาช่วยตอบ: วัสดุไหนเหมาะทำโครง และวัสดุไหนช่วยกันน้ำ?</span></div>
+        <div className={styles.tableCaption}><strong><AppIcon name="idea" /> ภารกิจตอนนี้</strong><span>หาหลักฐานมาช่วยตอบ: วัสดุไหนเหมาะทำโครง และวัสดุไหนช่วยกันน้ำ?</span></div>
       </section>
     </main>
     <footer className={styles.footer}><div className={styles.footerInstruction}><i>2</i><span><b>คิดจากหลักฐาน</b><small>พร้อมแล้วไปเลือกวัสดุตามหน้าที่</small></span></div><button className="button button-orange" type="button" onClick={onNext}>ไปเลือกวัสดุ ›</button></footer>
@@ -185,7 +186,7 @@ function MissionThreeMaterials({ save, onPatch, onNext, onBack }: { save: GameSa
         <div className={styles.roleGrid}>{ROLE_DEFINITIONS.map((role) => {
           const selected = materialById(selections[role.key]);
           return <article key={role.key} className={`${styles.roleCard} ${styles[`role${role.color}`]}`}>
-            <div className={styles.roleIcon}>{role.icon}</div><div className={styles.roleCopy}><b>{role.label}</b><span>{role.hint}</span></div>
+            <div className={styles.roleIcon}><AppIcon name={role.icon} /></div><div className={styles.roleCopy}><b>{role.label}</b><span>{role.hint}</span></div>
             <select aria-label={`เลือกวัสดุสำหรับ${role.label}`} value={selections[role.key] ?? ""} onChange={(event) => updateSelection(role.key, event.target.value)}><option value="">เลือกวัสดุ…</option>{LAB_MATERIALS.map((material) => <option key={material.id} value={material.id}>{material.name}</option>)}</select>
             <div className={styles.roleEvidence}>{selected ? <><img src={asset(`materials/${selected.image}`)} alt="" /><span><b>{evidenceFor(save, selected.id, role.evidence)}</b><small>หลักฐานที่เกี่ยวข้องกับหน้าที่นี้</small></span></> : <span className={styles.waiting}>เลือกวัสดุเพื่อดูหลักฐาน</span>}</div>
             {selected && <label className={styles.reuseCheck}><input type="checkbox" checked={Boolean(reuse[role.key])} onChange={() => toggleReuse(role.key)} /><span>เป็นวัสดุที่ใช้แล้ว แต่ตรวจสภาพแล้วว่าเหมาะสม</span></label>}
@@ -195,7 +196,7 @@ function MissionThreeMaterials({ save, onPatch, onNext, onBack }: { save: GameSa
       <aside className={styles.materialEvidence}>
         <div className={styles.sectionTitle}><b>แผงหลักฐาน</b><small>กดดูผลก่อนตัดสินใจ</small></div>
         <div className={styles.evidenceMiniList}>{LAB_MATERIALS.map((material) => <article key={material.id}><img src={asset(`materials/${material.image}`)} alt="" /><div><b>{material.name}</b><span>{formatCompression(save, material.id)} · {formatImpact(save, material.id)}</span><small>{formatWater(save, material.id)}</small></div></article>)}</div>
-        <div className={styles.reuseTip}><b>♻️ วัสดุใช้แล้ว</b><p>ใช้ได้เมื่อสะอาด ไม่ชื้น ไม่ขึ้นรา ไม่ฉีกขาด และยังปลอดภัยต่อการตัด พับ หรือประกอบ</p></div>
+        <div className={styles.reuseTip}><b><AppIcon name="recycle" /> วัสดุใช้แล้ว</b><p>ใช้ได้เมื่อสะอาด ไม่ชื้น ไม่ขึ้นรา ไม่ฉีกขาด และยังปลอดภัยต่อการตัด พับ หรือประกอบ</p></div>
       </aside>
     </main>
     <footer className={styles.footer}><span className={complete ? styles.readyText : ""}>{complete ? "✓ เลือกวัสดุครบทุกหน้าที่แล้ว" : "เลือกวัสดุให้ครบทุกหน้าที่ก่อน"}</span><button className="button button-orange" type="button" disabled={!complete} onClick={onNext}>ไปออกแบบสามมิติ ›</button></footer>
@@ -238,7 +239,7 @@ function MissionThreeDesign({ save, onPatch, onNext, onBack }: { save: GameSave;
       <section className={styles.designControls}>
         <div className={styles.sectionTitle}><b>รายละเอียดแบบ</b><small>ดินน้ำมันมาตรฐานประมาณ 4 × 4 × 4 ซม.</small></div>
         <div className={styles.dimensionGrid}>{(["length", "width", "height"] as const).map((key) => <label key={key}><span>{key === "length" ? "ความยาว" : key === "width" ? "ความกว้าง" : "ความสูง"} (ซม.)</span><input inputMode="decimal" min="1" max="60" type="number" value={design[key]} onChange={(event) => update(key, event.target.value)} /></label>)}</div>
-        <div className={styles.inspectCard}><span className={styles.inspectIcon}>{active.icon}</span><div><b>{active.label}</b><p>ใช้ <strong>{activeMaterial?.name ?? "ยังไม่เลือกวัสดุ"}</strong> · {active.hint}</p><small>{activeMaterial ? evidenceFor(save, activeMaterial.id, active.evidence) : "กลับไปเลือกวัสดุก่อน"}</small></div></div>
+        <div className={styles.inspectCard}><span className={styles.inspectIcon}><AppIcon name={active.icon} /></span><div><b>{active.label}</b><p>ใช้ <strong>{activeMaterial?.name ?? "ยังไม่เลือกวัสดุ"}</strong> · {active.hint}</p><small>{activeMaterial ? evidenceFor(save, activeMaterial.id, active.evidence) : "กลับไปเลือกวัสดุก่อน"}</small></div></div>
         <label className={styles.textField}><span>จุดพับ จุดเชื่อมต่อ และวิธีปิดฝากล่อง</span><textarea value={design.joints} maxLength={180} onChange={(event) => update("joints", event.target.value)} placeholder="เช่น พับแถบด้านข้าง 2 ซม. ใช้เทปปิดรอยต่อ และทำฝาเสียบล็อก..." /></label>
         <label className={styles.textField}><span>ลำดับขั้นตอนการสร้างและแบ่งหน้าที่</span><textarea value={design.steps} maxLength={240} onChange={(event) => update("steps", event.target.value)} placeholder="เช่น 1 ผู้วัด 2 ผู้ทำเครื่องหมาย 3 ผู้พับ 4 ผู้ประกอบ 5 ผู้ตรวจสอบ..." /></label>
       </section>
@@ -264,8 +265,8 @@ function MissionThreeReason({ save, onPatch, onComplete, onBack }: { save: GameS
       </section>
       <aside className={styles.reasonSummary}>
         <div className={styles.sectionTitle}><b>การเลือกของทีม</b><small>หน้าที่ · วัสดุ · หลักฐาน</small></div>
-        {ROLE_DEFINITIONS.map((role) => { const material = materialById(selections[role.key]); return <div key={role.key} className={styles.choiceRow}><i>{role.icon}</i><span><b>{role.label}</b><small>{material?.name ?? "ยังไม่เลือก"}</small></span><em>{material ? evidenceFor(save, material.id, role.evidence) : "—"}</em></div>; })}
-        <div className={styles.reasonTip}>💬 ทุกส่วนไม่จำเป็นต้องใช้วัสดุชนิดเดียวกัน ให้ดูว่า “สมบัติ” สัมพันธ์กับ “หน้าที่” อย่างไร</div>
+        {ROLE_DEFINITIONS.map((role) => { const material = materialById(selections[role.key]); return <div key={role.key} className={styles.choiceRow}><i><AppIcon name={role.icon} /></i><span><b>{role.label}</b><small>{material?.name ?? "ยังไม่เลือก"}</small></span><em>{material ? evidenceFor(save, material.id, role.evidence) : "—"}</em></div>; })}
+        <div className={styles.reasonTip}><AppIcon name="message" /> ทุกส่วนไม่จำเป็นต้องใช้วัสดุชนิดเดียวกัน ให้ดูว่า “สมบัติ” สัมพันธ์กับ “หน้าที่” อย่างไร</div>
       </aside>
     </main>
     <footer className={styles.footer}><span className={ready ? styles.readyText : ""}>{ready ? "✓ เหตุผลและทางเลือกอื่นครบแล้ว" : "เขียนเหตุผลอย่างน้อย 24 ตัวอักษร และทางเลือกอื่นอย่างน้อย 12 ตัวอักษร"}</span><button className="button button-orange" type="button" disabled={!ready} onClick={onComplete}>สรุปภารกิจ ›</button></footer>
@@ -277,9 +278,9 @@ function MissionThreeComplete({ save, onFinish }: { save: GameSave; onFinish: ()
   return <div className={`${styles.screen} ${styles.completeScreen}`}>
     <div className={styles.confetti} aria-hidden="true">✦　•　★　✦　•　✧　★　•</div>
     <section className={styles.completeCard}>
-      <div className={styles.completeMedal}>📦</div><span className={styles.completePill}>ภารกิจที่ 3 สำเร็จ</span><h1>ทีมพร้อมสร้างกล่องต้นแบบแล้ว!</h1><p>เลือกวัสดุตามหน้าที่ ออกแบบแบบสามมิติ และใช้หลักฐานอธิบายเหตุผลเรียบร้อย</p>
+      <div className={styles.completeMedal}><AppIcon name="package" /></div><span className={styles.completePill}>ภารกิจที่ 3 สำเร็จ</span><h1>ทีมพร้อมสร้างกล่องต้นแบบแล้ว!</h1><p>เลือกวัสดุตามหน้าที่ ออกแบบแบบสามมิติ และใช้หลักฐานอธิบายเหตุผลเรียบร้อย</p>
       <div className={styles.completeGrid}><article><b>วัสดุที่ทีมวางแผนใช้</b><span>{[...new Set(selectedMaterials)].join(" · ") || "บันทึกแล้ว"}</span></article><article><b>ขนาดกล่อง</b><span>{save.mission3Design.length} × {save.mission3Design.width} × {save.mission3Design.height} ซม.</span></article><article><b>ขั้นต่อไปนอก Simulation</b><span>ลงมือวัด ตัด พับ ประกอบ และติดป้ายชื่อทีม</span></article></div>
-      <div className={styles.nextMission}><div>🛠️</div><span><b>เชื่อมต่อภารกิจที่ 4</b><small>นำกล่องจริงไปทดสอบแรงกด แรงกระแทก และน้ำกับครู</small></span><strong>→</strong></div>
+      <div className={styles.nextMission}><div><AppIcon name="hammer" /></div><span><b>เชื่อมต่อภารกิจที่ 4</b><small>นำกล่องจริงไปทดสอบแรงกด แรงกระแทก และน้ำกับครู</small></span><strong>→</strong></div>
       <button className="button button-orange" type="button" onClick={onFinish}>ไปเส้นทางภารกิจที่ 4 ›</button>
     </section>
   </div>;

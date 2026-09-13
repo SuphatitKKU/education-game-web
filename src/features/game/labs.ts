@@ -10,9 +10,9 @@ export const LAB_MATERIALS = ["corrugated_cardboard", "cardboard", "bubble_wrap"
   .map((id) => MATERIALS.find((material) => material.id === id)!);
 
 export const LAB_ROOMS = [
-  { ...STUDY_TOPICS[0], id: "compression", number: 1, icon: "📦", notice: "", indexKey: "compressionIndex", resultsKey: "compressionResults" },
-  { ...STUDY_TOPICS[1], id: "impact", number: 2, icon: "🥚", notice: "", indexKey: "impactIndex", resultsKey: "impactResults" },
-  { ...STUDY_TOPICS[2], id: "absorption", number: 3, icon: "💧", notice: "", indexKey: "absorptionIndex", resultsKey: "absorptionResults" },
+  { ...STUDY_TOPICS[0], id: "compression", number: 1, icon: "package", notice: "", indexKey: "compressionIndex", resultsKey: "compressionResults" },
+  { ...STUDY_TOPICS[1], id: "impact", number: 2, icon: "egg", notice: "", indexKey: "impactIndex", resultsKey: "impactResults" },
+  { ...STUDY_TOPICS[2], id: "absorption", number: 3, icon: "drop", notice: "", indexKey: "absorptionIndex", resultsKey: "absorptionResults" },
 ] as const;
 
 export function labRoomDetails(id: LabRoom) {

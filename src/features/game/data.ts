@@ -223,10 +223,10 @@ export const STORY = ALL_STORY_SCENES.filter(([image]) => TORN_DAMAGE_STORY_ENAB
 export const DAMAGE_CAUSES: readonly DamageCause[] = ["แรงกด", "แรงกระแทก", "น้ำ"];
 
 export const BOX_MISSION_GOALS = [
-  { id: "resist-compression", label: "โครงกล่องไม่ยุบง่าย", icon: "📦" },
-  { id: "reduce-impact-damage", label: "ช่วยลดความเสียหายจากแรงกระแทก", icon: "🥚" },
-  { id: "reduce-wetting", label: "ช่วยลดการเปียก", icon: "☔" },
-  { id: "reuse-suitable-material", label: "นำวัสดุที่ใช้แล้วซึ่งยังมีสภาพเหมาะสมกลับมาใช้ใหม่", icon: "♻️" },
+  { id: "resist-compression", label: "โครงกล่องไม่ยุบง่าย", icon: "package" },
+  { id: "reduce-impact-damage", label: "ช่วยลดความเสียหายจากแรงกระแทก", icon: "egg" },
+  { id: "reduce-wetting", label: "ช่วยลดการเปียก", icon: "drop" },
+  { id: "reuse-suitable-material", label: "นำวัสดุที่ใช้แล้วซึ่งยังมีสภาพเหมาะสมกลับมาใช้ใหม่", icon: "recycle" },
 ] as const;
 
 // Keep the tear hotspot data ready for later, but exclude it from the research flow for now.

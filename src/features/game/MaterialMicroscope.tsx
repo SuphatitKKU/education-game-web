@@ -219,7 +219,7 @@ const paperNanoFeatures = (materialName: string): readonly MicroscopeFeature[] =
   {
     id: "water-loving-oh",
     label: "บริเวณรอบโซ่เซลลูโลส",
-    icon: "💧",
+    icon: "drop",
     detail: "รอบโซ่เซลลูโลสมีหมู่ –OH แสดงเป็นจุดเล็ก ๆ อยู่ตามแนวโซ่",
     x: 69,
     y: 27,

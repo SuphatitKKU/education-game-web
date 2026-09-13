@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import styles from "./MissionOverview.module.css";
+import { AppIcon, type AppIconName } from "@/components/AppIcon";
 
 export type MissionNumber = 1 | 2 | 3;
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -12,17 +13,17 @@ type Mission = {
   title: string;
   short: string;
   color: string;
-  icon: string;
+  icon: AppIconName;
   outsideSim?: boolean;
   outsideDescription?: string;
 };
 
 const MISSIONS: Mission[] = [
-  { id: 1, title: "ไขปริศนากล่องพัสดุเสียหาย", short: "สืบร่องรอยและค้นหาสาเหตุ", color: "#ff7a20", icon: "🔎" },
-  { id: 2, title: "สำรวจ 3 สมบัติลับของวัสดุ", short: "ทดลองแรงกด แรงกระแทก และน้ำ", color: "#f5b900", icon: "🧪" },
-  { id: 3, title: "ออกแบบและสร้างกล่องพัสดุ", short: "วางแผน เลือกวัสดุ และลงมือสร้าง", color: "#16aaa9", icon: "✏️" },
-  { id: 4, title: "ทดสอบกล่อง ค้นหาจุดอ่อน และปรับปรุง", short: "ลงมือทดสอบจริง บันทึกหลักฐาน แล้วปรับปรุง", color: "#8f57db", icon: "🛠️", outsideSim: true, outsideDescription: "นำกล่องที่ทีมสร้างไปทดสอบจริงตามเงื่อนไขที่กำหนด สังเกตและบันทึกหลักฐานจากแรงกด แรงกระแทก และน้ำ แล้วใช้หลักฐานค้นหาจุดอ่อนเพื่อปรับปรุงกล่อง" },
-  { id: 5, title: "พิสูจน์กล่องพัสดุรุ่นปรับปรุง", short: "ทดสอบจริงอีกครั้ง เปรียบเทียบ และสรุปผล", color: "#55a92e", icon: "🏆", outsideSim: true, outsideDescription: "นำกล่องรุ่นปรับปรุงไปทดสอบจริงอีกครั้งด้วยเงื่อนไขเดิม เปรียบเทียบหลักฐานก่อนและหลังการปรับปรุง แล้วสรุปว่ากล่องแข็งแรง ป้องกันสิ่งของ และนำวัสดุที่ใช้แล้วกลับมาใช้ใหม่ได้อย่างเหมาะสมขึ้นอย่างไร" },
+  { id: 1, title: "ไขปริศนากล่องพัสดุเสียหาย", short: "สืบร่องรอยและค้นหาสาเหตุ", color: "#ff7a20", icon: "search" },
+  { id: 2, title: "สำรวจ 3 สมบัติลับของวัสดุ", short: "ทดลองแรงกด แรงกระแทก และน้ำ", color: "#f5b900", icon: "flask" },
+  { id: 3, title: "ออกแบบและสร้างกล่องพัสดุ", short: "วางแผน เลือกวัสดุ และลงมือสร้าง", color: "#16aaa9", icon: "pencil" },
+  { id: 4, title: "ทดสอบกล่อง ค้นหาจุดอ่อน และปรับปรุง", short: "ลงมือทดสอบจริง บันทึกหลักฐาน แล้วปรับปรุง", color: "#8f57db", icon: "hammer", outsideSim: true, outsideDescription: "นำกล่องที่ทีมสร้างไปทดสอบจริงตามเงื่อนไขที่กำหนด สังเกตและบันทึกหลักฐานจากแรงกด แรงกระแทก และน้ำ แล้วใช้หลักฐานค้นหาจุดอ่อนเพื่อปรับปรุงกล่อง" },
+  { id: 5, title: "พิสูจน์กล่องพัสดุรุ่นปรับปรุง", short: "ทดสอบจริงอีกครั้ง เปรียบเทียบ และสรุปผล", color: "#55a92e", icon: "trophy", outsideSim: true, outsideDescription: "นำกล่องรุ่นปรับปรุงไปทดสอบจริงอีกครั้งด้วยเงื่อนไขเดิม เปรียบเทียบหลักฐานก่อนและหลังการปรับปรุง แล้วสรุปว่ากล่องแข็งแรง ป้องกันสิ่งของ และนำวัสดุที่ใช้แล้วกลับมาใช้ใหม่ได้อย่างเหมาะสมขึ้นอย่างไร" },
 ];
 
 export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission4Unlocked, mission1Answer, animateMission2Unlock, onUnlockAnimationDone, onBack, onSelect }: {
@@ -49,6 +50,8 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission4Un
       <button className={styles.back} type="button" onClick={onBack}>‹ กลับหน้าปก</button>
 
       <header className={styles.header}>
+        <AppIcon className={styles.headerSparkles} name="sparkles" />
+        <AppIcon className={styles.headerPackage} name="package" />
         <span>ภารกิจออกแบบกล่องแกร่ง</span>
         <h1>เส้นทาง 5 ภารกิจ</h1>
         <p><b>คำถามใหญ่ของเรา</b> เราจะเลือกและใช้วัสดุอย่างไร เพื่อสร้างกล่องพัสดุที่แข็งแรง ป้องกันสิ่งของ และนำวัสดุที่ใช้แล้วกลับมาใช้ใหม่อย่างเหมาะสม โดยมีหลักฐานสนับสนุน?</p>
@@ -84,10 +87,10 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission4Un
                 <span className={styles.picture} aria-hidden="true">
                   {mission.id === 1 && <img src={`${BASE_PATH}/assets/inspection/damaged_box_preview.png`} alt="" />}
                   {mission.id === 2 && <img className={styles.testIcon} src={`${BASE_PATH}/assets/menu/mission-2-material-tests.png`} alt="" />}
-                  {mission.id >= 3 && <em>{mission.icon}</em>}
+                  {mission.id >= 3 && <em><AppIcon name={mission.icon} /></em>}
                 </span>
-                {!unlocked && <span className={`${styles.lockIcon} ${mission.outsideSim ? styles.outsideIcon : ""}`} aria-hidden="true">{mission.outsideSim ? "!" : "🔒"}</span>}
-                {isUnlocking && <span className={styles.openLock} aria-hidden="true">🔓</span>}
+                {!unlocked && <span className={`${styles.lockIcon} ${mission.outsideSim ? styles.outsideIcon : ""}`} aria-hidden="true">{mission.outsideSim ? "!" : <AppIcon name="lock" />}</span>}
+                {isUnlocking && <span className={styles.openLock} aria-hidden="true"><AppIcon name="unlock" /></span>}
               </button>
               <div className={styles.label}>
                 <b>ภารกิจที่ {mission.id}</b>
@@ -107,7 +110,7 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission4Un
 
       {animateMission2Unlock && (
         <div className={styles.unlockCelebration} role="status" aria-live="assertive">
-          <span aria-hidden="true">🔓</span>
+          <AppIcon name="unlock" />
           <div><b>ปลดล็อกแล้ว!</b><small>ภารกิจที่ 2 พร้อมเล่น</small></div>
         </div>
       )}
@@ -115,7 +118,7 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission4Un
       {lockedMission && (
         <div className={styles.modalBackdrop} role="presentation" onClick={() => setLockedMission(null)}>
           <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="locked-title" onClick={(event) => event.stopPropagation()}>
-            <div className={lockedMission.outsideSim ? styles.outsideModalIcon : ""} aria-hidden="true">{lockedMission.outsideSim ? "!" : "🔒"}</div>
+            <div className={lockedMission.outsideSim ? styles.outsideModalIcon : ""} aria-hidden="true">{lockedMission.outsideSim ? "!" : <AppIcon name="lock" />}</div>
             <h2 id="locked-title">{lockedMission.outsideSim && lockedMission.id === 4 && mission4Unlocked ? "ภารกิจที่ 4 พร้อมลงมือจริง!" : lockedMission.outsideSim ? "ภารกิจนี้ลงมือทำนอก Simulation" : "ภารกิจนี้ยังล็อกอยู่นะ"}</h2>
             {lockedMission.outsideSim && lockedMission.id === 4 && mission4Unlocked
               ? <p>ทีมออกแบบและวางแผนสร้างกล่องแล้ว<br /><b>นำแบบไปสร้างต้นแบบจริงกับครู แล้วเริ่มทดสอบได้เลย</b></p>
