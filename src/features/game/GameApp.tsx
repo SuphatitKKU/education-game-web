@@ -85,16 +85,21 @@ function asset(path: string) {
 
 function IpadMiniCanvas({ children }: { children: ReactNode }) {
   const [isAppleMobile, setIsAppleMobile] = useState(false);
+  const [isStandalonePwa, setIsStandalonePwa] = useState(false);
 
   useEffect(() => {
     const userAgent = window.navigator.userAgent;
     // iPadOS 13+ reports itself as MacIntel, so retain the touch-point check.
     const ipadOs = window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1;
     setIsAppleMobile(/iPad|iPhone|iPod/.test(userAgent) || ipadOs);
+    setIsStandalonePwa(
+      window.matchMedia("(display-mode: standalone)").matches
+      || (window.navigator as Navigator & { standalone?: boolean }).standalone === true,
+    );
   }, []);
 
   return (
-    <main className={`app-shell${isAppleMobile ? " apple-mobile" : ""}`}>
+    <main className={`app-shell${isAppleMobile ? " apple-mobile" : ""}${isStandalonePwa ? " standalone-pwa" : ""}`}>
       <section className="game-viewport">
         <div className="game-frame" aria-live="polite">{children}</div>
       </section>

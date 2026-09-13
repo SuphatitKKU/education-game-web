@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { detectRenderCompatibility, readRendererStatuses, type RenderCompatibilityProfile, type RendererStatusRecord } from "./browser-compat";
 
-const BUILD_VERSION = "direct-edge-to-edge-20260913";
-const CACHE_VERSION = "parcel-lab-shell-v15-direct-edge-to-edge";
+const BUILD_VERSION = "standalone-fill-available-20260913";
+const CACHE_VERSION = "parcel-lab-shell-v16-standalone-fill-available";
 
 export function CompatibilityDiagnostics() {
   const [visible, setVisible] = useState(false);

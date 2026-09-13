@@ -840,6 +840,7 @@ body{overscroll-behavior:none;background:#d9f1ff}
 
 /* Fill the app surface directly; do not scale a fixed canvas and leave gutters. */
 .app-shell{position:absolute;inset:0;width:auto;height:auto!important;min-height:0!important;display:block;overflow:hidden;padding:0}
+.standalone-pwa{position:fixed;height:-webkit-fill-available!important;min-height:-webkit-fill-available!important}
 .game-viewport{
   position:absolute;
   inset:0;

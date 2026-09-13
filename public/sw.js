@@ -1,4 +1,4 @@
-const CACHE_NAME = "parcel-lab-shell-v15-direct-edge-to-edge";
+const CACHE_NAME = "parcel-lab-shell-v16-standalone-fill-available";
 const APP_SHELL = ["./", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
