@@ -117,6 +117,7 @@ function IpadMiniCanvas({ children }: { children: ReactNode }) {
       <section className="game-viewport">
         <div className="game-frame" aria-live="polite">{children}</div>
       </section>
+      <FullscreenInstallHelp />
       <aside className="orientation-notice" role="status" aria-live="assertive">
         <span className="orientation-notice-icon" aria-hidden="true">▭</span>
         <strong>หมุน iPad เป็นแนวนอน</strong>
@@ -125,6 +126,38 @@ function IpadMiniCanvas({ children }: { children: ReactNode }) {
       <CompatibilityDiagnostics />
     </main>
   );
+}
+
+function FullscreenInstallHelp() {
+  const [isIosSafari, setIsIosSafari] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const appleMobile = /iPad|iPhone|iPod/.test(window.navigator.userAgent);
+    const standalone = window.matchMedia("(display-mode: standalone)").matches
+      || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    setIsIosSafari(appleMobile && !standalone);
+  }, []);
+
+  if (!isIosSafari) return null;
+
+  return <>
+    <button className="pwa-install-button" type="button" onClick={() => setOpen(true)}>▣ เปิดเต็มจอ</button>
+    {open && <div className="pwa-install-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
+      <section className="pwa-install-card" role="dialog" aria-modal="true" aria-labelledby="pwa-install-title">
+        <button className="pwa-install-close" type="button" onClick={() => setOpen(false)} aria-label="ปิดคำแนะนำ">×</button>
+        <span aria-hidden="true">⛶</span>
+        <h2 id="pwa-install-title">เปิดเกมแบบเต็มจอ</h2>
+        <p>Safari บน iPad mini 2 ซ่อนแถบด้านบนไม่ได้ขณะเปิดผ่านเว็บ ให้เพิ่มเกมเป็นแอปก่อนหนึ่งครั้ง</p>
+        <ol>
+          <li>แตะปุ่ม <b>แชร์</b> ⎋ ใน Safari</li>
+          <li>เลือก <b>เพิ่มไปยังหน้าจอโฮม</b></li>
+          <li>เปิดไอคอน <b>กล่องแกร่ง</b> จากหน้าจอโฮมในแนวนอน</li>
+        </ol>
+        <small>เมื่อเปิดจากไอคอน เกมจะเต็มจอโดยไม่มีแถบ Safari</small>
+      </section>
+    </div>}
+  </>;
 }
 
 function userFacingError(error: unknown, fallback: string) {

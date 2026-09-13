@@ -874,11 +874,19 @@ body{overscroll-behavior:none;background:#d9f1ff}
 .orientation-notice{display:none}
 @media (orientation:portrait){
   .game-viewport,.compat-diagnostics{visibility:hidden;pointer-events:none}
+  .pwa-install-button,.pwa-install-backdrop{display:none!important}
   .orientation-notice{position:fixed;z-index:1000;inset:0;display:grid;place-content:center;justify-items:center;gap:1rem;padding:2rem;background:linear-gradient(145deg,#d8f4ff,#fff4c9);color:#17324d;text-align:center}
   .orientation-notice-icon{display:grid;place-items:center;width:5rem;height:3.75rem;border:.22rem solid currentColor;border-radius:.5rem;font-size:2.5rem;line-height:1;transform:rotate(90deg)}
   .orientation-notice strong{font-size:clamp(1.5rem,6vw,2.25rem)}
   .orientation-notice p{max-width:22rem;margin:0;font-size:clamp(1rem,4vw,1.25rem);line-height:1.55}
 }
+
+/* Safari on iPad mini 2 cannot hide its browser chrome. Guide learners into the installed PWA instead. */
+.pwa-install-button{position:fixed;z-index:600;right:1rem;bottom:1rem;border:.14rem solid #fff;border-radius:999px;background:#1769ff;color:#fff;padding:.6rem 1rem;font:700 .9rem/1 var(--font-kodchasan),Tahoma,sans-serif;box-shadow:0 .3rem 0 #0d4dbd,0 .55rem 1rem #17324d35;cursor:pointer}
+.pwa-install-backdrop{position:fixed;z-index:1100;inset:0;display:grid;place-items:center;padding:1.25rem;background:#102f4b8c;backdrop-filter:blur(.25rem)}
+.pwa-install-card{position:relative;width:min(33rem,100%);padding:2rem 2rem 1.65rem;border:.2rem solid #fff;border-radius:1.6rem;background:linear-gradient(145deg,#fffdf3,#e8f9ff);box-shadow:0 .7rem 0 #247eb1,0 1.3rem 3rem #071d2e66;color:#17324d;text-align:center}
+.pwa-install-card>span{display:grid;place-items:center;width:4.25rem;height:4.25rem;margin:0 auto .7rem;border-radius:1.2rem;background:#1769ff;color:#fff;font-size:2.25rem;line-height:1}
+.pwa-install-card h2{margin:0;color:#075bbd;font-size:1.5rem}.pwa-install-card p{margin:.65rem 0 1rem;font-size:.96rem;line-height:1.55}.pwa-install-card ol{display:grid;gap:.6rem;margin:0;padding:0;list-style-position:inside;text-align:left;font-size:.95rem;line-height:1.45}.pwa-install-card small{display:block;margin-top:1rem;padding:.65rem .85rem;border-radius:.8rem;background:#fff5c9;color:#765316;font-size:.82rem;line-height:1.45}.pwa-install-close{position:absolute;top:.65rem;right:.65rem;width:2rem;height:2rem;border:0;border-radius:50%;background:#e7f3fa;color:#23506d;font:700 1.35rem/1 system-ui;cursor:pointer}
 
 /* Box mission — compact card board matched to the classroom reference layout. */
 .box-mission-screen{overflow:clip;background:linear-gradient(145deg,#c9f1ff 0%,#f0fcff 58%,#fff6cf 100%)}
