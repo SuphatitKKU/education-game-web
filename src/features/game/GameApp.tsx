@@ -64,9 +64,6 @@ const MISSION_TWO_AVAILABLE = true;
 const MISSION_THREE_AVAILABLE = true;
 const DISABLED_LAB_STAGES = new Set<Stage>(LAB_STAGES);
 const MISSION_ONE_BIG_QUESTION_PROGRESS = "เราทราบแล้วว่าต้องศึกษาสมบัติ 3 ด้าน แต่ยังไม่ทราบว่าวัสดุชนิดใดเหมาะกับแต่ละหน้าที่";
-const IPAD_MINI_CANVAS_WIDTH = 1024;
-const IPAD_MINI_CANVAS_HEIGHT = 768;
-
 const MISSION_ONE_PHASES: Partial<Record<Stage, { step: number; label: string; icon: string }>> = {
   mission: { step: 1, label: "เกริ่นภารกิจ", icon: "🗺️" },
   story: { step: 2, label: "ติดตามสถานการณ์ 9 ฉาก", icon: "🎬" },
@@ -86,33 +83,7 @@ function asset(path: string) {
   return `${BASE_PATH}/assets/${path}`;
 }
 
-function useIpadMiniCanvasScale() {
-  const viewportRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const updateScale = () => {
-      const bounds = viewportRef.current?.getBoundingClientRect();
-      const viewportWidth = bounds?.width ?? window.innerWidth;
-      const viewportHeight = bounds?.height ?? window.innerHeight;
-      document.documentElement.style.setProperty("--ipad-mini-scale-x", String(Math.max(viewportWidth / IPAD_MINI_CANVAS_WIDTH, 0.01)));
-      document.documentElement.style.setProperty("--ipad-mini-scale-y", String(Math.max(viewportHeight / IPAD_MINI_CANVAS_HEIGHT, 0.01)));
-    };
-
-    updateScale();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateScale);
-    if (viewportRef.current) observer?.observe(viewportRef.current);
-    window.addEventListener("resize", updateScale);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", updateScale);
-    };
-  }, []);
-
-  return viewportRef;
-}
-
 function IpadMiniCanvas({ children }: { children: ReactNode }) {
-  const viewportRef = useIpadMiniCanvasScale();
   const [isAppleMobile, setIsAppleMobile] = useState(false);
 
   useEffect(() => {
@@ -124,7 +95,7 @@ function IpadMiniCanvas({ children }: { children: ReactNode }) {
 
   return (
     <main className={`app-shell${isAppleMobile ? " apple-mobile" : ""}`}>
-      <section className="game-viewport" ref={viewportRef}>
+      <section className="game-viewport">
         <div className="game-frame" aria-live="polite">{children}</div>
       </section>
       <FullscreenInstallHelp />

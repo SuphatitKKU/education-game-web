@@ -838,8 +838,7 @@ body{overscroll-behavior:none;background:#d9f1ff}
   .app-shell{height:100dvh;min-height:100dvh}
 }
 
-/* Legacy iPad mini canvas: keep every screen and every child coordinate on one 1024×768 stage. */
-:root{--ipad-mini-width:1024px;--ipad-mini-height:768px;--ipad-mini-scale-x:1;--ipad-mini-scale-y:1}
+/* Fill the app surface directly; do not scale a fixed canvas and leave gutters. */
 .app-shell{position:absolute;inset:0;width:auto;height:auto!important;min-height:0!important;display:block;overflow:hidden;padding:0}
 .game-viewport{
   position:absolute;
@@ -851,18 +850,16 @@ body{overscroll-behavior:none;background:#d9f1ff}
 }
 .game-frame{
   position:absolute;
-  left:50%;
-  top:50%;
-  width:var(--ipad-mini-width);
-  height:var(--ipad-mini-height);
+  inset:0;
+  width:100%;
+  height:100%;
   max-width:none;
   max-height:none;
   aspect-ratio:auto;
   overflow:hidden;
   container-type:inline-size;
-  transform:translate(-50%,-50%) scale(var(--ipad-mini-scale-x),var(--ipad-mini-scale-y));
-  transform-origin:center;
-  box-shadow:0 0 3rem #17324d2e;
+  transform:none;
+  box-shadow:none;
 }
 .game-frame>.screen{position:absolute;inset:0;width:100%;height:100%}
 .game-frame>.loading-screen{min-height:100%;height:100%}
