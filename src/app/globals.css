@@ -873,12 +873,12 @@ body{overscroll-behavior:none;background:#d9f1ff}
 /* The learning activity is a landscape-only iPad mini 2 experience. */
 .orientation-notice{display:none}
 @media (orientation:portrait){
-  .game-viewport,.compat-diagnostics{visibility:hidden;pointer-events:none}
-  .pwa-install-button,.pwa-install-backdrop{display:none!important}
-  .orientation-notice{position:fixed;z-index:1000;inset:0;display:grid;place-content:center;justify-items:center;gap:1rem;padding:2rem;background:linear-gradient(145deg,#d8f4ff,#fff4c9);color:#17324d;text-align:center}
-  .orientation-notice-icon{display:grid;place-items:center;width:5rem;height:3.75rem;border:.22rem solid currentColor;border-radius:.5rem;font-size:2.5rem;line-height:1;transform:rotate(90deg)}
-  .orientation-notice strong{font-size:clamp(1.5rem,6vw,2.25rem)}
-  .orientation-notice p{max-width:22rem;margin:0;font-size:clamp(1rem,4vw,1.25rem);line-height:1.55}
+  .apple-mobile .game-viewport,.apple-mobile .compat-diagnostics{visibility:hidden;pointer-events:none}
+  .apple-mobile .pwa-install-button,.apple-mobile .pwa-install-backdrop{display:none!important}
+  .apple-mobile .orientation-notice{position:fixed;z-index:1000;inset:0;display:grid;place-content:center;justify-items:center;gap:1rem;padding:2rem;background:linear-gradient(145deg,#d8f4ff,#fff4c9);color:#17324d;text-align:center}
+  .apple-mobile .orientation-notice-icon{display:grid;place-items:center;width:5rem;height:3.75rem;border:.22rem solid currentColor;border-radius:.5rem;font-size:2.5rem;line-height:1;transform:rotate(90deg)}
+  .apple-mobile .orientation-notice strong{font-size:clamp(1.5rem,6vw,2.25rem)}
+  .apple-mobile .orientation-notice p{max-width:22rem;margin:0;font-size:clamp(1rem,4vw,1.25rem);line-height:1.55}
 }
 
 /* Safari on iPad mini 2 cannot hide its browser chrome. Guide learners into the installed PWA instead. */

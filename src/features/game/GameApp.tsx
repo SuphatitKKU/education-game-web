@@ -113,8 +113,17 @@ function useIpadMiniCanvasScale() {
 
 function IpadMiniCanvas({ children }: { children: ReactNode }) {
   const viewportRef = useIpadMiniCanvasScale();
+  const [isAppleMobile, setIsAppleMobile] = useState(false);
+
+  useEffect(() => {
+    const userAgent = window.navigator.userAgent;
+    // iPadOS 13+ reports itself as MacIntel, so retain the touch-point check.
+    const ipadOs = window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1;
+    setIsAppleMobile(/iPad|iPhone|iPod/.test(userAgent) || ipadOs);
+  }, []);
+
   return (
-    <main className="app-shell">
+    <main className={`app-shell${isAppleMobile ? " apple-mobile" : ""}`}>
       <section className="game-viewport" ref={viewportRef}>
         <div className="game-frame" aria-live="polite">{children}</div>
       </section>

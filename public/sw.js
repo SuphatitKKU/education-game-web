@@ -1,4 +1,4 @@
-const CACHE_NAME = "parcel-lab-shell-v13-ipad-mini2-bottom-edge";
+const CACHE_NAME = "parcel-lab-shell-v14-apple-mobile-landscape-only";
 const APP_SHELL = ["./", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
