@@ -2394,6 +2394,7 @@ function normalizeExitTickets(initial: Record<string, ExitTicket>, team: TeamMem
 
 function ExitTicketScreen({ team, initial, confirmations, onBack, onAnswerChange, onSaveDraft, onDone }: { team: TeamMember[]; initial: Record<string, ExitTicket>; confirmations: Record<string, ExitTicket>; onBack: () => void; onAnswerChange: (values: Record<string, ExitTicket>) => void; onSaveDraft: (values: Record<string, ExitTicket>, confirmed: Record<string, ExitTicket>) => void; onDone: (values: Record<string, ExitTicket>) => void }) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const answerPanelRef = useRef<HTMLDivElement>(null);
   const values = { ...initial, ...normalizeExitTickets(initial, team) };
   const savedValues = confirmations;
   const [selectedAnswers, setSelectedAnswers] = useState<Record<MatchField, string>>({ k: "", p: "" });
@@ -2420,6 +2421,32 @@ function ExitTicketScreen({ team, initial, confirmations, onBack, onAnswerChange
     onSaveDraft(values, { ...savedValues, [activeKey]: current });
   };
   const valueAnswer = readValueAnswer(current.v);
+  useEffect(() => {
+    const panel = answerPanelRef.current;
+    if (!panel || !/iPad/.test(window.navigator.userAgent)) return;
+    let lastY: number | null = null;
+    const beginTouchScroll = (event: TouchEvent) => { lastY = event.touches.length === 1 ? event.touches[0].clientY : null; };
+    const continueTouchScroll = (event: TouchEvent) => {
+      if (lastY === null || event.touches.length !== 1 || panel.scrollHeight <= panel.clientHeight) return;
+      const nextY = event.touches[0].clientY;
+      const distance = lastY - nextY;
+      if (distance === 0) return;
+      panel.scrollTop += distance;
+      lastY = nextY;
+      event.preventDefault();
+    };
+    const endTouchScroll = () => { lastY = null; };
+    panel.addEventListener("touchstart", beginTouchScroll, { passive: true });
+    panel.addEventListener("touchmove", continueTouchScroll, { passive: false });
+    panel.addEventListener("touchend", endTouchScroll);
+    panel.addEventListener("touchcancel", endTouchScroll);
+    return () => {
+      panel.removeEventListener("touchstart", beginTouchScroll);
+      panel.removeEventListener("touchmove", continueTouchScroll);
+      panel.removeEventListener("touchend", endTouchScroll);
+      panel.removeEventListener("touchcancel", endTouchScroll);
+    };
+  }, []);
   return (
     <div className="screen exit-ticket-screen">
       <img className="group-design-bg" src={asset("compression/lab_background.png")} alt="" />
@@ -2441,7 +2468,7 @@ function ExitTicketScreen({ team, initial, confirmations, onBack, onAnswerChange
             <span>{complete ? "✓" : `${completedCount}/${team.length}`}</span>
           </div>
         </aside>
-        <div className="kpv-card matching-kpv-card">
+        <div className="kpv-card matching-kpv-card" ref={answerPanelRef}>
           <MatchingQuestion field="k" questionNumber={1} instruction="จากสถานการณ์ ให้จับคู่ปัญหาของกล่องพัสดุกับสมบัติของวัสดุที่ควรศึกษา" items={KNOWLEDGE_MATCHES} value={current.k} selectedAnswer={selectedAnswers.k} onSelectAnswer={(answer) => setSelectedAnswers((all) => ({ ...all, k: answer }))} onChange={(value) => update("k", value)} />
           <MatchingQuestion field="p" questionNumber={2} instruction="จากร่องรอยที่พบ ให้จับคู่ร่องรอยความเสียหายกับสาเหตุที่คาดว่าเกี่ยวข้อง" items={PROCESS_MATCHES} value={current.p} selectedAnswer={selectedAnswers.p} onSelectAnswer={(answer) => setSelectedAnswers((all) => ({ ...all, p: answer }))} onChange={(value) => update("p", value)} />
           <section className="value-question">

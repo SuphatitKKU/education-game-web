@@ -1168,3 +1168,6 @@ body{overscroll-behavior:none;background:#d9f1ff}
 
 /* iPad Safari's visual viewport is shorter than its layout viewport while browser bars are present. */
 @media screen and (orientation:landscape) and (min-device-width:768px) and (max-device-width:1024px){.app-shell.apple-mobile{position:fixed!important;top:0;right:0;bottom:0;left:0;width:auto!important;height:-webkit-fill-available!important;min-height:-webkit-fill-available!important}.app-shell.apple-mobile .game-viewport,.app-shell.apple-mobile .game-frame{top:0;right:0;bottom:0;left:0;width:auto!important;height:-webkit-fill-available!important;min-height:-webkit-fill-available!important}}
+
+/* iPad mini 2 needs explicit panel edges before -webkit-overflow-scrolling can calculate a scroll height. */
+@media screen and (orientation:landscape) and (min-device-width:768px) and (max-device-width:1024px){.exit-ticket-screen .exit-ticket-layout{position:relative;display:block!important}.exit-ticket-layout .student-tabs{position:absolute;top:0;bottom:1.35vw;left:2.2vw;width:27%;height:auto}.exit-ticket-layout .matching-kpv-card{position:absolute;top:0;right:2.2vw;bottom:1.35vw;left:calc(27% + 3.5vw);width:auto;height:auto;min-height:0;overflow-y:scroll!important;-webkit-overflow-scrolling:touch;touch-action:pan-y;-webkit-transform:translateZ(0);transform:translateZ(0)}}
