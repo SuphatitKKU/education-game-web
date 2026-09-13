@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { detectRenderCompatibility, readRendererStatuses, type RenderCompatibilityProfile, type RendererStatusRecord } from "./browser-compat";
 
-const BUILD_VERSION = "ipad-mini2-fullscreen-guide-20260913";
-const CACHE_VERSION = "parcel-lab-shell-v10-ipad-mini2-fullscreen-guide";
+const BUILD_VERSION = "ipad-mini2-edge-to-edge-20260913";
+const CACHE_VERSION = "parcel-lab-shell-v11-ipad-mini2-edge-to-edge";
 
 export function CompatibilityDiagnostics() {
   const [visible, setVisible] = useState(false);

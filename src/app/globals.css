@@ -839,15 +839,15 @@ body{overscroll-behavior:none;background:#d9f1ff}
 }
 
 /* Legacy iPad mini canvas: keep every screen and every child coordinate on one 1024×768 stage. */
-:root{--ipad-mini-width:1024px;--ipad-mini-height:768px;--ipad-mini-scale:1}
-.app-shell{display:grid;place-items:center;overflow:hidden}
+:root{--ipad-mini-width:1024px;--ipad-mini-height:768px;--ipad-mini-scale-x:1;--ipad-mini-scale-y:1}
+.app-shell{display:grid;place-items:center;overflow:hidden;padding:0}
 .game-viewport{
   position:relative;
   flex:none;
-  width:min(var(--ipad-mini-width),100vw,133.3333vh);
-  height:min(var(--ipad-mini-height),75vw,100vh);
-  aspect-ratio:4/3;
-  overflow:visible;
+  width:100vw;
+  height:100vh;
+  aspect-ratio:auto;
+  overflow:hidden;
 }
 .game-frame{
   position:absolute;
@@ -860,14 +860,14 @@ body{overscroll-behavior:none;background:#d9f1ff}
   aspect-ratio:auto;
   overflow:hidden;
   container-type:inline-size;
-  transform:translate(-50%,-50%) scale(var(--ipad-mini-scale));
+  transform:translate(-50%,-50%) scale(var(--ipad-mini-scale-x),var(--ipad-mini-scale-y));
   transform-origin:center;
   box-shadow:0 0 3rem #17324d2e;
 }
 .game-frame>.screen{position:absolute;inset:0;width:100%;height:100%}
 .game-frame>.loading-screen{min-height:100%;height:100%}
 @supports (height:100dvh){
-  .game-viewport{width:min(var(--ipad-mini-width),100vw,133.3333dvh);height:min(var(--ipad-mini-height),75vw,100dvh)}
+  .game-viewport{width:100vw;height:100dvh}
 }
 
 /* The learning activity is a landscape-only iPad mini 2 experience. */

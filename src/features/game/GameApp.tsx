@@ -92,12 +92,11 @@ function useIpadMiniCanvasScale() {
       const visualViewport = window.visualViewport;
       const viewportWidth = visualViewport?.width ?? window.innerWidth;
       const viewportHeight = visualViewport?.height ?? window.innerHeight;
-      const scale = Math.min(
-        1,
-        viewportWidth / IPAD_MINI_CANVAS_WIDTH,
-        viewportHeight / IPAD_MINI_CANVAS_HEIGHT,
-      );
-      document.documentElement.style.setProperty("--ipad-mini-scale", String(Math.max(scale, 0.01)));
+      // iPad's installed-web-app viewport is a little shorter than 768px when
+      // the system status area is present. Scale each axis to the available
+      // viewport so the 1024×768 learning canvas reaches every app edge.
+      document.documentElement.style.setProperty("--ipad-mini-scale-x", String(Math.max(viewportWidth / IPAD_MINI_CANVAS_WIDTH, 0.01)));
+      document.documentElement.style.setProperty("--ipad-mini-scale-y", String(Math.max(viewportHeight / IPAD_MINI_CANVAS_HEIGHT, 0.01)));
     };
 
     updateScale();
