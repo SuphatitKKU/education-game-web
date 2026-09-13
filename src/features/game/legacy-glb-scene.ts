@@ -154,7 +154,7 @@ export function createLegacyGlbScene(canvas: HTMLCanvasElement, options: {
   return {
     rotate(deltaTheta, deltaPhi = 0) {
       orbit.theta -= deltaTheta;
-      orbit.phi = THREE.MathUtils.clamp(orbit.phi + deltaPhi, THREE.MathUtils.degToRad(8), THREE.MathUtils.degToRad(172));
+      orbit.phi = THREE.MathUtils.clamp(orbit.phi - deltaPhi, THREE.MathUtils.degToRad(8), THREE.MathUtils.degToRad(172));
       updateCamera();
       render();
     },

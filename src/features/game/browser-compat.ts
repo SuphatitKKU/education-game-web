@@ -179,7 +179,7 @@ export function installModelViewerInputFallback(element: LegacyModelViewerElemen
   const tracker = createOrbitDragTracker((deltaX, deltaY) => {
     const orbit = element.getCameraOrbit?.();
     if (!orbit) return;
-    const nextPhi = Math.min(Math.PI - .08, Math.max(.08, orbit.phi + deltaY * .01));
+    const nextPhi = Math.min(Math.PI - .08, Math.max(.08, orbit.phi - deltaY * .01));
     const nextOrbit = `${orbit.theta - deltaX * .01}rad ${nextPhi}rad ${orbit.radius}m`;
     element.cameraOrbit = nextOrbit;
     element.setAttribute("camera-orbit", nextOrbit);

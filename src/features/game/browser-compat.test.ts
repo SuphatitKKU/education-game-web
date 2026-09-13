@@ -83,7 +83,7 @@ describe("legacy browser event fallbacks", () => {
     listeners.touchstart({ changedTouches: [{ identifier: 5, clientX: 100, clientY: 100 }] } as unknown as Event);
     const move = { changedTouches: [{ identifier: 5, clientX: 120, clientY: 120 }], preventDefault: vi.fn() };
     listeners.touchmove(move as unknown as Event);
-    expect(attributes.get("camera-orbit")).toBe("0.8rad 1rad 4m");
+    expect(attributes.get("camera-orbit")).toBe("0.8rad 0.6000000000000001rad 4m");
     expect(move.preventDefault).toHaveBeenCalledOnce();
     expect(element.jumpCameraToGoal).toHaveBeenCalledOnce();
     cleanup();

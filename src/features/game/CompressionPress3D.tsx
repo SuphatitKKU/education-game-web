@@ -63,7 +63,7 @@ export function CompressionPress3D({ material, phase, displayMode, onDisplayMode
   return <div className={styles.press3D} data-renderer={status}>
     <div className={styles.sceneLabels} hidden={status !== "ready"} role="group" aria-label="เลือกโมเดลการทดลอง">
       <button type="button" aria-pressed={displayMode === "before"} onClick={() => onDisplayModeChange("before")}>ก่อนกด</button>
-      <button type="button" aria-pressed={displayMode === "after"} onClick={() => onDisplayModeChange("after")}>ขณะรับแรงกด</button>
+      <button type="button" aria-pressed={displayMode === "after"} disabled={phase === "idle"} onClick={() => onDisplayModeChange("after")}>ขณะรับแรงกด</button>
     </div>
     <div className={styles.sceneViewport} hidden={status !== "ready"}>
       <canvas ref={canvasRef} className={styles.sceneCanvas} tabIndex={status === "ready" ? 0 : -1}
