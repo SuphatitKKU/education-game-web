@@ -31,3 +31,14 @@
 
 /* Keep the five mission icons readable without crowding their circular stops. */
 .picture :global(.app-icon){width:6.1cqw;height:6.1cqw}
+
+/* Fixed mission colors for Safari 12, which does not support color-mix(). */
+@supports not (color:color-mix(in srgb,#000,#fff)){
+.mission>button{box-shadow:0 0 0 .36cqw #fff,0 .7cqw 0 #64788b,0 1.1cqw 1.4cqw #123e643d}.number{box-shadow:0 .3cqw 0 #64788b,0 .55cqw .7cqw #17324d32}.label{box-shadow:0 .4cqw 0 #d9e7ed,0 .72cqw 1cqw #143b5f2d}
+.mission1>button{border:.5cqw solid #ff7a20}.mission1 .number,.mission1 .label::before{background:#ff7a20}.mission1 .label{border:.22cqw solid #ff7a20}.mission1 .label b{color:#ff7a20}
+.mission2>button{border:.5cqw solid #f5b900}.mission2 .number,.mission2 .label::before{background:#f5b900}.mission2 .label{border:.22cqw solid #f5b900}.mission2 .label b{color:#d69e00}
+.mission3>button{border:.5cqw solid #16aaa9}.mission3 .number,.mission3 .label::before{background:#16aaa9}.mission3 .label{border:.22cqw solid #16aaa9}.mission3 .label b{color:#148887}
+.mission4>button{border:.5cqw solid #8f57db}.mission4 .number,.mission4 .label::before{background:#8f57db}.mission4 .label{border:.22cqw solid #8f57db}.mission4 .label b{color:#7042b1}
+.mission5>button{border:.5cqw solid #55a92e}.mission5 .number,.mission5 .label::before{background:#55a92e}.mission5 .label{border:.22cqw solid #55a92e}.mission5 .label b{color:#438825}
+.locked>button{border-color:#93a1b0}.locked .label{border-color:#aab8c8}.locked .label b{color:#667c90}
+}
