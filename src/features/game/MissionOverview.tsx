@@ -6,7 +6,6 @@ import styles from "./MissionOverview.module.css";
 import { AppIcon, type AppIconName } from "@/components/AppIcon";
 
 export type MissionNumber = 1 | 2 | 3;
-const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 type Mission = {
   id: 1 | 2 | 3 | 4 | 5;
@@ -85,9 +84,7 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission4Un
               >
                 <span className={styles.number}>{mission.id}</span>
                 <span className={styles.picture} aria-hidden="true">
-                  {mission.id === 1 && <img src={`${BASE_PATH}/assets/inspection/damaged_box_preview.png`} alt="" />}
-                  {mission.id === 2 && <img className={styles.testIcon} src={`${BASE_PATH}/assets/menu/mission-2-material-tests.png`} alt="" />}
-                  {mission.id >= 3 && <em><AppIcon name={mission.icon} /></em>}
+                  <em><AppIcon name={mission.icon} strokeWidth={2.2} /></em>
                 </span>
                 {!unlocked && <span className={`${styles.lockIcon} ${mission.outsideSim ? styles.outsideIcon : ""}`} aria-hidden="true">{mission.outsideSim ? "!" : <AppIcon name="lock" />}</span>}
                 {isUnlocking && <span className={styles.openLock} aria-hidden="true"><AppIcon name="unlock" /></span>}
