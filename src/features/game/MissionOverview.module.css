@@ -29,10 +29,10 @@
 @keyframes unlock-banner{0%{opacity:0;transform:translate(-50%,-35%) scale(.55)}12%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}20%,72%{opacity:1;transform:translate(-50%,-50%) scale(1)}88%{opacity:1;transform:translate(-50%,-56%) scale(.98)}100%{opacity:0;transform:translate(-50%,-70%) scale(.9)}}
 @keyframes decor-pop{0%,100%{transform:scale(.9) rotate(-5deg)}50%{transform:scale(1.16) rotate(7deg)}}
 
-/* Keep the five mission icons centred and safely inside their circular stops on Safari 12/iPad mini. */
-.picture{display:grid;place-items:center}
-.picture em{display:grid;place-items:center;line-height:0;filter:none}
-.picture :global(.app-icon){display:block;flex:0 0 auto;width:4.75cqw;height:4.75cqw;max-width:100%;max-height:100%;transform:none!important;transform-origin:center}
+/* Safari 12 can misplace SVGs in grid cells. Centre every route icon from the
+   midpoint of its own circle instead of relying on grid alignment. */
+.picture em{position:absolute;inset:0;display:block;line-height:0;filter:none}
+.picture :global(.app-icon){position:absolute;left:50%;top:50%;display:block;width:5.6cqw;height:5.6cqw;max-width:100%;max-height:100%;transform:translate(-50%,-50%)!important;transform-origin:center}
 
 /* Safari 12 has no color-mix(); fixed pixels keep the five route stops coloured. */
 .mission>button{box-shadow:0 0 0 3px #fff,0 6px 0 #64788b,0 10px 14px #123e643d}.number{border:3px solid #fff;box-shadow:0 3px 0 #64788b,0 5px 7px #17324d32}.label{box-shadow:0 4px 0 #d9e7ed,0 7px 10px #143b5f2d}
