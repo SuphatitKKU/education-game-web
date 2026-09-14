@@ -57,9 +57,11 @@ const files = await cssFiles(STATIC_OUTPUT);
 let fallbackCount = 0;
 for (const file of files) {
   const original = await readFile(file, "utf8");
-  let compatible = addFallback(original, "cqw", legacyContainerWidth);
+  // Expand Safari-unsupported shorthands first, while their cqw values are
+  // still simple. The physical properties then receive vw/vh fallbacks too.
+  let compatible = addSafari12PropertyFallbacks(original);
+  compatible = addFallback(compatible, "cqw", legacyContainerWidth);
   compatible = addFallback(compatible, "dvh", (value) => value.replace(/dvh\b/g, "vh"));
-  compatible = addSafari12PropertyFallbacks(compatible);
   if (compatible !== original) {
     fallbackCount += 1;
     await writeFile(file, compatible);

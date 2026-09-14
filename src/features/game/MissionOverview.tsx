@@ -82,7 +82,7 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission1An
               >
                 <span className={styles.number}>{mission.id}</span>
                 <span className={styles.picture} aria-hidden="true">
-                  <em><AppIcon name={mission.icon} strokeWidth={2.2} /></em>
+                  <AppIcon name={mission.icon} strokeWidth={2.2} />
                 </span>
                 {!unlocked && <span className={`${styles.lockIcon} ${mission.outsideSim ? styles.outsideIcon : ""}`} aria-hidden="true">{mission.outsideSim ? "!" : <AppIcon name="lock" />}</span>}
                 {isUnlocking && <span className={styles.openLock} aria-hidden="true"><AppIcon name="unlock" /></span>}
