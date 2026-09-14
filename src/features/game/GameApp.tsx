@@ -1019,7 +1019,7 @@ function ComicStory({ index, audio, onIndex, onDone }: { index: number; audio: b
 function DamageInspection({ findings, audio, onFinding, onReset, onDone }: { findings: Record<string, DamageCause>; audio: boolean; onFinding: (findings: Record<string, DamageCause>) => void; onReset: () => void; onDone: () => void }) {
   type ViewerMaterial = { name: string; pbrMetallicRoughness: { setBaseColorFactor: (color: string | number[]) => void } };
   type ViewerElement = HTMLElement & { model?: { materials: ViewerMaterial[] }; src?: string; alt?: string };
-  const inspectionModelSrc = `${asset("models/damaged_box_blender.glb")}?v=blender-normal-box-1`;
+  const inspectionModelSrc = `${asset("models/damaged_box_blender.glb")}?v=wet-stain-back-2`;
   const inspectionModelAlt = "กล่องพัสดุเปิดฝาออกครบทั้งสี่ด้าน เห็นวัสดุกันกระแทกและแก้วด้านในที่แตกร้าวและขอบบิ่น สามารถหมุนตรวจสอบและแตะตอบได้";
 
   const [ready, setReady] = useState(false);
@@ -1274,7 +1274,7 @@ function TypewriterMessage({ text }: { text: string }) {
 function BoxMissionReadOnlyModel() {
   type ViewerMaterial = { name: string; pbrMetallicRoughness: { setBaseColorFactor: (color: string | number[]) => void } };
   type ViewerElement = HTMLElement & { model?: { materials: ViewerMaterial[] }; src?: string; alt?: string };
-  const modelSrc = `${asset("models/damaged_box_blender.glb")}?v=blender-normal-box-1`;
+  const modelSrc = `${asset("models/damaged_box_blender.glb")}?v=wet-stain-back-2`;
   const modelAlt = "โมเดลกล่องพัสดุที่ค้นพบรอยยุบ รอยเปียก มุมบุบ และสิ่งของด้านในเสียหายแล้ว หมุนดูได้";
   const [profile, setProfile] = useState<RenderCompatibilityProfile | null>(null);
   const [ready, setReady] = useState(false);
@@ -2213,8 +2213,8 @@ function StudyFocusScreen({ values, onBack, onChange, onDone }: { values: Record
       <button className="material-guide-back-button" onClick={onBack}>‹ ย้อนกลับ</button>
       <header className="study-focus-header">
         <div className="study-focus-question">
-          <span><AppIcon name="search" /> คำถามนำภารกิจที่ 1</span>
-          <h1>เมื่อกล่องพัสดุต้องเจอแรงกด แรงกระแทก และฝน เราควรศึกษาสมบัติใดของวัสดุบ้าง เพราะเหตุใด?</h1>
+          <span><AppIcon name="search" /> คำถามภารกิจที่ 1</span>
+          <h1>เมื่อกล่องพัสดุต้องเจอแรงกด แรงกระแทก และฝน<br />เราควรศึกษาสมบัติใดของวัสดุบ้าง เพราะเหตุใด?</h1>
         </div>
       </header>
       <div className="study-topic-title study-focus-title"><span>★</span> เลือกสมบัติที่จำเป็นต้องศึกษา</div>

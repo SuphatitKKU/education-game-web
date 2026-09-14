@@ -275,11 +275,18 @@ def add_damage_details(wet_mat, dark_mat):
     stain_material.node_tree.links.new(texture.outputs["Color"], bsdf.inputs["Base Color"])
     bsdf.inputs["Roughness"].default_value = .86
 
-    front_wall = bpy.data.objects.get("FrontWall_DentedCorner")
-    if front_wall is None:
-        raise RuntimeError("FrontWall_DentedCorner was not found for wet-cardboard material assignment")
-    front_wall.data.materials.clear()
-    front_wall.data.materials.append(stain_material)
+    # Keep the inside wall clean. This thin UV-mapped skin sits just outside
+    # the rear wall, so the stain is revealed only after rotating the box.
+    # X runs right-to-left to give the surface an outward (+Y) normal.
+    grid_surface(
+        "BackWall_Wet",
+        34,
+        20,
+        lambda u, v: (1.7 - 3.4 * u, 1.326, -1.19 + 1.72 * v),
+        stain_material,
+        0.008,
+        0,
+    )
 
     # The box's left wall remains a complete, flat cardboard panel. The tear
     # geometry and loose fiber flaps were intentionally removed from this model.
@@ -413,7 +420,7 @@ trace("mug ready")
 # Hotspot empties are exported as extras and preserve the positions expected by the game.
 for name,location in {
     "Hotspot_Crushed":(0.48,-1.94,.05),
-    "Hotspot_Wet":(-1.05,-1.35,-.18),
+    "Hotspot_Wet":(1.05,1.35,-.18),
     "Hotspot_DentedCorner":(1.42,-1.02,-.82),
 }.items():
     empty=bpy.data.objects.new(name,None); empty.location=location; empty["hotspot"]=name; bpy.context.collection.objects.link(empty); mark_export(empty)

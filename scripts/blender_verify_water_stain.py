@@ -29,10 +29,10 @@ ground_mat = bpy.data.materials.new("WaterVerifyGround")
 ground_mat.diffuse_color = (.055, .07, .085, 1)
 ground.data.materials.append(ground_mat)
 
-# Low front-three-quarter camera exposes the vertical wall under the open flap.
-bpy.ops.object.camera_add(location=(-4.9, -7.0, .55))
+# Low back-three-quarter camera exposes the relocated stain under the rear flap.
+bpy.ops.object.camera_add(location=(4.9, 7.0, .55))
 camera = bpy.context.object
-target = Vector((-1.02, -1.25, -.24))
+target = Vector((1.02, 1.25, -.24))
 camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
 camera.data.lens = 66
 bpy.context.scene.camera = camera
@@ -47,7 +47,7 @@ scene.render.filepath = VERIFY_PATH
 scene.view_settings.look = "AgX - Medium High Contrast"
 bpy.ops.render.render(write_still=True)
 
-stain = bpy.data.objects.get("FrontWall_DentedCorner")
+stain = bpy.data.objects.get("BackWall_Wet")
 result = {
     "verify": VERIFY_PATH,
     "stain_found": stain is not None,
