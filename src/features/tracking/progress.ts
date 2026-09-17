@@ -101,7 +101,19 @@ export function runProgress(run: TrackedRun): number {
     const answerProgress = missionOneAnswerProgress(run);
     // Older runs without a roster still show their journey through Mission 1,
     // but never receive a full bar without complete individual answers.
-    return answerProgress.total ? answerProgress.percent : Math.min(99, orderedProgress(MISSION_ONE_ORDER, run.currentStage));
+    if (!answerProgress.total) return Math.min(99, orderedProgress(MISSION_ONE_ORDER, run.currentStage));
+
+    const exitTicketIndex = MISSION_ONE_ORDER.indexOf("exitTicket");
+    const currentIndex = MISSION_ONE_ORDER.indexOf(run.currentStage);
+    if (currentIndex < exitTicketIndex) return orderedProgress(MISSION_ONE_ORDER, run.currentStage);
+    if (answerProgress.complete) return 100;
+
+    // Reaching the individual questions means the shared Mission 1 journey is
+    // already complete. Keep that progress visible, then let saved individual
+    // answers fill only the final portion of the bar.
+    const questionStageProgress = orderedProgress(MISSION_ONE_ORDER, "exitTicket");
+    const answerShare = answerProgress.percent / 100;
+    return Math.min(99, Math.round(questionStageProgress + ((100 - questionStageProgress) * answerShare)));
   }
   if (run.status === "completed") return 100;
   if (mission === 3) return orderedProgress(MISSION_THREE_ORDER, run.currentStage);

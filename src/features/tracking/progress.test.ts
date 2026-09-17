@@ -57,7 +57,7 @@ describe("tracking progress", () => {
     expect(runProgress(run({ status: "completed", currentStage: "mission2Complete", completedAt: "2026-09-16T02:00:00.000Z", saveState: { ...EMPTY_SAVE, missionNumber: 2 } }))).toBe(100);
   });
 
-  it("uses completed individual answers as the Mission 1 progress bar", () => {
+  it("keeps the completed Mission 1 journey visible while individual answers fill the final segment", () => {
     const ticket = {
       k: "ความต้านทานแรงกดทับ\nความสามารถในการลดความเสียหายจากแรงกระแทก\nการดูดซับน้ำของวัสดุ",
       p: "แรงกด\nแรงกระแทก\nน้ำ",
@@ -72,9 +72,10 @@ describe("tracking progress", () => {
       ],
       exitTickets: { "member-one": ticket },
     };
-    expect(runProgress(run({ currentStage: "exitTicket", saveState: save }))).toBe(50);
-    expect(runProgress(run({ currentStage: "mission1Complete", saveState: save }))).toBe(50);
-    expect(runProgress(run({ status: "completed", currentStage: "mission1Complete", saveState: save }))).toBe(50);
+    expect(runProgress(run({ currentStage: "exitTicket", saveState: { ...save, exitTickets: {} } }))).toBe(86);
+    expect(runProgress(run({ currentStage: "exitTicket", saveState: save }))).toBe(93);
+    expect(runProgress(run({ currentStage: "mission1Complete", saveState: save }))).toBe(93);
+    expect(runProgress(run({ status: "completed", currentStage: "mission1Complete", saveState: save }))).toBe(93);
     expect(runProgress(run({ currentStage: "mission1Complete", saveState: { ...save, exitTickets: { "member-one": ticket, "member-two": ticket } } }))).toBe(100);
     expect(runProgress(run({ currentStage: "overview", saveState: { ...save, exitTickets: {}, mission1Completed: true } }))).toBe(0);
   });
