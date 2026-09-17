@@ -33,6 +33,7 @@ import { AbsorptionLab } from "./AbsorptionLab";
 import { resumeLabStage } from "./impact";
 import { MissionOverview } from "./MissionOverview";
 import {
+  blocksMissionSwitch,
   COMPLETED_RUN_STAGES,
   completedMissionsForTeam,
   finishMissionState,
@@ -630,7 +631,7 @@ export function GameApp() {
     const previousRun = currentTeam.activeRun;
     if (previousRun && (runMissionNumber(previousRun) !== mission || isReplaying)) {
       const previousMission = runMissionNumber(previousRun);
-      if (mission < previousMission) throw new Error(`ทีมนี้กำลังทำภารกิจที่ ${previousMission} อยู่ กรุณาทำภารกิจนั้นต่อให้เสร็จก่อน`);
+      if (blocksMissionSwitch(previousMission, mission, isReplaying)) throw new Error(`ทีมนี้กำลังทำภารกิจที่ ${previousMission} อยู่ กรุณาทำภารกิจนั้นต่อให้เสร็จก่อน`);
       queueCheckpoint(
         { id: previousRun.id, teamId: previousRun.teamId, revision: previousRun.revision },
         finishMissionState(previousRun, previousMission),

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EMPTY_SAVE } from "./data";
 import type { TeamOverview, TrackedRun } from "@/features/tracking/types";
 import {
+  blocksMissionSwitch,
   completedMissionsForTeam,
   finishMissionState,
   latestRunForTeamMission,
@@ -53,7 +54,13 @@ describe("mission run history", () => {
     const active = trackedRun(1);
     const currentTeam = team([active], active);
     expect(visibleCompletedMissions(currentTeam, { ...EMPTY_SAVE, mission1Completed: true, stage: "mission1Complete" })).toContain(1);
+    expect(visibleCompletedMissions(currentTeam, { ...EMPTY_SAVE, mission1Completed: true, stage: "overview" })).toContain(1);
     expect(visibleCompletedMissions(currentTeam, { ...EMPTY_SAVE, mission1Completed: true, stage: "inspection" })).not.toContain(1);
+
+    const second = trackedRun(2);
+    const secondTeam = team([second], second);
+    expect(visibleCompletedMissions(secondTeam, { ...EMPTY_SAVE, mission1Completed: true, mission2Completed: true, stage: "overview" })).toContain(2);
+    expect(visibleCompletedMissions(secondTeam, { ...EMPTY_SAVE, mission1Completed: true, mission2Completed: true, stage: "comparison" })).not.toContain(2);
   });
 
   it("recognizes persisted completion history after the active run is cleared", () => {
@@ -71,5 +78,10 @@ describe("mission run history", () => {
     expect(nextUnlockMission([1])).toBe(2);
     expect(nextUnlockMission([1, 2])).toBe(3);
     expect(nextUnlockMission([1, 2, 3])).toBeNull();
+  });
+
+  it("allows a confirmed replay even when a later mission is active", () => {
+    expect(blocksMissionSwitch(3, 2, true)).toBe(false);
+    expect(blocksMissionSwitch(3, 2, false)).toBe(true);
   });
 });

@@ -4,6 +4,11 @@ import { exitTicketProgress } from "./exit-ticket-progress";
 
 export type MissionNumber = 1 | 2 | 3;
 
+/** A confirmed replay may open an earlier mission; ordinary navigation may not. */
+export function blocksMissionSwitch(activeMission: MissionNumber, selectedMission: MissionNumber, isReplaying: boolean) {
+  return !isReplaying && selectedMission < activeMission;
+}
+
 export const COMPLETED_RUN_STAGES = new Set<Stage>([
   "mission1Complete",
   "mission2Complete",
@@ -62,6 +67,11 @@ export function visibleCompletedMissions(team: TeamOverview | null, save: GameSa
   // reached, even when an older imported run was not marked completed.
   if (activeMission && activeMission >= 2) completed.add(1);
   if (activeMission === 3) completed.add(2);
-  if (activeMission && !COMPLETED_RUN_STAGES.has(save.stage)) completed.delete(activeMission);
+  const activeMissionCompletedOnMap = save.stage === "overview"
+    && (activeMission === 1 ? save.mission1Completed
+      : activeMission === 2 ? save.mission2Completed
+        : activeMission === 3 ? save.mission3Completed
+          : false);
+  if (activeMission && !COMPLETED_RUN_STAGES.has(save.stage) && !activeMissionCompletedOnMap) completed.delete(activeMission);
   return [...completed];
 }
