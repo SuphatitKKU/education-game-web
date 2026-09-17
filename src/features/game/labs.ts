@@ -28,6 +28,10 @@ export function allLabsComplete(save: GameSave) {
   return LAB_ROOMS.every((room) => labResultCount(save, room.id) === LAB_MATERIALS.length);
 }
 
+export function canContinueAfterLabs(save: GameSave) {
+  return allLabsComplete(save);
+}
+
 export function labQuestionIndex(room: LabRoom) {
   return LAB_ROOMS.findIndex((item) => item.id === room);
 }
@@ -38,10 +42,8 @@ export function labQuestionPassed(save: GameSave, room: LabRoom) {
   return Boolean(question && save.recapAnswers[String(index)]?.includes(question.answer));
 }
 
-export function labRoomUnlocked(save: GameSave, room: LabRoom) {
-  const index = labQuestionIndex(room);
-  if (index <= 0) return true;
-  return labQuestionPassed(save, LAB_ROOMS[index - 1].id);
+export function labRoomUnlocked(_save: GameSave, _room: LabRoom) {
+  return true;
 }
 
 export function allLabQuestionsPassed(save: GameSave) {

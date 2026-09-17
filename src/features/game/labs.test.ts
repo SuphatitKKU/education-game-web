@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { EMPTY_SAVE, type GameSave } from "./data";
-import { allLabQuestionsPassed, allLabsComplete, LAB_MATERIALS, LAB_ROOMS, LAB_ROOMS_ENABLED, labQuestionPassed, labResultCount, labRoomUnlocked, openLabPatch, restartMissionTwoLabsPatch } from "./labs";
+import { allLabQuestionsPassed, allLabsComplete, canContinueAfterLabs, LAB_MATERIALS, LAB_ROOMS, LAB_ROOMS_ENABLED, labQuestionPassed, labResultCount, labRoomUnlocked, openLabPatch, restartMissionTwoLabsPatch } from "./labs";
 import { STUDY_TOPICS, studyTopicLabel } from "./learning-topics";
 import { recordImpact } from "./impact";
 
@@ -62,20 +62,34 @@ describe("enabled laboratory flow", () => {
       impactResults: Object.fromEntries(LAB_MATERIALS.map(({ id }) => [id, recordImpact(id, "slight")])),
     };
     expect(allLabsComplete(save)).toBe(true);
+    expect(canContinueAfterLabs(save)).toBe(true);
     expect(openLabPatch(save, "compression")).toEqual({ stage: "compression", compressionIndex: 0 });
     const missing = { ...save, absorptionResults: {} };
     expect(allLabsComplete(missing)).toBe(false);
+    expect(canContinueAfterLabs(missing)).toBe(false);
   });
 
-  it("unlocks one room at a time after the team answers each lab question", () => {
+  it("permits continuing after all three rooms without recap answers", () => {
+    const save: GameSave = { ...EMPTY_SAVE,
+      compressionResults: Object.fromEntries(LAB_MATERIALS.map(({ id }) => [id, { materialId: id, measurements: [1, 2, 3], residual: 1, recovered: 2 }])),
+      impactResults: Object.fromEntries(LAB_MATERIALS.map(({ id }) => [id, recordImpact(id, "slight")])),
+      absorptionResults: Object.fromEntries(LAB_MATERIALS.map(({ id }) => [id, { materialId: id, drops: [1, 2, 3], absorbed: 3, summary: "test" }])),
+      recapAnswers: {},
+    };
+    expect(allLabQuestionsPassed(save)).toBe(false);
+    expect(canContinueAfterLabs(save)).toBe(true);
+  });
+
+  it("keeps all three rooms unlocked regardless of question progress", () => {
     expect(labRoomUnlocked(EMPTY_SAVE, "compression")).toBe(true);
-    expect(labRoomUnlocked(EMPTY_SAVE, "impact")).toBe(false);
+    expect(labRoomUnlocked(EMPTY_SAVE, "impact")).toBe(true);
+    expect(labRoomUnlocked(EMPTY_SAVE, "absorption")).toBe(true);
     expect(labQuestionPassed(EMPTY_SAVE, "compression")).toBe(false);
 
     const afterCompression = { ...EMPTY_SAVE, recapAnswers: { "0": [2, 0] } };
     expect(labQuestionPassed(afterCompression, "compression")).toBe(true);
     expect(labRoomUnlocked(afterCompression, "impact")).toBe(true);
-    expect(labRoomUnlocked(afterCompression, "absorption")).toBe(false);
+    expect(labRoomUnlocked(afterCompression, "absorption")).toBe(true);
 
     const allAnswered = { ...EMPTY_SAVE, recapAnswers: { "0": [0], "1": [1], "2": [1] } };
     expect(allLabQuestionsPassed(allAnswered)).toBe(true);

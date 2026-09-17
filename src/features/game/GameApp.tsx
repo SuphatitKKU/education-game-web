@@ -25,7 +25,7 @@ import { runProgress, STAGE_LABELS } from "@/features/tracking/progress";
 import type { ActiveRunRef, LegacyBundle, SaveIndicator, TeamOverview } from "@/features/tracking/types";
 import { answerEvents } from "@/features/tracking/answer-events";
 import { MAX_TEAM_MEMBERS, MIN_TEAM_MEMBERS, validateTeamDraft } from "@/features/tracking/validation";
-import { allLabQuestionsPassed, allLabsComplete, LAB_MATERIALS, LAB_ROOMS, LAB_ROOMS_ENABLED, LAB_STAGES, labQuestionIndex, labQuestionPassed, labResultCount, labRoomUnlocked, openLabPatch, restartMissionTwoLabsPatch, type LabRoom } from "./labs";
+import { allLabsComplete, canContinueAfterLabs, LAB_MATERIALS, LAB_ROOMS, LAB_ROOMS_ENABLED, LAB_STAGES, labResultCount, openLabPatch, restartMissionTwoLabsPatch, type LabRoom } from "./labs";
 import { STUDY_TOPICS, studyTopicLabel } from "./learning-topics";
 import { CompressionLab } from "./CompressionLab";
 import { ImpactLab } from "./ImpactLab";
@@ -2878,26 +2878,20 @@ function ExitTicketScreen({ team, initial, confirmations, onBack, onHome, onAnsw
 function LabScreens({ save, onPatch, onBack, onComplete }: {
   save: GameSave; onPatch: (next: Partial<GameSave>) => void; onBack: () => void; onComplete?: () => void;
 }) {
-  if (save.stage === "testHub") return <TestHub save={save} onStart={(room) => onPatch(openLabPatch(save, room))} onReview={(recapIndex) => onPatch({ stage: "recap", recapIndex })} onRestart={() => onPatch(restartMissionTwoLabsPatch())} onBack={onBack} onComplete={onComplete} />;
+  if (save.stage === "testHub") return <TestHub save={save} onStart={(room) => onPatch(openLabPatch(save, room))} onRestart={() => onPatch(restartMissionTwoLabsPatch())} onBack={onBack} onComplete={onComplete} />;
   if (!LAB_ROOMS.some((room) => room.id === save.stage) && save.stage !== "elasticity") return null;
-  const returnFromLab = (room: LabRoom) => {
-    if (labResultCount(save, room) === LAB_MATERIALS.length && !labQuestionPassed(save, room)) {
-      onPatch({ stage: "recap", recapIndex: labQuestionIndex(room) });
-      return;
-    }
-    onPatch({ stage: "testHub" });
-  };
+  const returnFromLab = () => onPatch({ stage: "testHub" });
   const draftAnswer = (room: string, materialId: string, answer: string) => onPatch({ labAnswerDrafts: { ...save.labAnswerDrafts, [room]: { ...save.labAnswerDrafts?.[room], [materialId]: answer } } });
-  if (save.stage === "compression") return <CompressionLab save={save} onAnswer={(id, answer) => draftAnswer("compression", id, answer)} onSave={(compressionResults, compressionIndex) => onPatch({ compressionResults, compressionIndex })} onDone={() => returnFromLab("compression")} />;
-  if (save.stage === "impact" || save.stage === "elasticity") return <ImpactLab save={save} onAnswer={(id, answer) => draftAnswer("impact", id, answer)} onSave={(impactResults, impactIndex) => onPatch({ impactResults, impactIndex, stage: "impact" })} onDone={() => returnFromLab("impact")} />;
-  if (save.stage === "absorption") return <AbsorptionLab save={save} onSave={(absorptionResults, absorptionIndex) => onPatch({ absorptionResults, absorptionIndex })} onDone={() => returnFromLab("absorption")} />;
+  if (save.stage === "compression") return <CompressionLab save={save} onAnswer={(id, answer) => draftAnswer("compression", id, answer)} onSave={(compressionResults, compressionIndex) => onPatch({ compressionResults, compressionIndex })} onDone={returnFromLab} />;
+  if (save.stage === "impact" || save.stage === "elasticity") return <ImpactLab save={save} onAnswer={(id, answer) => draftAnswer("impact", id, answer)} onSave={(impactResults, impactIndex) => onPatch({ impactResults, impactIndex, stage: "impact" })} onDone={returnFromLab} />;
+  if (save.stage === "absorption") return <AbsorptionLab save={save} onSave={(absorptionResults, absorptionIndex) => onPatch({ absorptionResults, absorptionIndex })} onDone={returnFromLab} />;
   return null;
 }
 
-function TestHub({ save, onStart, onReview, onRestart, onBack, onComplete }: {
-  save: GameSave; onStart: (room: LabRoom) => void; onReview?: (index: number) => void; onRestart: () => void; onBack: () => void; onComplete?: () => void;
+function TestHub({ save, onStart, onRestart, onBack, onComplete }: {
+  save: GameSave; onStart: (room: LabRoom) => void; onRestart: () => void; onBack: () => void; onComplete?: () => void;
 }) {
-  const complete = allLabsComplete(save) && allLabQuestionsPassed(save);
+  const complete = canContinueAfterLabs(save);
   const [reviewRoom, setReviewRoom] = useState<LabRoom | null>(null);
   const [confirmRestart, setConfirmRestart] = useState(false);
   const reviewDefinition = reviewRoom ? LAB_ROOMS.find((room) => room.id === reviewRoom) : null;
@@ -2920,27 +2914,24 @@ function TestHub({ save, onStart, onReview, onRestart, onBack, onComplete }: {
       <img className="group-design-bg" src={asset("compression/lab_background.png")} alt="" />
       <button className="button button-white lab-back-button" onClick={onBack}>‹ กลับไปเลือกทีม</button>
       <header className="test-hub-header">
-        <div><h1>ห้องทดลอง</h1><p className="test-hub-teacher-note">ครูพาทำทีละห้องพร้อมกันทั้งชั้น<br />ห้องถัดไปจะเปิดหลังตอบคำถามร่วมกัน</p></div>
+        <div><h1>ห้องทดลอง</h1><p className="test-hub-teacher-note">เลือกเข้าห้องทดลองใดก่อนก็ได้<br />ทดลองให้ครบทั้ง 3 ห้อง แล้วกดไปต่อได้เลย</p></div>
       </header>
       <section className="test-room-grid" aria-label="ห้องทดสอบทั้งหมด">
         {LAB_ROOMS.map((room) => {
           const count = labResultCount(save, room.id);
-          const passed = labQuestionPassed(save, room.id);
-          const unlocked = labRoomUnlocked(save, room.id);
-          const questionPending = count === LAB_MATERIALS.length && !passed;
-          const finished = passed;
-          const progressText = !unlocked ? "รอทำห้องก่อนหน้า" : questionPending ? "ทดลองครบแล้ว · รอตอบ 1 ข้อ" : count ? `บันทึกแล้ว ${count}/${LAB_MATERIALS.length} วัสดุ` : "พร้อมทดลอง";
-          return <article key={room.id} className={`test-room-card test-room-${room.id}${!unlocked ? " is-locked" : ""}${finished ? " is-finished" : ""}`}>
+          const finished = count === LAB_MATERIALS.length;
+          const progressText = finished ? "✓ ทดลองครบแล้ว" : count ? `บันทึกแล้ว ${count}/${LAB_MATERIALS.length} วัสดุ` : "พร้อมทดลอง";
+          return <article key={room.id} className={`test-room-card test-room-${room.id}${finished ? " is-finished" : ""}`}>
             <span className="test-room-icon" aria-hidden="true"><img src={asset(`menu/lab-room-${room.id}.png`)} alt="" /></span>
             <small>ห้องทดลองที่ {room.number}</small><h2>{room.title}</h2>
             <div className="test-room-description"><p>{room.observation}</p><p>{room.purpose}</p></div>
             {progressText && <div className="test-room-progress">{progressText}</div>}
             {count === LAB_MATERIALS.length && <button type="button" className="button test-result-button" onClick={() => setReviewRoom(room.id)} aria-label={`ดูผลการทดลอง${room.title}`}><AppIcon name="notebook" />ดูผลการทดลอง</button>}
-            <button className="button button-orange" disabled={!unlocked || finished} onClick={() => questionPending ? onReview?.(labQuestionIndex(room.id)) : onStart(room.id)} aria-label={`เข้าห้องทดสอบ${room.title}`}>{!unlocked ? "รอครูพาไป" : finished ? "✓ เสร็จแล้ว" : questionPending ? "ตอบคำถามสรุป" : count ? "ทดลองต่อ" : "เข้าห้องทดลอง"}</button>
+            <button className="button button-orange" disabled={finished} onClick={() => onStart(room.id)} aria-label={`เข้าห้องทดสอบ${room.title}`}>{finished ? "✓ เสร็จแล้ว" : count ? "ทดลองต่อ" : "เข้าห้องทดลอง"}</button>
           </article>;
         })}
       </section>
-      <footer className="test-hub-footer"><p>{complete ? "✓ ทดลองและตอบคำถามครบทั้ง 3 ห้องแล้ว" : ""}</p>
+      <footer className="test-hub-footer"><p>{complete ? "✓ ทดลองครบทั้ง 3 ห้องแล้ว ไปต่อได้เลย" : ""}</p>
         <div className="test-hub-footer-actions">{complete && <button className="button test-hub-restart" type="button" onClick={() => setConfirmRestart(true)}><AppIcon name="refresh" />ทดลองใหม่ทั้ง 3 ห้อง</button>}
           {onComplete && <button className="button button-orange" disabled={!complete} onClick={onComplete}>เชื่อมโยงผลกับกล่อง ›</button>}
         </div>
