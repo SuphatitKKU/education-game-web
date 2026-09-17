@@ -25,7 +25,7 @@ import { runProgress, STAGE_LABELS } from "@/features/tracking/progress";
 import type { ActiveRunRef, LegacyBundle, SaveIndicator, TeamOverview } from "@/features/tracking/types";
 import { answerEvents } from "@/features/tracking/answer-events";
 import { MAX_TEAM_MEMBERS, MIN_TEAM_MEMBERS, validateTeamDraft } from "@/features/tracking/validation";
-import { allLabsComplete, canContinueAfterLabs, LAB_MATERIALS, LAB_ROOMS, LAB_ROOMS_ENABLED, LAB_STAGES, labResultCount, openLabPatch, restartMissionTwoLabsPatch, type LabRoom } from "./labs";
+import { allLabsComplete, canContinueAfterLabs, LAB_MATERIALS, LAB_ROOMS, LAB_ROOMS_ENABLED, LAB_STAGES, labQuestionIndex, labRecapRequired, labResultCount, openLabPatch, restartMissionTwoLabsPatch, type LabRoom } from "./labs";
 import { STUDY_TOPICS, studyTopicLabel } from "./learning-topics";
 import { CompressionLab } from "./CompressionLab";
 import { ImpactLab } from "./ImpactLab";
@@ -832,7 +832,7 @@ export function GameApp() {
         {!labRoomsPaused && save.stage === "mission2Intro" && <MissionTwoIntro onBack={() => go("mission2Parts")} onStart={() => go("testHub")} />}
         {!labRoomsPaused && <LabScreens save={save} onPatch={patch} onBack={leaveRunToTeams} onComplete={() => go("comparison")} />}
         {!labRoomsPaused && (save.stage === "notebook" || save.stage === "comparison") && <MissionTwoConnection values={save.mission2Connections ?? {}} onBack={() => go("testHub")} onChange={(mission2Connections) => patch({ mission2Connections })} onDone={() => go("mission2Assessment")} />}
-        {!labRoomsPaused && save.stage === "recap" && <Recap index={save.recapIndex} answers={save.recapAnswers} onAnswer={(recapAnswers) => patch({ recapAnswers })} onDone={() => go(save.recapIndex >= RECAP.length - 1 ? "comparison" : "testHub")} />}
+        {!labRoomsPaused && save.stage === "recap" && <Recap index={save.recapIndex} answers={save.recapAnswers} onAnswer={(recapAnswers) => patch({ recapAnswers })} onDone={() => go("testHub")} />}
         {!labRoomsPaused && save.stage === "mission2Assessment" && <MissionTwoAssessment team={save.team} values={save.mission2Assessments ?? {}} confirmed={save.mission2AssessmentConfirmed ?? {}} onBack={() => go("comparison")} onChange={(mission2Assessments, mission2AssessmentConfirmed) => patch({ mission2Assessments, mission2AssessmentConfirmed })} onDone={() => { playSound("10_idea_chime.ogg", save.audio); patch({ mission2Completed: true, stage: "mission2Complete" }); }} />}
         {!labRoomsPaused && save.stage === "mission2Complete" && <MissionTwoComplete team={save.team} onHome={() => { setUnlockingMission(3); patch({ mission2Completed: true, stage: "overview" }); }} />}
         {!["menu", "overview", "team"].includes(save.stage) && ["mission3Intro", "mission3Data", "mission3Materials", "mission3Design", "mission3Reason", "mission3Complete"].includes(save.stage) && <MissionThreeScreen stage={save.stage as MissionThreeStage} save={save} onPatch={patch} onBack={goBack} onNext={(stage) => go(stage)} onComplete={() => patch({ mission3Completed: true, stage: "mission3Complete" })} onFinish={() => patch({ mission3Completed: true, stage: "overview" })} />}
@@ -2880,11 +2880,17 @@ function LabScreens({ save, onPatch, onBack, onComplete }: {
 }) {
   if (save.stage === "testHub") return <TestHub save={save} onStart={(room) => onPatch(openLabPatch(save, room))} onRestart={() => onPatch(restartMissionTwoLabsPatch())} onBack={onBack} onComplete={onComplete} />;
   if (!LAB_ROOMS.some((room) => room.id === save.stage) && save.stage !== "elasticity") return null;
-  const returnFromLab = () => onPatch({ stage: "testHub" });
+  const returnFromLab = (room: LabRoom) => {
+    if (labRecapRequired(save, room)) {
+      onPatch({ stage: "recap", recapIndex: labQuestionIndex(room) });
+      return;
+    }
+    onPatch({ stage: "testHub" });
+  };
   const draftAnswer = (room: string, materialId: string, answer: string) => onPatch({ labAnswerDrafts: { ...save.labAnswerDrafts, [room]: { ...save.labAnswerDrafts?.[room], [materialId]: answer } } });
-  if (save.stage === "compression") return <CompressionLab save={save} onAnswer={(id, answer) => draftAnswer("compression", id, answer)} onSave={(compressionResults, compressionIndex) => onPatch({ compressionResults, compressionIndex })} onDone={returnFromLab} />;
-  if (save.stage === "impact" || save.stage === "elasticity") return <ImpactLab save={save} onAnswer={(id, answer) => draftAnswer("impact", id, answer)} onSave={(impactResults, impactIndex) => onPatch({ impactResults, impactIndex, stage: "impact" })} onDone={returnFromLab} />;
-  if (save.stage === "absorption") return <AbsorptionLab save={save} onSave={(absorptionResults, absorptionIndex) => onPatch({ absorptionResults, absorptionIndex })} onDone={returnFromLab} />;
+  if (save.stage === "compression") return <CompressionLab save={save} onAnswer={(id, answer) => draftAnswer("compression", id, answer)} onSave={(compressionResults, compressionIndex) => onPatch({ compressionResults, compressionIndex })} onDone={() => returnFromLab("compression")} />;
+  if (save.stage === "impact" || save.stage === "elasticity") return <ImpactLab save={save} onAnswer={(id, answer) => draftAnswer("impact", id, answer)} onSave={(impactResults, impactIndex) => onPatch({ impactResults, impactIndex, stage: "impact" })} onDone={() => returnFromLab("impact")} />;
+  if (save.stage === "absorption") return <AbsorptionLab save={save} onSave={(absorptionResults, absorptionIndex) => onPatch({ absorptionResults, absorptionIndex })} onDone={() => returnFromLab("absorption")} />;
   return null;
 }
 

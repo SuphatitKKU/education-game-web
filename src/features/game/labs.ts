@@ -42,6 +42,10 @@ export function labQuestionPassed(save: GameSave, room: LabRoom) {
   return Boolean(question && save.recapAnswers[String(index)]?.includes(question.answer));
 }
 
+export function labRecapRequired(save: GameSave, room: LabRoom) {
+  return labResultCount(save, room) === LAB_MATERIALS.length && !labQuestionPassed(save, room);
+}
+
 export function labRoomUnlocked(_save: GameSave, _room: LabRoom) {
   return true;
 }

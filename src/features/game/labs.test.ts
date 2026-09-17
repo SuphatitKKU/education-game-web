@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { EMPTY_SAVE, type GameSave } from "./data";
-import { allLabQuestionsPassed, allLabsComplete, canContinueAfterLabs, LAB_MATERIALS, LAB_ROOMS, LAB_ROOMS_ENABLED, labQuestionPassed, labResultCount, labRoomUnlocked, openLabPatch, restartMissionTwoLabsPatch } from "./labs";
+import { allLabQuestionsPassed, allLabsComplete, canContinueAfterLabs, LAB_MATERIALS, LAB_ROOMS, LAB_ROOMS_ENABLED, labQuestionPassed, labRecapRequired, labResultCount, labRoomUnlocked, openLabPatch, restartMissionTwoLabsPatch } from "./labs";
 import { STUDY_TOPICS, studyTopicLabel } from "./learning-topics";
 import { recordImpact } from "./impact";
 
@@ -78,6 +78,15 @@ describe("enabled laboratory flow", () => {
     };
     expect(allLabQuestionsPassed(save)).toBe(false);
     expect(canContinueAfterLabs(save)).toBe(true);
+  });
+
+  it("opens the recap question after a room is completed", () => {
+    const completedCompression: GameSave = { ...EMPTY_SAVE,
+      compressionResults: Object.fromEntries(LAB_MATERIALS.map(({ id }) => [id, { materialId: id, measurements: [1, 2, 3], residual: 1, recovered: 2 }])),
+    };
+    expect(labRecapRequired(completedCompression, "compression")).toBe(true);
+    expect(labRecapRequired({ ...completedCompression, recapAnswers: { "0": [0] } }, "compression")).toBe(false);
+    expect(labRecapRequired(EMPTY_SAVE, "compression")).toBe(false);
   });
 
   it("keeps all three rooms unlocked regardless of question progress", () => {
