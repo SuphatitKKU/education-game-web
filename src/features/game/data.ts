@@ -1,8 +1,14 @@
-export type Stage = "menu" | "purpose" | "overview" | "team" | "mission" | "story" | "inspection" | "boxMission" | "materials" | "studyFocus" | "exitTicket" | "mission1Complete" | "mission2Intro" | "testHub" | "compression" | "absorption" | "elasticity" | "impact" | "notebook" | "comparison" | "recap" | "mission2Complete" | "mission3Intro" | "mission3Data" | "mission3Materials" | "mission3Design" | "mission3Reason" | "mission3Complete" | "prediction" | "summary";
+export type Stage = "menu" | "purpose" | "overview" | "team" | "mission" | "story" | "inspection" | "boxMission" | "materials" | "studyFocus" | "exitTicket" | "mission1Complete" | "mission2Review" | "mission2Question" | "mission2Parts" | "mission2Intro" | "testHub" | "compression" | "absorption" | "elasticity" | "impact" | "notebook" | "comparison" | "recap" | "mission2Assessment" | "mission2Complete" | "mission3Intro" | "mission3Data" | "mission3Materials" | "mission3Design" | "mission3Reason" | "mission3Complete" | "prediction" | "summary";
 
 export type DamageCause = "แรงกด" | "แรงกระแทก" | "น้ำ";
 
 export type TeamMember = { name: string; avatar: string; id?: string; position?: number; present?: boolean };
+
+export type MissionAttendance = {
+  missionNumber: 1 | 2 | 3 | 4 | 5;
+  recordedAt: string;
+  members: Array<Pick<TeamMember, "id" | "name" | "avatar" | "position"> & { present: boolean }>;
+};
 
 export type CompressionResult = {
   materialId: string;
@@ -139,9 +145,21 @@ export type GameSave = {
   exitTickets: Record<string, ExitTicket>;
   exitTicketConfirmations: Record<string, ExitTicket>;
   labAnswerDrafts: Record<string, Record<string, string>>;
+  /** Added after launch; optional so every historical checkpoint stays readable. */
+  missionNumber?: 1 | 2 | 3 | 4 | 5;
+  /** Attendance is captured once when a team starts a mission. */
+  attendance?: MissionAttendance;
   mission1Completed: boolean;
   mission2Completed: boolean;
   mission3Completed: boolean;
+  /** Group answers that connect each lab result to the box part it informs. */
+  mission2Connections: Record<string, string>;
+  /** The team's pre-lab prediction about which box part could address each damage clue. */
+  mission2PartPredictions?: Record<string, string>;
+  /** Individual K-P-V multiple-choice answers, keyed by the stable attendance member key. */
+  mission2Assessments: Record<string, ExitTicket>;
+  /** A completed ticket is confirmed before the next learner uses the shared device. */
+  mission2AssessmentConfirmed: Record<string, boolean>;
   mission3Selections: Record<string, string>;
   mission3Reuse: Record<string, boolean>;
   mission3Alternative: string;
@@ -180,6 +198,10 @@ export const EMPTY_SAVE: GameSave = {
   mission1Completed: false,
   mission2Completed: false,
   mission3Completed: false,
+  mission2Connections: {},
+  mission2PartPredictions: {},
+  mission2Assessments: {},
+  mission2AssessmentConfirmed: {},
   mission3Selections: {},
   mission3Reuse: {},
   mission3Alternative: "",
@@ -342,9 +364,42 @@ export const DESIGN_QUESTIONS = [
 ] as const;
 
 export const RECAP = [
-  { question: "เมื่อรับแรงกดเท่ากัน เราควรเปรียบเทียบอะไร?", choices: ["การยุบหรือบุบของวัสดุ", "สีของขวดน้ำ", "ชื่อของทีม"], answer: 0 },
-  { question: "ถ้าจะทดสอบการลดความเสียหายจากแรงกระแทก ควรดูอะไร?", choices: ["ดูว่าวัสดุยืดได้ยาวที่สุดหรือไม่", "ดูความเสียหายของสิ่งของเมื่อรับแรงกระแทกเท่ากัน", "ดูว่าวัสดุสีสวยหรือไม่"], answer: 1 },
-  { question: "เมื่อได้รับน้ำเท่ากัน เราศึกษาการดูดซับน้ำจากอะไร?", choices: ["ความยาวของวัสดุ", "สีของโต๊ะ", "ปริมาณน้ำที่ซึมเข้าเนื้อวัสดุ"], answer: 2 },
+  {
+    lab: "compression",
+    label: "สรุปผลแรงกด",
+    question: "จากผลของแบบจำลอง วัสดุคู่ใดไม่เห็นการยุบ?",
+    choices: [
+      { label: "กระดาษหน้าขาวหลังเทา และแผ่นพลาสติก PE", materialIds: ["cardboard", "pe_sheet"] },
+      { label: "กระดาษลูกฟูก และแผ่นโฟม EPE", materialIds: ["corrugated_cardboard", "closed_cell_pe_foam"] },
+      { label: "แผ่นพลาสติกกันกระแทก", materialIds: ["bubble_wrap"] },
+    ],
+    answer: 0,
+    conclusion: "วัสดุที่ยุบหรือเปลี่ยนรูปน้อยกว่า ต้านทานแรงกดทับได้ดีกว่าในการทดลองนี้",
+  },
+  {
+    lab: "impact",
+    label: "สรุปผลแรงกระแทก",
+    question: "วัสดุคู่ใดทำให้สิ่งของจำลองไม่เสียหาย?",
+    choices: [
+      { label: "กระดาษลูกฟูก และแผ่นพลาสติก PE", materialIds: ["corrugated_cardboard", "pe_sheet"] },
+      { label: "แผ่นพลาสติกกันกระแทก และแผ่นโฟม EPE", materialIds: ["bubble_wrap", "closed_cell_pe_foam"] },
+      { label: "กระดาษหน้าขาวหลังเทา และแผ่นพลาสติก PE", materialIds: ["cardboard", "pe_sheet"] },
+    ],
+    answer: 1,
+    conclusion: "วัสดุที่ทำให้สิ่งของเสียหายน้อยกว่า ช่วยลดความเสียหายจากแรงกระแทกได้ดีกว่าในการทดลองนี้",
+  },
+  {
+    lab: "absorption",
+    label: "สรุปผลการดูดซับน้ำ",
+    question: "วัสดุกลุ่มใดไม่ดูดซับน้ำ?",
+    choices: [
+      { label: "กระดาษลูกฟูก และกระดาษหน้าขาวหลังเทา", materialIds: ["corrugated_cardboard", "cardboard"] },
+      { label: "แผ่นพลาสติกกันกระแทก แผ่นโฟม EPE และแผ่นพลาสติก PE", materialIds: ["bubble_wrap", "closed_cell_pe_foam", "pe_sheet"] },
+      { label: "กระดาษลูกฟูก และแผ่นโฟม EPE", materialIds: ["corrugated_cardboard", "closed_cell_pe_foam"] },
+    ],
+    answer: 1,
+    conclusion: "วัสดุที่มีน้ำซึมเข้าไปน้อยกว่า เหมาะนำไปพิจารณาเป็นชั้นช่วยลดการเปียกมากกว่า",
+  },
 ] as const;
 
 export const BOX_PARTS = ["โครงกล่อง", "ชั้นป้องกันน้ำ", "วัสดุเติมช่องว่าง", "วัสดุกันกระแทก"] as const;

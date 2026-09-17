@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { ACTIVE_STAGE_ORDER, formatDuration, isToday, stageProgress } from "./progress";
+import { EMPTY_SAVE } from "@/features/game/data";
+import type { TrackedRun } from "./types";
+import { ACTIVE_STAGE_ORDER, formatDuration, isToday, runProgress, stageProgress } from "./progress";
+
+function run(overrides: Partial<TrackedRun> = {}): TrackedRun {
+  return {
+    id: "run-1",
+    teamId: "team-1",
+    status: "in_progress",
+    currentStage: "mission",
+    saveState: { ...EMPTY_SAVE, missionNumber: 1 },
+    revision: 0,
+    startedAt: "2026-09-16T01:00:00.000Z",
+    updatedAt: "2026-09-16T01:00:00.000Z",
+    completedAt: null,
+    ...overrides,
+  };
+}
 
 describe("tracking progress", () => {
   it("maps active lesson stages to monotonic progress", () => {
@@ -28,6 +45,51 @@ describe("tracking progress", () => {
 
   it("marks the mission-one celebration as a completed mission", () => {
     expect(stageProgress("mission1Complete")).toBe(100);
+  });
+
+  it("tracks progress independently for each mission run", () => {
+    expect(runProgress(run())).toBe(0);
+    expect(runProgress(run({ currentStage: "exitTicket", saveState: { ...EMPTY_SAVE, missionNumber: 1 } }))).toBeGreaterThan(80);
+    expect(runProgress(run({ currentStage: "mission2Review", saveState: { ...EMPTY_SAVE, missionNumber: 2 } }))).toBe(0);
+    expect(runProgress(run({ currentStage: "mission2Question", saveState: { ...EMPTY_SAVE, missionNumber: 2 } }))).toBe(3);
+    expect(runProgress(run({ currentStage: "mission2Parts", saveState: { ...EMPTY_SAVE, missionNumber: 2 } }))).toBe(5);
+    expect(runProgress(run({ currentStage: "mission2Intro", saveState: { ...EMPTY_SAVE, missionNumber: 2 } }))).toBe(7);
+    expect(runProgress(run({ status: "completed", currentStage: "mission2Complete", completedAt: "2026-09-16T02:00:00.000Z", saveState: { ...EMPTY_SAVE, missionNumber: 2 } }))).toBe(100);
+  });
+
+  it("uses completed individual answers as the Mission 1 progress bar", () => {
+    const ticket = {
+      k: "ความต้านทานแรงกดทับ\nความสามารถในการลดความเสียหายจากแรงกระแทก\nการดูดซับน้ำของวัสดุ",
+      p: "แรงกด\nแรงกระแทก\nน้ำ",
+      v: "ได้\nเหตุผล: วัสดุยังแข็งแรงและช่วยลดขยะ",
+    };
+    const save = {
+      ...EMPTY_SAVE,
+      missionNumber: 1 as const,
+      team: [
+        { id: "one", name: "หนึ่ง", avatar: "inventor_sun", position: 0 },
+        { id: "two", name: "สอง", avatar: "inventor_moon", position: 1 },
+      ],
+      exitTickets: { "member-one": ticket },
+    };
+    expect(runProgress(run({ currentStage: "exitTicket", saveState: save }))).toBe(50);
+    expect(runProgress(run({ currentStage: "mission1Complete", saveState: save }))).toBe(50);
+    expect(runProgress(run({ status: "completed", currentStage: "mission1Complete", saveState: save }))).toBe(50);
+    expect(runProgress(run({ currentStage: "mission1Complete", saveState: { ...save, exitTickets: { "member-one": ticket, "member-two": ticket } } }))).toBe(100);
+    expect(runProgress(run({ currentStage: "overview", saveState: { ...save, exitTickets: {}, mission1Completed: true } }))).toBe(0);
+  });
+
+  it("counts only attending students in the Mission 2 individual checkpoint", () => {
+    const save = {
+      ...EMPTY_SAVE,
+      missionNumber: 2 as const,
+      team: [
+        { id: "one", name: "หนึ่ง", avatar: "inventor_sun", position: 0, present: true },
+        { id: "two", name: "สอง", avatar: "inventor_moon", position: 1, present: false },
+      ],
+      mission2AssessmentConfirmed: { "member-one": true },
+    };
+    expect(runProgress(run({ currentStage: "testHub", saveState: save }))).toBe(17);
   });
 
   it("recognizes completions from today", () => {

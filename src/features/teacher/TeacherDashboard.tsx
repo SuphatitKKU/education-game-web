@@ -3,12 +3,22 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import { formatDuration, isToday, STAGE_LABELS, stageProgress } from "@/features/tracking/progress";
+import { formatDuration, isToday, runProgress, STAGE_LABELS } from "@/features/tracking/progress";
 import { deleteTeam, getTeacherTeamDetail, listTeams } from "@/features/tracking/persistence";
 import type { TeacherTeamDetail, TeamOverview } from "@/features/tracking/types";
 import { studyTopicLabel } from "@/features/game/learning-topics";
 import { BOX_MISSION_GOALS, RECAP } from "@/features/game/data";
 import { AppIcon } from "@/components/AppIcon";
+import {
+  attendanceForRun,
+  buildTeacherCsv,
+  latestRunForMission,
+  missionFilterLabel,
+  missionNumberForRun,
+  MISSION_LABELS,
+  runsForMission,
+  type DashboardMissionFilter,
+} from "./teacher-report";
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 // Convenience access for the classroom device. This is intentionally a simple
@@ -16,6 +26,7 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 // actions that require an authenticated account (for example deleting a team).
 export const TEACHER_QUICK_ACCESS_CODE = "box1234";
 const QUICK_ACCESS_STORAGE_KEY = "parcel-lab-teacher-quick-access-v1";
+const AUTO_BACKUP_STORAGE_KEY = "parcel-lab-teacher-auto-backup-v1";
 
 type AuthState = "loading" | "signed_out" | "checking" | "authorized" | "denied";
 
@@ -29,6 +40,9 @@ const EVENT_LABELS: Record<string, string> = {
   study_focus_changed: "เลือกหัวข้อที่ต้องศึกษา",
   exit_ticket_saved: "บันทึกคำตอบนักเรียน",
   exit_ticket_answer_changed: "ตอบหรือแก้ไขคำตอบรายบุคคล",
+  mission2_connection_changed: "เชื่อมโยงผลทดลองกับส่วนของกล่อง",
+  mission2_individual_answer_changed: "ตอบคำถามรายบุคคลภารกิจที่ 2",
+  mission2_individual_answer_saved: "บันทึกคำตอบรายบุคคลภารกิจที่ 2",
   lab_answer_changed: "เลือกคำตอบระหว่างทดลอง",
   big_question_progress_saved: "บันทึกข้อสรุปสะสมจากระบบ",
   exit_tickets_completed: "ตอบคำถามรายบุคคลครบแล้ว",
@@ -74,6 +88,48 @@ function clearRememberedQuickAccess(): void {
   catch { /* Ignore storage failures while signing out. */ }
 }
 
+function backupFilename(prefix: string, extension: "json" | "csv"): string {
+  const timestamp = new Date().toISOString().replace(/:/g, "-").replace(".000Z", "");
+  return `${prefix}-${timestamp}.${extension}`;
+}
+
+function downloadFile(contents: string, type: string, filename: string): void {
+  const blob = new Blob([contents], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+function storeAutomaticBackup(teams: TeamOverview[]): string | null {
+  const createdAt = new Date().toISOString();
+  try {
+    window.localStorage.setItem(AUTO_BACKUP_STORAGE_KEY, JSON.stringify({
+      format: "parcel-lab-teacher-backup",
+      version: 1,
+      createdAt,
+      source: "automatic-browser-snapshot",
+      teams,
+    }));
+    return createdAt;
+  } catch {
+    return null;
+  }
+}
+
+function readAutomaticBackupDate(): string | null {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(AUTO_BACKUP_STORAGE_KEY) ?? "null") as { createdAt?: string } | null;
+    return parsed?.createdAt ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function TeacherDashboard() {
   const [authState, setAuthState] = useState<AuthState>("loading");
   const [session, setSession] = useState<Session | null>(null);
@@ -88,6 +144,9 @@ export function TeacherDashboard() {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">("all");
   const [teamFilter, setTeamFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
+  const [missionFilter, setMissionFilter] = useState<DashboardMissionFilter>("all");
+  const [exporting, setExporting] = useState<"csv" | "backup" | null>(null);
+  const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
   const configured = isSupabaseConfigured();
 
   const authorize = useCallback(async (nextSession: Session | null) => {
@@ -124,6 +183,8 @@ export function TeacherDashboard() {
     return () => data.subscription.unsubscribe();
   }, [authorize, configured]);
 
+  useEffect(() => { setLastBackupAt(readAutomaticBackupDate()); }, []);
+
   const refresh = useCallback(async () => {
     if (authState !== "authorized") return;
     setLoadingData(true);
@@ -131,6 +192,9 @@ export function TeacherDashboard() {
     try {
       const nextTeams = await listTeams();
       setTeams(nextTeams);
+      const previousBackupAt = readAutomaticBackupDate();
+      // A temporary empty response must not erase the last useful snapshot.
+      setLastBackupAt(nextTeams.length > 0 || !previousBackupAt ? storeAutomaticBackup(nextTeams) : previousBackupAt);
       if (selectedTeam) {
         const refreshed = nextTeams.find((team) => team.id === selectedTeam.id) ?? null;
         setSelectedTeam(refreshed);
@@ -159,18 +223,30 @@ export function TeacherDashboard() {
   }, [authState, refresh]);
 
   const filteredTeams = useMemo(() => teams.filter((team) => {
-    if (statusFilter === "active" && !team.activeRun) return false;
-    if (statusFilter === "completed" && (team.activeRun || team.completedRuns.length === 0)) return false;
+    const run = latestRunForMission(team, missionFilter);
+    if (statusFilter === "active" && run?.status !== "in_progress") return false;
+    if (statusFilter === "completed" && run?.status !== "completed") return false;
     if (teamFilter && !team.name.toLocaleLowerCase("th").includes(teamFilter.toLocaleLowerCase("th"))) return false;
     if (dateFilter) {
-      const latest = team.activeRun?.updatedAt ?? team.completedRuns[0]?.updatedAt ?? team.updatedAt;
+      const latest = run?.updatedAt ?? team.updatedAt;
       if (latest.slice(0, 10) !== dateFilter) return false;
     }
     return true;
-  }), [dateFilter, statusFilter, teamFilter, teams]);
+  }), [dateFilter, missionFilter, statusFilter, teamFilter, teams]);
 
-  const completedToday = teams.reduce((total, team) => total + team.completedRuns.filter((run) => run.completedAt && isToday(run.completedAt)).length, 0);
-  const latestUpdate = teams.map((team) => team.updatedAt).sort().at(-1);
+  const missionRuns = teams.reduce<TeamOverview["runs"]>((runs, team) => runs.concat(runsForMission(team, missionFilter)), []);
+  const completedToday = missionRuns.filter((run) => run.completedAt && isToday(run.completedAt)).length;
+  const sortedUpdates = missionRuns.map((run) => run.updatedAt).sort();
+  const latestUpdate = sortedUpdates[sortedUpdates.length - 1];
+  const attendanceTotals = teams.reduce((totals, team) => {
+    const run = latestRunForMission(team, missionFilter);
+    if (!run) return totals;
+    attendanceForRun(team, run).forEach((member) => {
+      if (member.present) totals.present += 1;
+      else totals.absent += 1;
+    });
+    return totals;
+  }, { present: 0, absent: 0 });
 
   const openDetail = async (team: TeamOverview) => {
     setSelectedTeam(team);
@@ -182,12 +258,55 @@ export function TeacherDashboard() {
     finally { setLoadingData(false); }
   };
 
+  const exportCsv = () => {
+    setExporting("csv");
+    setError("");
+    try {
+      downloadFile(
+        buildTeacherCsv(teams, missionFilter),
+        "text/csv;charset=utf-8",
+        backupFilename(`ข้อมูลนักเรียน-${missionFilterLabel(missionFilter).replace(/\s+/g, "-")}`, "csv"),
+      );
+    } catch (nextError) {
+      setError(friendlyError(nextError));
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const exportBackup = async (targetTeams: TeamOverview[] = teams) => {
+    setExporting("backup");
+    setError("");
+    try {
+      const details = await Promise.all(targetTeams.map(async (team) => {
+        try { return await getTeacherTeamDetail(team); }
+        catch { return { team, responses: [], events: [], note: "เก็บข้อมูลรอบและคำตอบจาก save_state ครบ แต่ดึงตารางเหตุการณ์เพิ่มเติมไม่ได้" }; }
+      }));
+      const createdAt = new Date().toISOString();
+      downloadFile(JSON.stringify({
+        format: "parcel-lab-teacher-backup",
+        version: 1,
+        createdAt,
+        source: "manual-full-export",
+        teams: details,
+      }, null, 2), "application/json;charset=utf-8", backupFilename("สำรองข้อมูลกล่องแกร่ง", "json"));
+      setLastBackupAt(createdAt);
+    } catch (nextError) {
+      setError(`สำรองข้อมูลไม่สำเร็จ จึงยังไม่ได้ดำเนินการต่อ: ${friendlyError(nextError)}`);
+      throw nextError;
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const confirmDeleteTeam = async () => {
     if (!deleteTarget || deletingTeamId) return;
     const teamId = deleteTarget.id;
     setDeletingTeamId(teamId);
     setError("");
     try {
+      // A recoverable JSON copy is required before any destructive action.
+      await exportBackup([deleteTarget]);
       await deleteTeam(teamId);
       setTeams((current) => current.filter((team) => team.id !== teamId));
       if (selectedTeam?.id === teamId) {
@@ -215,32 +334,41 @@ export function TeacherDashboard() {
       <div className="teacher-account"><span>{quickAccess ? "รหัสครูแบบเร็ว · โหมดดูข้อมูล" : session?.user.email}</span><button onClick={() => { if (quickAccess) { clearRememberedQuickAccess(); setQuickAccess(false); setAuthState("signed_out"); } else { void getSupabaseClient()?.auth.signOut(); } }}>ออกจากระบบ</button></div>
     </aside>
     <section className="teacher-main">
-      <header className="teacher-topbar"><div><p>ภาพรวมการเรียนรู้</p><h1>สวัสดีคุณครู</h1><span>ติดตามสิ่งที่เด็ก ๆ กำลังคิด ทดลอง และบันทึก</span></div><button className="teacher-refresh" onClick={() => void refresh()} disabled={loadingData}>{loadingData ? "กำลังอัปเดต…" : <><AppIcon name="refresh" /> อัปเดตข้อมูล</>}</button></header>
+      <header className="teacher-topbar"><div><p>ภาพรวมการเรียนรู้</p><h1>สวัสดีคุณครู</h1><span>ติดตามการเข้าเรียน ความก้าวหน้า และคำตอบ แยกตามภารกิจ</span></div><div className="teacher-top-actions"><button className="teacher-refresh" onClick={() => void refresh()} disabled={loadingData}>{loadingData ? "กำลังอัปเดต…" : <><AppIcon name="refresh" /> อัปเดตข้อมูล</>}</button><button className="teacher-export-button" onClick={exportCsv} disabled={Boolean(exporting) || teams.length === 0}>{exporting === "csv" ? "กำลังส่งออก…" : "ส่งออก CSV / Excel"}</button><button className="teacher-backup-button" onClick={() => void exportBackup()} disabled={Boolean(exporting) || teams.length === 0}>{exporting === "backup" ? "กำลังสำรอง…" : "สำรองข้อมูลทั้งหมด"}</button></div></header>
       {error && <div className="teacher-error" role="alert">{error}</div>}
+      <section className="teacher-mission-filter" aria-label="เลือกดูข้อมูลตามภารกิจ">
+        <header><div><b>เลือกดูทีละภารกิจ</b><span>ข้อมูลด้านล่างจะเปลี่ยนตามภารกิจที่เลือก</span></div><small>{lastBackupAt ? `สำรองอัตโนมัติล่าสุด ${new Date(lastBackupAt).toLocaleString("th-TH")}` : "ยังไม่มีสำเนาในเครื่องนี้"}</small></header>
+        <div><button className={missionFilter === "all" ? "active" : ""} onClick={() => setMissionFilter("all")}><b>ทั้งหมด</b><span>ภาพรวมทุกภารกิจ</span></button>{([1, 2, 3, 4, 5] as const).map((mission) => <button key={mission} className={missionFilter === mission ? "active" : ""} onClick={() => setMissionFilter(mission)}><b>ภารกิจ {mission}</b><span>{MISSION_LABELS[mission]}</span></button>)}</div>
+      </section>
       <div className="teacher-kpi-grid">
         <article><i className="blue">♟</i><div><span>ทีมทั้งหมด</span><b>{teams.length}</b></div></article>
-        <article><i className="orange"><AppIcon name="play" /></i><div><span>กำลังทำภารกิจ</span><b>{teams.filter((team) => team.activeRun).length}</b></div></article>
+        <article><i className="orange"><AppIcon name="play" /></i><div><span>กำลังทำภารกิจ</span><b>{missionRuns.filter((run) => run.status === "in_progress").length}</b></div></article>
         <article><i className="green"><AppIcon name="check" /></i><div><span>สำเร็จวันนี้</span><b>{completedToday}</b></div></article>
+        <article><i className="teal">✓</i><div><span>มาเรียน</span><b>{attendanceTotals.present}</b></div></article>
+        <article><i className="red">–</i><div><span>ไม่มาเรียน</span><b>{attendanceTotals.absent}</b></div></article>
         <article><i className="pink">◷</i><div><span>อัปเดตล่าสุด</span><b className="kpi-time">{latestUpdate ? new Date(latestUpdate).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "-"}</b></div></article>
       </div>
       <section className="teacher-teams-section" id="teacher-team-list">
-        <header><div><h2>ความก้าวหน้าของแต่ละทีม</h2><p>ข้อมูลจะอัปเดตอัตโนมัติระหว่างที่เด็กทำกิจกรรม</p></div><div className="teacher-filters"><input aria-label="ค้นหาทีม" value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} placeholder="ค้นหาชื่อทีม" /><select aria-label="กรองสถานะ" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="all">ทุกสถานะ</option><option value="active">กำลังทำ</option><option value="completed">ทำเสร็จแล้ว</option></select><input aria-label="กรองวันที่" type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} /></div></header>
-        {loadingData && teams.length === 0 ? <div className="teacher-empty">กำลังโหลดข้อมูลชั้นเรียน…</div> : filteredTeams.length === 0 ? <div className="teacher-empty"><b>ไม่พบทีมตามตัวกรอง</b><span>ลองเปลี่ยนสถานะ ชื่อทีม หรือวันที่</span></div> : <div className="teacher-team-grid">{filteredTeams.map((team) => <TeacherTeamCard key={team.id} team={team} canDelete={!quickAccess} onOpen={() => void openDetail(team)} onDelete={() => setDeleteTarget(team)} />)}</div>}
+        <header><div><h2>{missionFilterLabel(missionFilter)}</h2><p>ข้อมูลจะอัปเดตอัตโนมัติระหว่างที่เด็กทำกิจกรรม</p></div><div className="teacher-filters"><input aria-label="ค้นหาทีม" value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} placeholder="ค้นหาชื่อทีม" /><select aria-label="กรองสถานะ" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="all">ทุกสถานะ</option><option value="active">กำลังทำ</option><option value="completed">ทำเสร็จแล้ว</option></select><input aria-label="กรองวันที่" type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} /></div></header>
+        {loadingData && teams.length === 0 ? <div className="teacher-empty">กำลังโหลดข้อมูลชั้นเรียน…</div> : filteredTeams.length === 0 ? <div className="teacher-empty"><b>ไม่พบทีมตามตัวกรอง</b><span>ลองเปลี่ยนภารกิจ สถานะ ชื่อทีม หรือวันที่</span></div> : <div className="teacher-team-grid">{filteredTeams.map((team) => <TeacherTeamCard key={`${team.id}-${missionFilter}`} team={team} run={latestRunForMission(team, missionFilter)} missionFilter={missionFilter} canDelete={!quickAccess} onOpen={() => void openDetail(team)} onDelete={() => setDeleteTarget(team)} />)}</div>}
       </section>
     </section>
-    {selectedTeam && <TeacherDetailPanel team={selectedTeam} detail={detail} loading={loadingData} onClose={() => { setSelectedTeam(null); setDetail(null); }} />}
+    {selectedTeam && <TeacherDetailPanel key={`${selectedTeam.id}-${missionFilter}`} team={selectedTeam} detail={detail} missionFilter={missionFilter} loading={loadingData} onClose={() => { setSelectedTeam(null); setDetail(null); }} />}
     {deleteTarget && <DeleteTeamDialog team={deleteTarget} busy={deletingTeamId === deleteTarget.id} onCancel={() => { if (!deletingTeamId) setDeleteTarget(null); }} onConfirm={() => void confirmDeleteTeam()} />}
   </main>;
 }
 
-function TeacherTeamCard({ team, canDelete, onOpen, onDelete }: { team: TeamOverview; canDelete: boolean; onOpen: () => void; onDelete: () => void }) {
-  const run = team.activeRun ?? team.completedRuns[0];
-  const progress = run ? stageProgress(run.currentStage) : 0;
+function TeacherTeamCard({ team, run, missionFilter, canDelete, onOpen, onDelete }: { team: TeamOverview; run: TeamOverview["activeRun"]; missionFilter: DashboardMissionFilter; canDelete: boolean; onOpen: () => void; onDelete: () => void }) {
+  const progress = run ? runProgress(run) : 0;
+  const attendance = run ? attendanceForRun(team, run) : [];
+  const presentCount = attendance.filter((member) => member.present).length;
+  const missionRuns = runsForMission(team, missionFilter);
   return <article className="teacher-team-card">
-    <header><div className="teacher-avatar-stack">{team.members.slice(0, 5).map((member) => <img key={member.id ?? member.name} src={`${BASE_PATH}/assets/profiles/${member.avatar}.png`} alt="" />)}</div><span className={team.activeRun ? "active" : "complete"}>{team.activeRun ? "กำลังทำ" : team.completedRuns.length ? "ทำเสร็จแล้ว" : "ยังไม่เริ่ม"}</span></header>
+    <header><div className="teacher-avatar-stack">{team.members.slice(0, 5).map((member) => <img key={member.id ?? member.name} src={`${BASE_PATH}/assets/profiles/${member.avatar}.png`} alt="" />)}</div><span className={run?.status === "in_progress" ? "active" : run ? "complete" : "not-started"}>{run?.status === "in_progress" ? "กำลังทำ" : run ? "ทำเสร็จแล้ว" : "ยังไม่เริ่ม"}</span></header>
     <h3>{team.name}</h3><p>{team.members.map((member) => member.name).join(" · ")}</p>
+    {run && <div className="teacher-card-meta"><span>ภารกิจที่ {missionNumberForRun(run)}</span><span>มา {presentCount}/{attendance.length} คน</span></div>}
     <div className="teacher-progress-label"><span>{run ? STAGE_LABELS[run.currentStage] : "ยังไม่เริ่มภารกิจ"}</span><b>{progress}%</b></div><div className="teacher-progress"><i style={{ width: `${progress}%` }} /></div>
-    <footer><div><span>ระยะเวลา</span><b>{run ? formatDuration(run.startedAt, run.completedAt) : "-"}</b></div><div><span>รอบที่ผ่านมา</span><b>{team.completedRuns.length}</b></div><div className="teacher-card-actions"><button className="teacher-detail-button" onClick={onOpen}>ดูรายละเอียด →</button>{canDelete && <button className="teacher-delete-button" onClick={onDelete} aria-label={`ลบทีม ${team.name}`}>ลบทีม</button>}</div></footer>
+    <footer><div><span>ระยะเวลา</span><b>{run ? formatDuration(run.startedAt, run.completedAt) : "-"}</b></div><div><span>รอบในตัวกรองนี้</span><b>{missionRuns.length}</b></div><div className="teacher-card-actions"><button className="teacher-detail-button" onClick={onOpen}>ดูรายละเอียด →</button>{canDelete && <button className="teacher-delete-button" onClick={onDelete} aria-label={`ลบทีม ${team.name}`}>ลบทีม</button>}</div></footer>
   </article>;
 }
 
@@ -249,28 +377,39 @@ function DeleteTeamDialog({ team, busy, onCancel, onConfirm }: { team: TeamOverv
     <section className="teacher-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-team-title">
       <div className="teacher-confirm-icon">!</div>
       <h2 id="delete-team-title">ลบทีม “{team.name}” หรือไม่?</h2>
-      <p>สมาชิก ความคืบหน้า คำตอบ และประวัติภารกิจทั้งหมดของทีมนี้จะถูกลบถาวรและเรียกคืนไม่ได้</p>
+      <p>ระบบจะดาวน์โหลดไฟล์สำรองของทีมนี้ก่อน แล้วจึงลบสมาชิก ความคืบหน้า คำตอบ และประวัติภารกิจออกจากฐานข้อมูล</p>
       {team.activeRun && <strong>ทีมนี้กำลังทำภารกิจอยู่</strong>}
       <div><button className="teacher-cancel-delete" onClick={onCancel} disabled={busy}>ยกเลิก</button><button className="teacher-confirm-delete" onClick={onConfirm} disabled={busy}>{busy ? "กำลังลบ…" : "ลบทีมถาวร"}</button></div>
     </section>
   </div>;
 }
 
-function TeacherDetailPanel({ team, detail, loading, onClose }: { team: TeamOverview; detail: TeacherTeamDetail | null; loading: boolean; onClose: () => void }) {
-  const [runId, setRunId] = useState(team.activeRun?.id ?? team.runs[0]?.id ?? "");
-  const run = team.runs.find((item) => item.id === runId) ?? team.runs[0];
+function TeacherDetailPanel({ team, detail, missionFilter, loading, onClose }: { team: TeamOverview; detail: TeacherTeamDetail | null; missionFilter: DashboardMissionFilter; loading: boolean; onClose: () => void }) {
+  const candidateRuns = runsForMission(team, missionFilter);
+  const [runId, setRunId] = useState(candidateRuns[0]?.id ?? "");
+  const run = candidateRuns.find((item) => item.id === runId) ?? candidateRuns[0];
   const events = detail?.events.filter((event) => event.runId === run?.id) ?? [];
-  const responses = detail?.responses.filter((response) => response.runId === run?.id) ?? [];
+  const attendance = run ? attendanceForRun(team, run) : [];
+  const storedResponses = detail?.responses.filter((response) => response.runId === run?.id) ?? [];
+  const missionTwoResponses = run && missionNumberForRun(run) === 2 ? attendance.flatMap((member, index) => {
+    const tickets = run.saveState.mission2Assessments ?? {};
+    const ticket = member.id ? tickets[`member-${member.id}`] : tickets[`student-${member.position ?? index}`] ?? tickets[member.name];
+    if (!ticket) return [];
+    return [{ id: `mission2-${run.id}-${member.id ?? index}`, runId: run.id, memberId: member.id ?? `student-${index}`, memberName: member.name, k: ticket.k, p: ticket.p, v: ticket.v, savedAt: run.updatedAt }];
+  }) : [];
+  const responses = missionTwoResponses.length ? missionTwoResponses : storedResponses;
+  const presentCount = attendance.filter((member) => member.present).length;
   return <div className="teacher-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="teacher-detail-panel" aria-label={`รายละเอียด ${team.name}`}>
-    <header><div><span>รายละเอียดทีม</span><h2>{team.name}</h2><p>{team.members.map((member) => member.name).join(" · ")}</p></div><button aria-label="ปิด" onClick={onClose}><AppIcon name="x" /></button></header>
-    <label className="teacher-run-picker">รอบภารกิจ<select value={runId} onChange={(event) => setRunId(event.target.value)}>{team.runs.map((item, index) => <option value={item.id} key={item.id}>{item.status === "in_progress" ? "รอบปัจจุบัน" : `ประวัติรอบ ${team.runs.length - index}`} · {new Date(item.startedAt).toLocaleString("th-TH")}</option>)}</select></label>
+    <header><div><span>{missionFilterLabel(missionFilter)}</span><h2>{team.name}</h2><p>{team.members.map((member) => member.name).join(" · ")}</p></div><button aria-label="ปิด" onClick={onClose}><AppIcon name="x" /></button></header>
+    {candidateRuns.length > 0 && <label className="teacher-run-picker">รอบภารกิจ<select value={runId} onChange={(event) => setRunId(event.target.value)}>{candidateRuns.map((item, index) => <option value={item.id} key={item.id}>ภารกิจที่ {missionNumberForRun(item)} · {item.status === "in_progress" ? "รอบปัจจุบัน" : `ประวัติรอบ ${candidateRuns.length - index}`} · {new Date(item.startedAt).toLocaleString("th-TH")}</option>)}</select></label>}
     {loading && !detail ? <div className="teacher-empty">กำลังโหลดรายละเอียด…</div> : run ? <div className="teacher-detail-content">
-      <div className="teacher-detail-summary"><div><span>สถานะ</span><b>{run.status === "in_progress" ? "กำลังทำ" : "สำเร็จแล้ว"}</b></div><div><span>ขั้นล่าสุด</span><b>{STAGE_LABELS[run.currentStage]}</b></div><div><span>เวลา</span><b>{formatDuration(run.startedAt, run.completedAt)}</b></div></div>
+      <div className="teacher-detail-summary"><div><span>ภารกิจ</span><b>ภารกิจที่ {missionNumberForRun(run)}</b></div><div><span>สถานะ</span><b>{run.status === "in_progress" ? "กำลังทำ" : "สำเร็จแล้ว"}</b></div><div><span>ขั้นล่าสุด</span><b>{STAGE_LABELS[run.currentStage]}</b></div><div><span>เวลา</span><b>{formatDuration(run.startedAt, run.completedAt)}</b></div></div>
+      <section className="teacher-attendance-section"><h3>การเข้าเรียนประจำภารกิจ <span>มา {presentCount}/{attendance.length} คน</span></h3><div className="teacher-attendance-list">{attendance.map((member, index) => <article className={member.present ? "present" : "absent"} key={member.id ?? `${member.name}-${index}`}><img src={`${BASE_PATH}/assets/profiles/${member.avatar}.png`} alt="" /><div><b>{(member.position ?? index) + 1}. {member.name}</b><span>{member.present ? "มาเรียน" : "ไม่มาเรียน"}</span></div></article>)}</div></section>
       <section><h3>คำตอบรายบุคคล</h3>{responses.length ? <div className="teacher-response-list">{responses.map((response) => <article key={response.id}><header><b>{response.memberName}</b><span>{new Date(response.savedAt).toLocaleString("th-TH")}</span></header><p><i>K</i>{response.k || "-"}</p><p><i>P</i>{response.p || "-"}</p><p><i>V</i>{response.v || "-"}</p></article>)}</div> : <div className="teacher-inline-empty">ยังไม่มีคำตอบรายบุคคล</div>}</section>
       <section><h3>คำตอบจากหน้าหมุนกล่อง 3 มิติ</h3><div className="teacher-chip-list">{Object.entries(run.saveState.inspectionFindings ?? {}).map(([damageId, cause]) => <span key={damageId}>{DAMAGE_LABELS[damageId] ?? damageId} → {cause}</span>)}{!Object.keys(run.saveState.inspectionFindings ?? {}).length && <em>ยังไม่ได้บันทึกคำตอบ</em>}</div></section>
       <section><h3>ภารกิจของกล่องที่ทีมเลือก</h3><div className="teacher-chip-list">{BOX_MISSION_GOALS.filter((goal) => run.saveState.boxMissionGoals?.[goal.id]).map((goal) => <span key={goal.id}>{goal.label}</span>)}{!Object.values(run.saveState.boxMissionGoals ?? {}).some(Boolean) && <em>ยังไม่ได้เลือก</em>}</div></section>
       <section><h3>สิ่งที่ทีมเลือกศึกษา</h3><div className="teacher-chip-list">{Object.entries(run.saveState.studyFocus ?? {}).filter(([, selected]) => selected).map(([key]) => <span key={key}>{studyTopicLabel(key)}</span>)}{!Object.values(run.saveState.studyFocus ?? {}).some(Boolean) && <em>ยังไม่ได้เลือก</em>}</div></section>
-      {Object.keys(run.saveState.recapAnswers ?? {}).length > 0 && <section><h3>คำตอบแบบทบทวนหลังการทดลอง</h3><div className="teacher-recap-list">{Object.entries(run.saveState.recapAnswers).map(([questionIndex, choices]) => { const item = RECAP[Number(questionIndex)]; return <article key={questionIndex}><b>{item?.question ?? `คำถามที่ ${Number(questionIndex) + 1}`}</b><span>{choices.map((choice) => item?.choices[choice] ?? `ตัวเลือก ${choice + 1}`).join(" → ")}</span></article>; })}</div></section>}
+      {Object.keys(run.saveState.recapAnswers ?? {}).length > 0 && <section><h3>คำตอบร่วมกันหลังการทดลอง</h3><div className="teacher-recap-list">{Object.entries(run.saveState.recapAnswers).map(([questionIndex, choices]) => { const item = RECAP[Number(questionIndex)]; return <article key={questionIndex}><b>{item?.question ?? `คำถามที่ ${Number(questionIndex) + 1}`}</b><span>{choices.map((choice) => item?.choices[choice]?.label ?? `ตัวเลือก ${choice + 1}`).join(" → ")}</span></article>; })}</div></section>}
       <section><h3>กิจกรรมตามลำดับเวลา</h3>{events.length ? <ol className="teacher-timeline">{events.map((event) => <li key={event.id}><i /><div><b>{EVENT_LABELS[event.eventType] ?? event.eventType}</b><span>{STAGE_LABELS[event.stage] ?? event.stage}</span><small>{event.memberName ? `${event.memberName} · ` : ""}{new Date(event.occurredAt).toLocaleString("th-TH")}</small></div></li>)}</ol> : <div className="teacher-inline-empty">ยังไม่มีกิจกรรมที่บันทึกไว้</div>}</section>
     </div> : <div className="teacher-empty">ทีมนี้ยังไม่เคยเริ่มภารกิจ</div>}
   </aside></div>;

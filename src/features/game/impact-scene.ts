@@ -4,12 +4,13 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { ImpactDamage, MaterialDefinition } from "./data";
 import { IMPACT_DROP_MS, IMPACT_GRIPPER_MS, IMPACT_SETTLE_MS, impactDamageFor, type ImpactPhase } from "./impact";
 import { createMaterialModelLibrary } from "./material-model-3d";
-import { detectRenderCompatibility, handleWebGLContextLoss, observeElementResize } from "./browser-compat";
+import { createCompatibleWebGLContext, detectRenderCompatibility, handleWebGLContextLoss, observeElementResize } from "./browser-compat";
 
 export function createImpactScene(canvas: HTMLCanvasElement, onFailure: () => void) {
   const compatibility = detectRenderCompatibility();
   if (compatibility.webglVersion === 0) throw new Error("WebGL is unavailable");
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: compatibility.antialias, precision: compatibility.precision, powerPreference: "low-power" });
+  const webglContext = createCompatibleWebGLContext(canvas, compatibility);
+  const renderer = new THREE.WebGLRenderer({ canvas, context: webglContext, alpha: true, antialias: compatibility.antialias, precision: compatibility.precision, powerPreference: "low-power" });
   renderer.setClearColor(0xffffff, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;

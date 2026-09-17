@@ -1,6 +1,9 @@
 import type { AbsorptionLevel, MaterialDefinition, StripAbsorptionLevel, WaterAbsorptionResult } from "./data";
 
-export const ABSORPTION_STEP_MS = 850;
+export const ABSORPTION_TRANSITION_MS = 850;
+export const ABSORPTION_DURATION_MS = 30_000;
+// Kept for older imports that use the short preparation/immersion transition.
+export const ABSORPTION_STEP_MS = ABSORPTION_TRANSITION_MS;
 export type AbsorptionPhase = "idle" | "prepare" | "immersing" | "holding" | "done";
 
 export const ABSORPTION_CONDITIONS = {
@@ -64,4 +67,12 @@ export function absorptionStep(phase: AbsorptionPhase) {
   if (phase === "immersing") return 2;
   if (phase === "holding") return 3;
   return 4;
+}
+
+export function absorptionPhaseDuration(phase: AbsorptionPhase) {
+  return phase === "holding" ? ABSORPTION_DURATION_MS : ABSORPTION_TRANSITION_MS;
+}
+
+export function absorptionProgress(elapsedMs: number) {
+  return Math.min(1, Math.max(0, elapsedMs / ABSORPTION_DURATION_MS));
 }

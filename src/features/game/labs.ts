@@ -1,4 +1,4 @@
-import { MATERIALS, type GameSave, type Stage } from "./data";
+import { MATERIALS, RECAP, type GameSave, type Stage } from "./data";
 import { STUDY_TOPICS } from "./learning-topics";
 
 export const LAB_ROOMS_ENABLED = true;
@@ -28,9 +28,49 @@ export function allLabsComplete(save: GameSave) {
   return LAB_ROOMS.every((room) => labResultCount(save, room.id) === LAB_MATERIALS.length);
 }
 
+export function labQuestionIndex(room: LabRoom) {
+  return LAB_ROOMS.findIndex((item) => item.id === room);
+}
+
+export function labQuestionPassed(save: GameSave, room: LabRoom) {
+  const index = labQuestionIndex(room);
+  const question = RECAP[index];
+  return Boolean(question && save.recapAnswers[String(index)]?.includes(question.answer));
+}
+
+export function labRoomUnlocked(save: GameSave, room: LabRoom) {
+  const index = labQuestionIndex(room);
+  if (index <= 0) return true;
+  return labQuestionPassed(save, LAB_ROOMS[index - 1].id);
+}
+
+export function allLabQuestionsPassed(save: GameSave) {
+  return LAB_ROOMS.every((room) => labQuestionPassed(save, room.id));
+}
+
 export function openLabPatch(save: GameSave, room: LabRoom): Partial<GameSave> {
   const definition = LAB_ROOMS.find((item) => item.id === room)!;
   // Find the first unfinished material by ID, including saves from older material orders.
   const unfinished = LAB_MATERIALS.findIndex((material) => !save[definition.resultsKey]?.[material.id]);
   return { stage: room, [definition.indexKey]: unfinished < 0 ? 0 : unfinished };
+}
+
+/** Start Mission 2's evidence collection again without touching the team or Mission 1 evidence. */
+export function restartMissionTwoLabsPatch(): Partial<GameSave> {
+  return {
+    stage: "testHub",
+    compressionIndex: 0,
+    impactIndex: 0,
+    absorptionIndex: 0,
+    compressionResults: {},
+    impactResults: {},
+    absorptionResults: {},
+    recapIndex: 0,
+    recapAnswers: {},
+    labAnswerDrafts: {},
+    mission2Connections: {},
+    mission2Assessments: {},
+    mission2AssessmentConfirmed: {},
+    mission2Completed: false,
+  };
 }

@@ -16,6 +16,10 @@ export function answerEvents(current: GameSave, next: Partial<GameSave>): Learni
     ["absorptionResults", "absorption_result_saved", "absorption"],
     ["elasticityResults", "elasticity_result_saved", "elasticity"],
     ["recapAnswers", "recap_answer_saved", "recap"],
+    ["mission2PartPredictions", "mission2_part_prediction_changed", "mission2Parts"],
+    ["mission2Connections", "mission2_connection_changed", "comparison"],
+    ["mission2Assessments", "mission2_individual_answer_changed", "mission2Assessment"],
+    ["mission2AssessmentConfirmed", "mission2_individual_answer_saved", "mission2Assessment"],
     ["predictions", "material_prediction_changed", "prediction"],
     ["bigQuestionProgress", "big_question_progress_saved", "studyFocus"],
     ["mission3Selections", "mission3_material_selected", "mission3Materials"],
@@ -31,7 +35,7 @@ export function answerEvents(current: GameSave, next: Partial<GameSave>): Learni
     for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
       if (JSON.stringify(before[key]) === JSON.stringify(after[key])) continue;
       events.push({ eventType, stage: stage as Stage,
-        memberId: field.startsWith("exitTicket") && key.startsWith("member-") ? key.slice(7) : null,
+        memberId: (field.startsWith("exitTicket") || field.startsWith("mission2Assessment")) && key.startsWith("member-") ? key.slice(7) : null,
         payload: { field, key, previous: before[key] ?? null, answer: after[key] ?? null },
       });
     }

@@ -381,7 +381,7 @@ begin
   if found then return jsonb_build_object('team_id', v_team_id, 'already_imported', true); end if;
 
   v_members := p_save_state->'team';
-  if jsonb_typeof(v_members) <> 'array' or jsonb_array_length(v_members) not between 6 and 7 then
+  if jsonb_typeof(v_members) <> 'array' or jsonb_array_length(v_members) not between 4 and 7 then
     if jsonb_typeof(p_statistics) = 'array' and jsonb_array_length(p_statistics) > 0 then
       select coalesce(jsonb_agg(jsonb_build_object(
         'name', member_name,
@@ -391,8 +391,8 @@ begin
       from jsonb_array_elements_text(p_statistics->0->'members') with ordinality as names(member_name, ordinality);
     end if;
   end if;
-  if jsonb_typeof(v_members) <> 'array' or jsonb_array_length(v_members) not between 6 and 7 then
-    raise exception 'ข้อมูลเดิมไม่มีรายชื่อสมาชิก 6–7 คน' using errcode = '22023';
+  if jsonb_typeof(v_members) <> 'array' or jsonb_array_length(v_members) not between 4 and 7 then
+    raise exception 'ข้อมูลเดิมไม่มีรายชื่อสมาชิก 4–7 คน' using errcode = '22023';
   end if;
 
   v_team := public.create_team_with_members(p_team_name, v_members);
@@ -440,7 +440,7 @@ begin
     end loop;
   end if;
 
-  if jsonb_typeof(p_save_state) = 'object' and jsonb_array_length(coalesce(p_save_state->'team', '[]'::jsonb)) between 6 and 7 then
+  if jsonb_typeof(p_save_state) = 'object' and jsonb_array_length(coalesce(p_save_state->'team', '[]'::jsonb)) between 4 and 7 then
     v_legacy_id := nullif(p_save_state->>'runId', '');
     if v_legacy_id is null or not exists (select 1 from public.game_runs where legacy_run_id = v_legacy_id) then
       v_status := case when p_save_state->>'stage' = 'summary' then 'completed' else 'in_progress' end;

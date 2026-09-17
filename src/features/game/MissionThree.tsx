@@ -114,7 +114,7 @@ function MissionThreeIntro({ onNext, onBack }: { onNext: () => void; onBack: () 
           <AppIcon className={styles.welcomeToolIcon} name="hammer" />
         </div>
         <h1>ออกแบบและสร้างกล่องพัสดุ</h1>
-        <p className={styles.welcomeCopy}>มาเลือกวัสดุและออกแบบกล่องพัสดุของเรากัน</p>
+        <p className={styles.welcomeCopy}>นำผลจากภารกิจที่ 2 มาเลือกวัสดุจริงและออกแบบกล่องของเรา</p>
         <div className={styles.mission3Route} aria-label="เส้นทางภารกิจที่ 3">
           <article><i>1</i><b>รับภารกิจ</b><span>รู้โจทย์ของกล่อง</span></article>
           <article><i>2</i><b>อ่านหลักฐาน</b><span>ดูผลจากภารกิจที่ 2</span></article>
@@ -126,7 +126,7 @@ function MissionThreeIntro({ onNext, onBack }: { onNext: () => void; onBack: () 
         <span className={styles.welcomeLabel}>เป้าหมายของทีมเรา</span>
         <h1>กล่องของเราต้องช่วยอะไรบ้าง?</h1>
         <div className={styles.goalTiles}>{GOALS.map(([icon, label]) => <div key={label}><AppIcon name={icon as AppIconName} /><b>{label}</b></div>)}</div>
-        <p className={styles.firstAction}>เริ่มจากดูผลทดลองของทีม<br />แล้วค่อยเลือกวัสดุมาออกแบบกล่อง</p>
+        <p className={styles.firstAction}>เรารู้แล้วว่าต้องดูผลด้านใดสำหรับแต่ละส่วน<br />ต่อไปใช้ผลของทีมเลือกวัสดุจริงและออกแบบกล่อง</p>
         <button className={`button button-orange mission-briefing-start ${styles.welcomeStart}`} type="button" onClick={onNext}>ไปดูผลทดลอง <b aria-hidden="true"><span>›</span></b></button>
         <p className={styles.buildLater}>ออกแบบในเกม แล้วนำไปสร้างกล่องจริงกับครู</p>
       </>}
@@ -137,7 +137,7 @@ function MissionThreeIntro({ onNext, onBack }: { onNext: () => void; onBack: () 
 function MissionThreeData({ save, onNext, onBack }: { save: GameSave; onNext: () => void; onBack: () => void }) {
   const resultState = (value: string) => value === "ยังไม่มีผล" ? <span className={styles.resultEmpty}>รอผลทดลอง</span> : <span className={styles.resultValue}>{value}</span>;
   return <div className={`${styles.screen} ${styles.dataScreen}`}>
-    <ScreenHeader step={2} centered title="ผลการทดลองของทีมเรา" subtitle="ดูผลจากภารกิจที่ 2 แล้วคุยกันว่า วัสดุไหนช่วยกล่องของเราได้" onBack={onBack} />
+    <ScreenHeader step={2} centered title="ผลการทดลองของทีมเรา" subtitle="ใช้ความเชื่อมโยงจากภารกิจที่ 2 แล้วเลือกวัสดุสำหรับแต่ละส่วนของกล่อง" onBack={onBack} />
     <main className={styles.dataLayout}>
       <aside className={styles.dataGuide}>
         <div className={styles.coachHeader}>

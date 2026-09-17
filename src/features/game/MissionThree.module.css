@@ -1151,3 +1151,125 @@
   .dataLayout { grid-template-columns: 29% 68%; }
   .tableCard th, .tableCard td { font-size: .96cqw; }
 }
+
+/* Grade 2 readability: all task directions and evidence must remain legible at iPad size. */
+.header span { font-size: clamp(14px, 1.15cqw, 17px); }
+.header p { font-size: clamp(16px, 1.35cqw, 20px); line-height: 1.4; }
+.back { font-size: clamp(15px, 1.25cqw, 18px); }
+.stepper small { font-size: clamp(12px, 1cqw, 14px); }
+.footer > span { max-width: 64%; font-size: clamp(15px, 1.3cqw, 19px); }
+.footer button { font-size: clamp(17px, 1.5cqw, 21px); }
+
+.dataScreen .dataLayout { height: 64%; grid-template-columns: 29% 68.5%; padding: 1% 3.4% 0; }
+.dataScreen .dataGuide { padding: 1.05cqw; }
+.dataScreen .coachAvatar { width: 5.2cqw; height: 5.2cqw; }
+.dataScreen .coachAvatar img { width: 4.6cqw; height: 4.6cqw; }
+.dataScreen .coachHeader span { font-size: clamp(13px, 1.05cqw, 15px); }
+.dataScreen .coachHeader b { font-size: clamp(17px, 1.45cqw, 20px); }
+.dataScreen .coachSpeech { padding: .7cqw .78cqw; }
+.dataScreen .coachSpeech b { font-size: clamp(15px, 1.25cqw, 18px); }
+.dataScreen .coachSpeech p { font-size: clamp(13px, 1.08cqw, 16px); line-height: 1.32; }
+.dataScreen .readSteps { gap: .38cqw; }
+.dataScreen .readStep { min-height: 3.65cqw; padding: .4cqw .55cqw; }
+.dataScreen .readStep b { font-size: clamp(14px, 1.15cqw, 17px); }
+.dataScreen .readStep small { font-size: clamp(12px, .98cqw, 14px); line-height: 1.18; }
+.dataScreen .coachTip { padding: .5cqw .62cqw; }
+.dataScreen .coachTip strong { font-size: clamp(13px, 1.08cqw, 16px); }
+.dataScreen .coachTip span { font-size: clamp(12px, .98cqw, 14px); }
+.dataScreen .tableCard { padding: .9cqw 1cqw; }
+.dataScreen .tableTitle .boardKicker { font-size: clamp(12px, 1cqw, 14px); }
+.dataScreen .tableTitle > div:first-child > b { font-size: clamp(19px, 1.7cqw, 23px); }
+.dataScreen .tableTitle > div:first-child > small { font-size: clamp(12px, 1cqw, 14px); }
+.dataScreen .resultBadge b { font-size: clamp(15px, 1.25cqw, 18px); }
+.dataScreen .resultBadge span { font-size: clamp(12px, 1cqw, 14px); }
+.dataScreen .dataLegend { gap: .38cqw; margin-bottom: .48cqw; }
+.dataScreen .dataLegend > span { padding: .32cqw .44cqw; font-size: clamp(13px, 1.08cqw, 16px); }
+.dataScreen .dataLegend > span > small { font-size: clamp(11px, .9cqw, 13px); }
+.dataScreen .tableCard th,.dataScreen .tableCard td { padding: .46cqw .42cqw; font-size: clamp(13px, 1.08cqw, 16px); }
+.dataScreen .tableCard thead th { font-size: clamp(13px, 1.08cqw, 16px); }
+.dataScreen .tableCard thead th span { font-size: clamp(15px, 1.3cqw, 18px); }
+.dataScreen .tableCard thead small { font-size: clamp(11px, .9cqw, 13px); }
+.dataScreen .tableCard tbody th { font-size: clamp(13px, 1.05cqw, 15px); }
+.dataScreen .tableCard tbody th img { width: 3cqw; height: 3cqw; }
+.dataScreen .tableCard tbody td { font-size: clamp(13px, 1.08cqw, 16px); }
+.dataScreen .resultValue,.dataScreen .resultEmpty { font-size: clamp(12px, 1cqw, 14px); }
+.dataScreen .tableCaption { margin-top: .45cqw; padding: .45cqw .6cqw; font-size: clamp(12px, 1cqw, 14px); }
+.dataScreen .tableCaption strong { font-size: clamp(13px, 1.08cqw, 16px); }
+.dataScreen .footerInstruction b { font-size: clamp(15px, 1.25cqw, 18px); }
+.dataScreen .footerInstruction small { font-size: clamp(13px, 1.05cqw, 15px); }
+
+.materialLayout { height: 72%; grid-template-columns: 72% 26%; gap: 1.4%; padding: .8% 2.8% 0; }
+.materialRoles,.materialEvidence { padding: .9cqw 1cqw; }
+.roleGrid { gap: .58cqw; margin-top: .55cqw; }
+.roleCard { min-height: 9.8cqw; padding: .62cqw .7cqw; }
+.roleCopy b { font-size: clamp(15px, 1.25cqw, 18px); }
+.roleCopy span { font-size: clamp(12px, 1cqw, 14px); }
+.roleCard select { height: 3cqw; font-size: clamp(14px, 1.15cqw, 17px); }
+.roleEvidence { padding: .35cqw .42cqw; }
+.roleEvidence b { font-size: clamp(13px, 1.05cqw, 15px); }
+.roleEvidence small { font-size: clamp(11px, .9cqw, 13px); }
+.waiting { font-size: clamp(12px, 1cqw, 14px); }
+.reuseCheck { font-size: clamp(12px, .98cqw, 14px); }
+.reuseCheck input { width: 1.35cqw; height: 1.35cqw; }
+.evidenceMiniList { gap: .42cqw; margin-top: .58cqw; }
+.evidenceMiniList article { padding: .4cqw; }
+.evidenceMiniList b { font-size: clamp(13px, 1.05cqw, 15px); }
+.evidenceMiniList span,.evidenceMiniList small { font-size: clamp(11px, .9cqw, 13px); white-space: normal; }
+.reuseTip { padding: .55cqw; }
+.reuseTip b { font-size: clamp(13px, 1.08cqw, 16px); }
+.reuseTip p { font-size: clamp(12px, .98cqw, 14px); }
+
+.designLayout { height: 59%; grid-template-columns: 56% 42%; gap: 1.5%; padding: .8% 2.8% 0; }
+.blueprintWrap,.designControls { padding: .75cqw .9cqw; }
+.blueprintTag { font-size: clamp(16px, 1.35cqw, 19px); }
+.blueprintTag span { font-size: clamp(12px, 1cqw, 14px); }
+.blueprint { height: 22cqw; max-height: calc(100% - 8cqw); }
+.blueprintLegend { gap: .3cqw; }
+.blueprintLegend button { padding: .35cqw .28cqw; }
+.blueprintLegend b { font-size: clamp(12px, .98cqw, 14px); white-space: normal; }
+.blueprintLegend small { font-size: clamp(10px, .82cqw, 12px); white-space: normal; }
+.dimensionGrid { margin: .58cqw 0; }
+.dimensionGrid span,.textField > span { font-size: clamp(14px, 1.15cqw, 17px); font-weight: 700; }
+.dimensionGrid input { height: 3cqw; font-size: clamp(14px, 1.15cqw, 17px); }
+.inspectCard { padding: .5cqw .6cqw; }
+.inspectCard b { font-size: clamp(14px, 1.15cqw, 17px); }
+.inspectCard p { font-size: clamp(12px, 1cqw, 14px); }
+.inspectCard small { font-size: clamp(11px, .9cqw, 13px); }
+.textField { margin-top: .5cqw; }
+.textField textarea { height: 4.8cqw; font-size: clamp(14px, 1.15cqw, 17px); }
+
+.reasonLayout { height: 62%; grid-template-columns: 58% 40%; gap: 1.5%; padding: .9% 2.9% 0; }
+.reasonCard,.reasonSummary { padding: .9cqw 1.05cqw; }
+.reasonLabel { margin-top: .55cqw; }
+.reasonLabel > span { font-size: clamp(15px, 1.25cqw, 18px); font-weight: 700; }
+.reasonLabel textarea { height: 10.5cqw; font-size: clamp(14px, 1.15cqw, 17px); }
+.reasonLabel > small { font-size: clamp(12px, .98cqw, 14px); }
+.evidenceButtons > b { font-size: clamp(13px, 1.05cqw, 15px); }
+.evidenceButtons button { font-size: clamp(12px, 1cqw, 14px); }
+.choiceRow { margin-top: .45cqw; padding: .42cqw; }
+.choiceRow b { font-size: clamp(14px, 1.15cqw, 17px); }
+.choiceRow small { font-size: clamp(12px, .98cqw, 14px); }
+.choiceRow em { font-size: clamp(11px, .9cqw, 13px); }
+.reasonTip { padding: .58cqw; font-size: clamp(12px, 1cqw, 14px); }
+
+.completePill { font-size: clamp(14px, 1.15cqw, 17px); }
+.completeCard > p { font-size: clamp(15px, 1.25cqw, 18px); }
+.completeGrid b { font-size: clamp(13px, 1.05cqw, 15px); }
+.completeGrid span { font-size: clamp(12px, 1cqw, 14px); }
+.nextMission b { font-size: clamp(14px, 1.15cqw, 17px); }
+.nextMission small { font-size: clamp(12px, .98cqw, 14px); }
+.completeCard > button { font-size: clamp(16px, 1.4cqw, 20px); }
+.mission3Route b { font-size: clamp(16px, 1.35cqw, 19px); }
+.mission3Route span { font-size: clamp(13px, 1.08cqw, 16px); line-height: 1.25; }
+.materialLayout { grid-template-columns: 69% 29.5%; }
+.evidenceMiniList b { overflow: visible; font-size: clamp(13px, 1.08cqw, 16px); text-overflow: clip; white-space: normal; }
+.evidenceMiniList span,.evidenceMiniList small { font-size: clamp(12px, .98cqw, 14px); }
+.jointMarker text { font-size: 16px; font-weight: 700; }
+.dimension text { font-size: 16px; font-weight: 700; }
+.blueprintLegend b { font-size: clamp(13px, 1.05cqw, 15px); }
+.blueprintLegend small { font-size: clamp(11px, .9cqw, 13px); }
+.missionProgress { width: 19.5cqw; height: 5.7cqw; }
+.progressHeading span { font-size: clamp(12px, 1cqw, 14px); }
+.progressHeading b { font-size: clamp(11px, .9cqw, 13px); }
+.progressDetails > strong { font-size: clamp(13px, 1.08cqw, 16px); }
+.progressDetails > strong > span { font-size: clamp(14px, 1.18cqw, 17px); }

@@ -55,6 +55,33 @@ export function detectRenderCompatibility(): RenderCompatibilityProfile {
   return cachedProfile;
 }
 
+/**
+ * Create exactly the WebGL generation selected by the compatibility profile.
+ * Passing this context into Three.js prevents an old iOS device from being
+ * probed a second time with newer defaults after it has selected WebGL 1.
+ */
+export function createCompatibleWebGLContext(canvas: HTMLCanvasElement, profile: RenderCompatibilityProfile): WebGLRenderingContext {
+  const attributes: WebGLContextAttributes = {
+    alpha: true,
+    antialias: profile.antialias,
+    depth: true,
+    stencil: false,
+    preserveDrawingBuffer: false,
+    powerPreference: "low-power",
+  };
+  let context: WebGLRenderingContext | null = null;
+  try {
+    if (profile.webglVersion === 2) context = canvas.getContext("webgl2", attributes) as WebGL2RenderingContext | null;
+    if (!context && profile.webglVersion > 0) {
+      context = (canvas.getContext("webgl", attributes) || canvas.getContext("experimental-webgl", attributes)) as WebGLRenderingContext | null;
+    }
+  } catch {
+    context = null;
+  }
+  if (!context) throw new Error("WebGL context creation failed");
+  return context;
+}
+
 export function resetRenderCompatibilityForTests() {
   cachedProfile = null;
   for (const key of Object.keys(rendererStatuses)) delete rendererStatuses[key];

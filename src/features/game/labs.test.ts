@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { EMPTY_SAVE, type GameSave } from "./data";
-import { allLabsComplete, LAB_MATERIALS, LAB_ROOMS, LAB_ROOMS_ENABLED, labResultCount, openLabPatch } from "./labs";
+import { allLabQuestionsPassed, allLabsComplete, LAB_MATERIALS, LAB_ROOMS, LAB_ROOMS_ENABLED, labQuestionPassed, labResultCount, labRoomUnlocked, openLabPatch, restartMissionTwoLabsPatch } from "./labs";
 import { STUDY_TOPICS, studyTopicLabel } from "./learning-topics";
 import { recordImpact } from "./impact";
 
@@ -65,5 +65,41 @@ describe("enabled laboratory flow", () => {
     expect(openLabPatch(save, "compression")).toEqual({ stage: "compression", compressionIndex: 0 });
     const missing = { ...save, absorptionResults: {} };
     expect(allLabsComplete(missing)).toBe(false);
+  });
+
+  it("unlocks one room at a time after the team answers each lab question", () => {
+    expect(labRoomUnlocked(EMPTY_SAVE, "compression")).toBe(true);
+    expect(labRoomUnlocked(EMPTY_SAVE, "impact")).toBe(false);
+    expect(labQuestionPassed(EMPTY_SAVE, "compression")).toBe(false);
+
+    const afterCompression = { ...EMPTY_SAVE, recapAnswers: { "0": [2, 0] } };
+    expect(labQuestionPassed(afterCompression, "compression")).toBe(true);
+    expect(labRoomUnlocked(afterCompression, "impact")).toBe(true);
+    expect(labRoomUnlocked(afterCompression, "absorption")).toBe(false);
+
+    const allAnswered = { ...EMPTY_SAVE, recapAnswers: { "0": [0], "1": [1], "2": [1] } };
+    expect(allLabQuestionsPassed(allAnswered)).toBe(true);
+  });
+
+  it("restarts all three rooms while preserving team and Mission 1 evidence", () => {
+    const patch = restartMissionTwoLabsPatch();
+    expect(patch).toMatchObject({
+      stage: "testHub",
+      compressionIndex: 0,
+      impactIndex: 0,
+      absorptionIndex: 0,
+      compressionResults: {},
+      impactResults: {},
+      absorptionResults: {},
+      recapAnswers: {},
+      labAnswerDrafts: {},
+      mission2Connections: {},
+      mission2Assessments: {},
+      mission2AssessmentConfirmed: {},
+      mission2Completed: false,
+    });
+    expect(patch).not.toHaveProperty("team");
+    expect(patch).not.toHaveProperty("inspectionFindings");
+    expect(patch).not.toHaveProperty("studyFocus");
   });
 });

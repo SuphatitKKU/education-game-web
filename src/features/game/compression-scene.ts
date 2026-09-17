@@ -3,13 +3,14 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import type { MaterialDefinition } from "./data";
 import { APPROACH_DURATION_MS, LIFT_DURATION_MS, PRESS_DURATION_MS, PRESS_GEOMETRY, compressionPose, type CompressionPhase } from "./compression";
 import { createMaterialModelLibrary } from "./material-model-3d";
-import { detectRenderCompatibility, handleWebGLContextLoss, listenToMediaQuery, observeElementResize } from "./browser-compat";
+import { createCompatibleWebGLContext, detectRenderCompatibility, handleWebGLContextLoss, listenToMediaQuery, observeElementResize } from "./browser-compat";
 
 /** A single WebGL context renders one selected press view, only when something changes. */
 export function createCompressionScene(canvas: HTMLCanvasElement, onFailure: () => void) {
   const compatibility = detectRenderCompatibility();
   if (compatibility.webglVersion === 0) throw new Error("WebGL is unavailable");
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: compatibility.antialias, precision: compatibility.precision, powerPreference: "low-power" });
+  const webglContext = createCompatibleWebGLContext(canvas, compatibility);
+  const renderer = new THREE.WebGLRenderer({ canvas, context: webglContext, alpha: true, antialias: compatibility.antialias, precision: compatibility.precision, powerPreference: "low-power" });
   renderer.setClearColor(0xffffff, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;

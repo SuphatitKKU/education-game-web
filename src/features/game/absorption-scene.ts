@@ -1,9 +1,9 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import type { MaterialDefinition } from "./data";
-import { ABSORPTION_STEP_MS, type AbsorptionPhase } from "./absorption";
+import { ABSORPTION_DURATION_MS, ABSORPTION_TRANSITION_MS, absorptionProgress, type AbsorptionPhase } from "./absorption";
 import { createMaterialModelLibrary } from "./material-model-3d";
-import { detectRenderCompatibility, handleWebGLContextLoss, listenToMediaQuery, observeElementResize } from "./browser-compat";
+import { createCompatibleWebGLContext, detectRenderCompatibility, handleWebGLContextLoss, listenToMediaQuery, observeElementResize } from "./browser-compat";
 
 type StripAssembly = {
   root: THREE.Group;
@@ -17,7 +17,8 @@ type StripAssembly = {
 export function createAbsorptionScene(canvas: HTMLCanvasElement, onFailure: () => void) {
   const compatibility = detectRenderCompatibility();
   if (compatibility.webglVersion === 0) throw new Error("WebGL is unavailable");
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: compatibility.antialias, precision: compatibility.precision, powerPreference: "low-power" });
+  const webglContext = createCompatibleWebGLContext(canvas, compatibility);
+  const renderer = new THREE.WebGLRenderer({ canvas, context: webglContext, alpha: true, antialias: compatibility.antialias, precision: compatibility.precision, powerPreference: "low-power" });
   renderer.setClearColor(0xffffff, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -55,8 +56,8 @@ export function createAbsorptionScene(canvas: HTMLCanvasElement, onFailure: () =
 
   const station = new THREE.Group();
   scene.add(station);
-  box(station, [7.2, .22, 2.8], surface("#d9e4eb", .05, .52), 0, .12, 0, .09);
-  box(station, [6.5, .16, 2.15], surface("#f4f8fb", .05, .65), 0, .3, 0, .08);
+  // A single shared stand keeps all five beakers on one level.
+  box(station, [7.2, .28, 2.8], surface("#eef4f7", .05, .6), 0, .2, 0, .09);
 
   const commonCupWall = surface("#8ed7f2", .02, .16, true, .28);
   const commonCupBase = surface("#9bdcf4", .02, .22, true, .52);
@@ -95,15 +96,15 @@ export function createAbsorptionScene(canvas: HTMLCanvasElement, onFailure: () =
     const modelRoot = new THREE.Group();
     modelRoot.position.set(0, 2.7, .02);
     stripRoot.add(modelRoot);
-    const stripBorder = surface("#172033", 0, .68);
-    box(stripRoot, [.045, 2.78, .055], stripBorder, -.45, 2.7, .16, .004);
-    box(stripRoot, [.045, 2.78, .055], stripBorder, .45, 2.7, .16, .004);
-    box(stripRoot, [.9, .045, .055], stripBorder, 0, 4.09, .16, .004);
-    box(stripRoot, [.9, .045, .055], stripBorder, 0, 1.31, .16, .004);
-    const wetMaterial = track(new THREE.MeshBasicMaterial({ color: "#24baf3", transparent: true, opacity: .62, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
+    const stripBorder = surface("#52616d", 0, .72);
+    box(stripRoot, [.018, 2.78, .035], stripBorder, -.45, 2.7, .16, .003);
+    box(stripRoot, [.018, 2.78, .035], stripBorder, .45, 2.7, .16, .003);
+    box(stripRoot, [.9, .018, .035], stripBorder, 0, 4.09, .16, .003);
+    box(stripRoot, [.9, .018, .035], stripBorder, 0, 1.31, .16, .003);
+    const wetMaterial = track(new THREE.MeshBasicMaterial({ color: "#7fc9e5", transparent: true, opacity: .32, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
     const wetLayer = box(stripRoot, [.74, 1, .065], wetMaterial, 0, 1.3, .2, .018);
     wetLayer.renderOrder = 4;
-    const wetLineMaterial = track(new THREE.MeshBasicMaterial({ color: "#0576b9", transparent: true, opacity: .95, depthWrite: false, depthTest: false }));
+    const wetLineMaterial = track(new THREE.MeshBasicMaterial({ color: "#559ec0", transparent: true, opacity: .5, depthWrite: false, depthTest: false }));
     const wetLine = box(stripRoot, [.8, .035, .075], wetLineMaterial, 0, 1.3, .22, .008);
     wetLine.renderOrder = 5;
     const drops = new THREE.Group();
@@ -135,29 +136,43 @@ export function createAbsorptionScene(canvas: HTMLCanvasElement, onFailure: () =
   let selected: MaterialDefinition[] = [];
   let phase: AbsorptionPhase = "idle";
   let phaseStart = 0;
+  let focusedMaterialId: string | null = null;
+  let previousFocusedMaterialId: string | null = null;
+  let focusChangedAt = 0;
   let frame = 0;
   let disposed = false;
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const phaseDuration = () => phase === "holding" ? ABSORPTION_DURATION_MS : ABSORPTION_TRANSITION_MS;
+  const wetStartY = 1.56;
 
   function applyPose(now: number) {
-    const progress = motion.matches ? 1 : Math.min(1, (now - phaseStart) / ABSORPTION_STEP_MS);
+    const progress = Math.min(1, (now - phaseStart) / phaseDuration());
+    const focusProgress = motion.matches ? 1 : Math.min(1, (now - focusChangedAt) / 450);
+    const easedFocus = 1 - Math.pow(1 - focusProgress, 3);
     const immersing = phase === "immersing";
     const holding = phase === "holding";
     const submerged = holding || phase === "done";
     const immersionProgress = immersing ? progress * progress : submerged ? 1 : 0;
-    const wetProgress = holding ? progress : phase === "done" ? 1 : 0;
+    // The wet front communicates the measured 30-second process, so it stays
+    // time-accurate even when decorative motion is reduced by the OS.
+    const wetProgress = holding ? absorptionProgress(now - phaseStart) : phase === "done" ? 1 : 0;
     assemblies.forEach((assembly, index) => {
       const material = selected[index];
       const rise = material ? Math.min(1.85, Math.max(0, material.waterRiseCm / 10 * 1.85)) : 0;
-      assembly.root.position.y = THREE.MathUtils.lerp(0, -.38, immersionProgress);
+      const previousLift = material?.id === previousFocusedMaterialId ? .55 : 0;
+      const targetLift = material?.id === focusedMaterialId ? .55 : 0;
+      const focusLift = THREE.MathUtils.lerp(previousLift, targetLift, easedFocus);
+      assembly.root.position.y = THREE.MathUtils.lerp(0, -.38, immersionProgress) + focusLift;
       assembly.drops.visible = immersing;
       assembly.drops.position.y = THREE.MathUtils.lerp(0, -.35, immersionProgress);
       assembly.wetLayer.visible = submerged && rise > 0;
       assembly.wetLine.visible = submerged && rise > 0;
       assembly.wetLayer.scale.y = Math.max(.02, rise * wetProgress);
-      assembly.wetLayer.position.y = 1.3 + (rise * wetProgress) / 2;
-      assembly.wetLine.position.y = 1.3 + rise * wetProgress;
-      assembly.wetMaterial.opacity = rise > 0 ? .7 : 0;
+      // Start at the visible water surface rather than below it, so every
+      // small increase is visible from the first second onward.
+      assembly.wetLayer.position.y = wetStartY + (rise * wetProgress) / 2;
+      assembly.wetLine.position.y = wetStartY + rise * wetProgress;
+      assembly.wetMaterial.opacity = rise > 0 ? .34 : 0;
     });
   }
 
@@ -180,7 +195,9 @@ export function createAbsorptionScene(canvas: HTMLCanvasElement, onFailure: () =
     camera.bottom = -halfHeight;
     camera.updateProjectionMatrix();
     try { renderer.render(scene, camera); } catch { onFailure(); return; }
-    if ((phase === "immersing" || phase === "holding") && now - phaseStart < ABSORPTION_STEP_MS) schedule();
+    const phaseAnimating = (phase === "immersing" || phase === "holding") && now - phaseStart < phaseDuration();
+    const focusAnimating = now - focusChangedAt < 450;
+    if (phaseAnimating || focusAnimating) schedule();
   }
   function schedule() { if (!disposed && !frame && !document.hidden) frame = requestAnimationFrame(render); }
   const stopResize = observeElementResize(canvas, schedule);
@@ -191,10 +208,15 @@ export function createAbsorptionScene(canvas: HTMLCanvasElement, onFailure: () =
   canvas.addEventListener("webglcontextlost", contextLost);
 
   return {
-    update(materials: MaterialDefinition[], nextPhase: AbsorptionPhase, startedAt: number) {
+    update(materials: MaterialDefinition[], nextPhase: AbsorptionPhase, nextFocusedMaterialId: string | null, startedAt: number) {
       selected = materials;
       phase = nextPhase;
       phaseStart = startedAt;
+      if (nextFocusedMaterialId !== focusedMaterialId) {
+        previousFocusedMaterialId = focusedMaterialId;
+        focusedMaterialId = nextFocusedMaterialId;
+        focusChangedAt = performance.now();
+      }
       materials.forEach((material, index) => {
         const assembly = assemblies[index];
         if (!assembly) return;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WaterAbsorptionResult } from "./data";
 import { LAB_MATERIALS } from "./labs";
-import { absorptionLevel, absorptionLevelLabel, absorptionStep, recordAbsorption, stripAbsorptionLevel } from "./absorption";
+import { ABSORPTION_DURATION_MS, ABSORPTION_TRANSITION_MS, absorptionLevel, absorptionLevelLabel, absorptionPhaseDuration, absorptionProgress, absorptionStep, recordAbsorption, stripAbsorptionLevel } from "./absorption";
 
 describe("equal-condition water absorption activity", () => {
   it("uses the same colored-water strip conditions for all five materials", () => {
@@ -41,5 +41,16 @@ describe("equal-condition water absorption activity", () => {
     expect(absorptionStep("immersing")).toBe(2);
     expect(absorptionStep("holding")).toBe(3);
     expect(absorptionStep("done")).toBe(4);
+    expect(absorptionPhaseDuration("prepare")).toBe(ABSORPTION_TRANSITION_MS);
+    expect(absorptionPhaseDuration("immersing")).toBe(ABSORPTION_TRANSITION_MS);
+    expect(absorptionPhaseDuration("holding")).toBe(ABSORPTION_DURATION_MS);
+  });
+
+  it("raises the wet front continuously throughout all 30 seconds", () => {
+    expect(absorptionProgress(0)).toBe(0);
+    expect(absorptionProgress(7_500)).toBe(.25);
+    expect(absorptionProgress(15_000)).toBe(.5);
+    expect(absorptionProgress(22_500)).toBe(.75);
+    expect(absorptionProgress(30_000)).toBe(1);
   });
 });

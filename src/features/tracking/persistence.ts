@@ -200,9 +200,50 @@ export async function updateTeamMembers(teamId: string, members: TeamMember[]): 
   };
 }
 
-export async function startOrResumeRun(team: TeamOverview): Promise<TrackedRun> {
+type PlayableMissionNumber = 1 | 2 | 3;
+type RunSeedCarry = Partial<Pick<GameSave, "mission1Completed" | "mission2Completed" | "mission3Completed" | "bigQuestionProgress">>;
+
+function missionEntryStage(missionNumber: PlayableMissionNumber): Stage {
+  if (missionNumber === 2) return "mission2Intro";
+  if (missionNumber === 3) return "mission3Intro";
+  return "mission";
+}
+
+export function buildRunSeed(
+  attendingTeam: TeamOverview,
+  missionNumber: PlayableMissionNumber = 1,
+  rosterMembers: TeamMember[] = attendingTeam.members,
+  carry: RunSeedCarry = {},
+): GameSave {
+  return {
+    ...EMPTY_SAVE,
+    ...carry,
+    team: attendingTeam.members,
+    stage: missionEntryStage(missionNumber),
+    runId: createBrowserId(),
+    missionNumber,
+    attendance: {
+      missionNumber,
+      recordedAt: new Date().toISOString(),
+      members: rosterMembers.map((member) => ({
+        id: member.id,
+        name: member.name,
+        avatar: member.avatar,
+        position: member.position,
+        present: member.present !== false,
+      })),
+    },
+  };
+}
+
+export async function startOrResumeRun(
+  team: TeamOverview,
+  missionNumber: PlayableMissionNumber = 1,
+  rosterMembers: TeamMember[] = team.members,
+  carry: RunSeedCarry = {},
+): Promise<TrackedRun> {
   const client = requireClient();
-  const seed: GameSave = { ...EMPTY_SAVE, team: team.members, stage: "mission", runId: createBrowserId() };
+  const seed = buildRunSeed(team, missionNumber, rosterMembers, carry);
   const { data, error } = await client.rpc("start_or_resume_run", {
     p_team_id: team.id,
     p_seed_state: seed,

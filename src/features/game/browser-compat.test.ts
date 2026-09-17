@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createOrbitDragTracker, handleWebGLContextLoss, installModelViewerInputFallback, listenToMediaQuery, observeElementResize, readRendererStatuses, selectRenderCompatibility } from "./browser-compat";
+import { createCompatibleWebGLContext, createOrbitDragTracker, handleWebGLContextLoss, installModelViewerInputFallback, listenToMediaQuery, observeElementResize, readRendererStatuses, selectRenderCompatibility } from "./browser-compat";
 
 describe("browser compatibility profiles", () => {
   it("keeps the modern WebGL 2 quality cap", () => {
@@ -12,6 +12,15 @@ describe("browser compatibility profiles", () => {
 
   it("selects the existing 2D fallback when WebGL is unavailable", () => {
     expect(selectRenderCompatibility(0)).toMatchObject({ renderer: "none", webglVersion: 0, modelViewerShadowScale: 0 });
+  });
+
+  it("requests WebGL 1 directly with low-memory attributes for an old iPad", () => {
+    const webgl1 = { getParameter: vi.fn() } as unknown as WebGLRenderingContext;
+    const getContext = vi.fn((name: string, _attributes?: WebGLContextAttributes) => name === "webgl" ? webgl1 : null);
+    const context = createCompatibleWebGLContext({ getContext } as unknown as HTMLCanvasElement, selectRenderCompatibility(1, 2, 4096));
+    expect(context).toBe(webgl1);
+    expect(getContext.mock.calls.map(([name]) => name)).toEqual(["webgl"]);
+    expect(getContext.mock.calls[0][1]).toMatchObject({ antialias: false, stencil: false, preserveDrawingBuffer: false, powerPreference: "low-power" });
   });
 });
 

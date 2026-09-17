@@ -16,7 +16,7 @@ create unique index team_members_active_avatar_unique_idx
 create or replace function public.skip_inactive_member_response()
 returns trigger
 language plpgsql
-security definer
+security invoker
 set search_path = ''
 as $$
 begin
@@ -29,6 +29,8 @@ begin
   return new;
 end;
 $$;
+
+revoke execute on function public.skip_inactive_member_response() from public, anon, authenticated;
 
 drop trigger if exists student_responses_active_member_only on public.student_responses;
 create trigger student_responses_active_member_only

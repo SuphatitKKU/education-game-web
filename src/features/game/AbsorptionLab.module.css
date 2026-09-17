@@ -74,19 +74,16 @@
 .stripStageLegend span { color: #617089; font-size: clamp(11px, .78cqw, 14px); }
 .reviewFeedback { background: #fff6df !important; border-color: #f0c76b !important; color: #7e5c1e !important; }
 .materialLegend { grid-template-rows: repeat(5, minmax(0, 1fr)); }
-.materialLegendCard { display: grid; grid-template-columns: 38% minmax(0, 1fr); grid-template-rows: 1fr; align-items: center; gap: .2cqw .45cqw; min-height: 0; padding: .25cqw .55cqw .25cqw .35cqw; border: .1cqw solid #e0e3ef; border-radius: .9cqw; background: #fff; color: #1b2867; }
-.materialLegendCard img { grid-row: 1 / -1; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
-.materialLegendCard span { align-self: center; font-size: clamp(15px, 1.26cqw, 20px); line-height: 1.4; padding-right: .35cqw; }
 .comparisonStage { position: relative; width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; align-items: stretch; justify-content: center; padding: .35cqw .35cqw .1cqw; }
 .comparisonCups { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: end; gap: .25cqw; min-height: 0; flex: 1; }
-.comparisonItem { min-width: 0; min-height: 0; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: end; gap: .25cqw; }
+.comparisonItem { min-width: 0; min-height: 0; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: .25cqw; }
 .comparisonCup { position: relative; width: 88%; min-width: 24px; height: 78%; min-height: 105px; overflow: hidden; border: .14cqw solid #6aa6c4; border-top: .1cqw solid #bdeeff; border-radius: .75cqw .75cqw .55cqw .55cqw; background: linear-gradient(90deg, #c6f1ff44, #ffffff50 28%, #70c6ee45 82%, #c6f1ff44); box-shadow: inset .15cqw 0 .24cqw #ffffff9c, 0 .25cqw .4cqw #36546c35; }
 .comparisonWater { position: absolute; z-index: 1; left: 4%; right: 4%; bottom: 3%; height: 40%; border-radius: 0 0 .45cqw .45cqw; background: linear-gradient(180deg, #5fc8f6, #198edc); box-shadow: inset 0 .16cqw .25cqw #d6f4ff8c; }
 .comparisonWater::after { content: ""; position: absolute; left: 4%; right: 4%; top: -.2cqw; height: .45cqw; border-radius: 50%; background: #61cafa; }
-.comparisonStrip { position: absolute; z-index: 3; left: 50%; bottom: 28%; width: 31%; height: 78%; transform: translateX(-50%); overflow: hidden; border: .1cqw solid #172033; border-radius: .12cqw; background: #fff; box-shadow: .1cqw .14cqw .2cqw #26384942; }
+.comparisonStrip { position: absolute; z-index: 3; left: 50%; bottom: 28%; width: 31%; height: 78%; transform: translate(-50%, var(--strip-lift)); overflow: hidden; border: .045cqw solid #52616d; border-radius: .12cqw; background: #fff; box-shadow: .08cqw .1cqw .16cqw #2638492b; transition: transform .45s cubic-bezier(.2,.8,.2,1); }
 .comparisonStrip img { width: 100%; height: 100%; object-fit: fill; opacity: .96; mix-blend-mode: normal; }
-.comparisonStrip i { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; height: var(--wet-rise); border-top: .12cqw solid #0576b9; background: linear-gradient(180deg, #36c6ffb8, #0786d6e8); box-shadow: inset 0 0 .2cqw #ffffff66; opacity: 0; }
-.comparisonStrip i.stripWet { opacity: 1; animation: stripWetReveal .6s ease-out; }
+.comparisonStrip i { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; height: var(--wet-rise); border-top: .06cqw solid #70afca; background: linear-gradient(180deg, #92d8ed70, #5bb8dc8c); box-shadow: inset 0 0 .2cqw #ffffff66; opacity: 0; transition: height .055s linear; }
+.comparisonStrip i.stripWet { opacity: 1; }
 .comparisonItem figcaption { width: 100%; min-height: 2.25em; color: #315083; font-size: clamp(9px, .66cqw, 12px); line-height: 1.1; text-align: center; }
 .observationMatrix { display: grid; grid-template-rows: repeat(5, minmax(122px, auto)); gap: .55cqw; min-height: 0; flex: 1; padding: .55cqw .65cqw .7cqw; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .observationMatrix article { min-width: 0; min-height: 122px; display: grid; grid-template-columns: minmax(0, 1fr); gap: .45cqw; padding: .55cqw .5cqw; border: .1cqw solid #e2d7df; border-radius: .65cqw; background: #fffafd; }
@@ -98,7 +95,6 @@
 .observationMatrix button b { font-weight: 700; }
 @media (max-width: 900px) {
   .comparisonItem figcaption { font-size: 9px; }
-  .materialLegendCard span { font-size: 15px; }
   .observationMatrix h3 { font-size: 15px; }
   .observationMatrix button { font-size: 14px; }
 }

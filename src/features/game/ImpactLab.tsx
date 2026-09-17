@@ -48,8 +48,8 @@ function DropRig({ material, phase }: { material: MaterialDefinition; phase: Imp
   </div>;
 }
 
-export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
-  save: GameSave; onSave: (results: Record<string, ImpactResult>, index: number) => void; onDone: () => void; preview?: boolean;
+export function ImpactLab({ save, onSave, onAnswer, onDone }: {
+  save: GameSave; onSave: (results: Record<string, ImpactResult>, index: number) => void; onDone: () => void;
   onAnswer?: (materialId: string, answer: string) => void;
 }) {
   const index = Math.max(0, Math.min(save.impactIndex ?? 0, LAB_MATERIALS.length - 1));
@@ -102,12 +102,12 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
   return <div className={`screen ${base.screen} ${styles.screen}`} data-focus={focusStep}>
     <header className={base.header}>
       <button className={base.home} onClick={() => guard(onDone)} disabled={running} aria-label="กลับไปหน้าเลือกห้องทดลอง"><LabIcon name="home" />กลับไปหน้าเลือกห้องทดลอง</button>
-      <div className={base.heading}><h1>ห้องที่ 2 : ความสามารถในการลดความเสียหายจากแรงกระแทก</h1><p>กระแทกแล้ว ของเสียหายไหม?</p></div>
+      <div className={base.heading}><h1>ห้องทดลองที่ 2 : ความสามารถในการลดความเสียหายจากแรงกระแทก</h1><p>กระแทกแล้ว ของเสียหายไหม?</p></div>
     </header>
 
     <aside id="impact-conditions" data-collapsed={!showConditions} className={`${base.panel} ${base.conditions} ${styles.conditionPanel}`}>
       <Title icon="scale">เงื่อนไขการทดลอง</Title>
-      <p className={`${base.conditionSummary} ${styles.conditionSummary}`}><LabIcon name="scale" /><b>เงื่อนไขเท่ากันทุกวัสดุ</b><span>ไข่จำลอง · ระดับปล่อย · การตรวจ<br />เหมือนกันทุกครั้ง</span></p>
+      <p className={`${base.conditionSummary} ${styles.conditionSummary}`}><LabIcon name="scale" /><b>เงื่อนไขเท่ากันทุกวัสดุ</b><span>ไข่จำลอง ระดับปล่อย การตรวจเหมือนกันทุกครั้ง</span></p>
       <div className={`${base.conditionList} ${styles.conditions}`}>
         <div><ImpactEgg /><p>ไข่จำลอง<small>มวล {IMPACT_CONDITIONS.eggMassG} กรัม<br />สูง {IMPACT_CONDITIONS.eggHeightCm} ซม.</small></p></div>
         <div><LabIcon name="height" /><p>ระดับปล่อย<small>สูง {IMPACT_CONDITIONS.dropHeightCm} ซม.<br />ตำแหน่งเดิมทุกครั้ง</small></p></div>
@@ -158,7 +158,7 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
 
     <section className={`${base.panel} ${base.recordPanel}`}>
       <div className={base.recordButtons}>
-        <button data-saved={accepted} disabled={!accepted && (!done || !observation)} onClick={accepted ? advance : record}><LabIcon name={accepted ? "play" : "save"} />{accepted ? (nextMaterialIndex >= 0 ? "ทดลองวัสดุถัดไป" : "กลับไปเลือกห้องทดลอง") : done && !observation ? "เลือกผลก่อน" : "บันทึกผลการทดลอง"}</button>
+        <button data-saved={accepted} disabled={!accepted && (!done || !observation)} onClick={accepted ? advance : record}><LabIcon name={accepted ? "play" : "save"} />{accepted ? (nextMaterialIndex >= 0 ? "ทดลองวัสดุถัดไป" : "ตอบคำถามสรุป") : done && !observation ? "เลือกผลก่อน" : "บันทึกผลการทดลอง"}</button>
         <button onClick={() => setShowRecords(true)}><LabIcon name="book" />ดูตารางผลการทดลอง</button>
       </div>
     </section>
@@ -167,8 +167,8 @@ export function ImpactLab({ save, onSave, onAnswer, onDone, preview = false }: {
       <header><h2 id="impact-records-title">บันทึกผลแรงกระแทก</h2><button autoFocus onClick={() => setShowRecords(false)} aria-label="ปิดบันทึก">×</button></header>
       <p>สภาพสิ่งของจำลองหลังตกกระแทก · บันทึกแล้ว {count}/5 วัสดุ</p>
       <table><thead><tr><th>วัสดุรองรับ</th><th>ผลที่เราสังเกต</th></tr></thead><tbody>{LAB_MATERIALS.map((item) => <tr key={item.id} className={!records[item.id] ? base.missingRecord : undefined}><td><img src={asset(`materials/${item.image}`)} alt="" />{item.name}</td><td>{impactObservationLabel(records[item.id])}</td></tr>)}</tbody></table>
-      <p className={base.recordNote}>เป็นคำตอบจากการสังเกตสถานการณ์จำลอง ไม่ใช่ค่าทดสอบหรือการจัดอันดับวัสดุจริง{preview ? " · เก็บเฉพาะรอบทดลองอิสระนี้" : ""}</p>
-      <button className={base.dialogDone} onClick={() => { setShowRecords(false); guard(onDone); }}>กลับไปเลือกห้องทดลอง</button>
+      <p className={base.recordNote}>เป็นคำตอบจากการสังเกตสถานการณ์จำลอง ไม่ใช่ค่าทดสอบหรือการจัดอันดับวัสดุจริง</p>
+      <button className={base.dialogDone} onClick={() => { setShowRecords(false); guard(onDone); }}>{count === LAB_MATERIALS.length ? "ตอบคำถามสรุป" : "กลับไปทดลองต่อ"}</button>
     </dialog>
     <dialog ref={confirmDialog} className={`${base.dialog} ${base.confirm}`} onCancel={() => setPending(null)} aria-labelledby="impact-confirm-title">
       <h2 id="impact-confirm-title">ยังไม่ได้บันทึกผลครั้งนี้</h2><p>จะกลับไปบันทึกก่อน หรือออกจากการทดลองครั้งนี้?</p><div><button autoFocus onClick={() => setPending(null)}>กลับไปบันทึก</button><button onClick={() => { pending?.(); setPending(null); }}>ไปต่อโดยไม่บันทึก</button></div>

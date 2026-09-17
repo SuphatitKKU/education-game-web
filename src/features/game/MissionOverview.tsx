@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import styles from "./MissionOverview.module.css";
 import { AppIcon, type AppIconName } from "@/components/AppIcon";
+import type { MissionNumber } from "./mission-runs";
 
-export type MissionNumber = 1 | 2 | 3;
+export type { MissionNumber } from "./mission-runs";
 
 type Mission = {
   id: 1 | 2 | 3 | 4 | 5;
@@ -25,16 +26,19 @@ const MISSIONS: Mission[] = [
   { id: 5, title: "พิสูจน์กล่องพัสดุรุ่นปรับปรุง", short: "ทดสอบจริงอีกครั้ง เปรียบเทียบ และสรุปผล", color: "#55a92e", icon: "trophy", outsideSim: true, outsideDescription: "นำกล่องรุ่นปรับปรุงไปทดสอบจริงอีกครั้งด้วยเงื่อนไขเดิม เปรียบเทียบหลักฐานก่อนและหลังการปรับปรุง แล้วสรุปว่ากล่องแข็งแรง ป้องกันสิ่งของ และนำวัสดุที่ใช้แล้วกลับมาใช้ใหม่ได้อย่างเหมาะสมขึ้นอย่างไร" },
 ];
 
-export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission1Answer, unlockingMission, onUnlockAnimationDone, onBack, onSelect }: {
+export function MissionOverview({ mission2Unlocked, mission3Unlocked, completedMissions, mission1Answer, unlockingMission, onUnlockAnimationDone, onBack, onSelect, onReplay }: {
   mission2Unlocked: boolean;
   mission3Unlocked: boolean;
+  completedMissions: MissionNumber[];
   mission1Answer?: string;
   unlockingMission: MissionNumber | null;
   onUnlockAnimationDone: () => void;
   onBack: () => void;
   onSelect: (mission: MissionNumber) => void;
+  onReplay: (mission: MissionNumber) => void;
 }) {
   const [lockedMission, setLockedMission] = useState<Mission | null>(null);
+  const [completedMission, setCompletedMission] = useState<Mission | null>(null);
 
   useEffect(() => {
     if (!unlockingMission) return;
@@ -45,7 +49,7 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission1An
   return (
     <div className={`screen ${styles.screen}`}>
       <div className={styles.clouds} aria-hidden="true"><i /><i /><i /></div>
-      <button className={styles.back} type="button" onClick={onBack}>‹ กลับไปดูเป้าหมาย</button>
+      <button className={styles.back} type="button" onClick={onBack}>‹ กลับไปเลือกทีม</button>
 
       <header className={styles.header}>
         <AppIcon className={styles.headerSparkles} name="sparkles" />
@@ -69,6 +73,7 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission1An
           {MISSIONS.map((mission) => {
             const unlocked = mission.outsideSim || mission.id === 1 || (mission.id === 2 && mission2Unlocked) || (mission.id === 3 && mission3Unlocked);
             const simulationUnlocked = mission.id <= 3 && unlocked;
+            const completed = mission.id <= 3 && completedMissions.includes(mission.id as MissionNumber);
             const isUnlocking = mission.id === unlockingMission;
             return <article
               key={mission.id}
@@ -78,7 +83,7 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission1An
               <button
                 type="button"
                 aria-label={`${simulationUnlocked ? "เข้าสู่" : mission.outsideSim ? (unlocked ? "ดูรายละเอียดภารกิจนอก Simulation" : "ดูคำแนะนำกิจกรรมนอก Simulation") : "ภารกิจถูกล็อก"} ภารกิจที่ ${mission.id} ${mission.title}`}
-                onClick={() => simulationUnlocked ? onSelect(mission.id as MissionNumber) : setLockedMission(mission)}
+                onClick={() => simulationUnlocked ? (completed ? setCompletedMission(mission) : onSelect(mission.id as MissionNumber)) : setLockedMission(mission)}
               >
                 <span className={styles.number}>{mission.id}</span>
                 <span className={styles.picture} aria-hidden="true">
@@ -91,7 +96,7 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission1An
                 <b>ภารกิจที่ {mission.id}</b>
                 <strong>{mission.title}</strong>
                 <small>{mission.short}</small>
-                <span>{isUnlocking ? "ปลดล็อกแล้ว!" : simulationUnlocked ? "กดเพื่อเริ่มภารกิจ ›" : mission.outsideSim ? "กิจกรรมนอก Simulation · กดดูรายละเอียด" : "ยังไม่ปลดล็อก"}</span>
+                <span>{isUnlocking ? "ปลดล็อกแล้ว!" : completed ? "ทำสำเร็จแล้ว · กดดู ›" : simulationUnlocked ? "กดเพื่อเริ่มภารกิจ ›" : mission.outsideSim ? "กิจกรรมนอก Simulation · กดดูรายละเอียด" : "ยังไม่ปลดล็อก"}</span>
               </div>
             </article>;
           })}
@@ -119,6 +124,20 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, mission1An
               ? <p><b>ภารกิจที่ {lockedMission.id} เป็นการทดสอบกล่องจริงร่วมกับครูและทีม</b><br />{lockedMission.outsideDescription}<br /><small>ทำภารกิจที่ 1–3 ให้เสร็จเพื่อเตรียมความรู้ แบบกล่อง และแผนการทดสอบให้พร้อม</small></p>
               : <p>ต้องผ่าน <b>ภารกิจที่ {lockedMission.id - 1}</b> ก่อน<br />แล้วภารกิจที่ {lockedMission.id} จะปลดล็อกทันที!</p>}
             <button className="button button-orange" type="button" onClick={() => setLockedMission(null)}>เข้าใจแล้ว</button>
+          </section>
+        </div>
+      )}
+
+      {completedMission && (
+        <div className={styles.modalBackdrop} role="presentation" onClick={() => setCompletedMission(null)}>
+          <section className={`${styles.modal} ${styles.completedModal}`} role="dialog" aria-modal="true" aria-labelledby="completed-title" onClick={(event) => event.stopPropagation()}>
+            <div className={styles.completedModalIcon} aria-hidden="true"><AppIcon name="trophy" /></div>
+            <h2 id="completed-title">เก่งมาก! ทีมทำภารกิจที่ {completedMission.id} เสร็จแล้ว</h2>
+            <p>ผลงานและคำตอบรอบเดิมถูกบันทึกไว้เรียบร้อย<br /><b>ต้องการเริ่มภารกิจนี้อีกครั้งหรือไม่?</b><br /><small>หากยืนยัน ระบบจะสร้างรอบใหม่พร้อมวันที่ใหม่ และไม่ลบข้อมูลเดิม</small></p>
+            <div className={styles.modalActions}>
+              <button className="button button-white" type="button" onClick={() => setCompletedMission(null)}>ย้อนกลับ</button>
+              <button className="button button-orange" type="button" onClick={() => { const mission = completedMission.id as MissionNumber; setCompletedMission(null); onReplay(mission); }}>ยืนยัน เริ่มรอบใหม่</button>
+            </div>
           </section>
         </div>
       )}

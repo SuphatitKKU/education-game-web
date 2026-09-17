@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_SAVE } from "@/features/game/data";
-import { compactOutbox, RevisionConflictError, withLegacyExitTicketKeys, type OutboxItem } from "./persistence";
+import type { TeamOverview } from "./types";
+import { buildRunSeed, compactOutbox, RevisionConflictError, withLegacyExitTicketKeys, type OutboxItem } from "./persistence";
 
 function queued(runId: string, revision: number): OutboxItem {
   return {
@@ -58,5 +59,31 @@ describe("offline checkpoint queue", () => {
     expect(save.exitTickets["member-member-present"]).toEqual(answer);
     expect(save.exitTickets["student-3"]).toEqual(answer);
     expect(save.team).toHaveLength(1);
+  });
+
+  it("starts the selected mission with a complete attendance snapshot", () => {
+    const roster = [
+      { id: "member-1", name: "มาเรียน", avatar: "inventor_sun", position: 0, present: true },
+      { id: "member-2", name: "ไม่มา", avatar: "inventor_mint", position: 1, present: false },
+    ];
+    const team: TeamOverview = {
+      id: "team-1",
+      name: "ทีมทดสอบ",
+      createdAt: "2026-09-15T00:00:00.000Z",
+      updatedAt: "2026-09-15T00:00:00.000Z",
+      members: roster,
+      runs: [],
+      activeRun: null,
+      completedRuns: [],
+    };
+    const seed = buildRunSeed({ ...team, members: [roster[0]] }, 2, roster, { mission1Completed: true });
+    expect(seed.stage).toBe("mission2Intro");
+    expect(seed.missionNumber).toBe(2);
+    expect(seed.team.map((member) => member.id)).toEqual(["member-1"]);
+    expect(seed.attendance?.members.map((member) => [member.id, member.present])).toEqual([
+      ["member-1", true],
+      ["member-2", false],
+    ]);
+    expect(seed.mission1Completed).toBe(true);
   });
 });

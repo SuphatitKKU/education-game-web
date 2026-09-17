@@ -10,6 +10,7 @@ import {
   Expand,
   FlaskConical,
   Hammer,
+  House,
   Lightbulb,
   LockKeyhole,
   Map,
@@ -45,7 +46,7 @@ import {
 
 export type AppIconName =
   | "box" | "brick" | "bubbles" | "check" | "continue" | "movie" | "drop"
-  | "egg" | "expand" | "flask" | "hammer" | "idea" | "lock" | "map" | "message"
+  | "egg" | "expand" | "flask" | "hammer" | "home" | "idea" | "lock" | "map" | "message"
   | "microscope" | "notebook" | "package" | "palette" | "party" | "pencil" | "play"
   | "recycle" | "refresh" | "ruler" | "search" | "settings" | "shield" | "sparkles"
   | "star" | "target" | "trash" | "warning" | "trophy" | "truck" | "unlock" | "users"
@@ -63,6 +64,7 @@ const ICONS: Record<AppIconName, LucideIcon> = {
   expand: Expand,
   flask: FlaskConical,
   hammer: Hammer,
+  home: House,
   idea: Lightbulb,
   lock: LockKeyhole,
   map: Map,

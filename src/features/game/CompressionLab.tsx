@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { CompressionResult, GameSave, MaterialDefinition } from "./data";
 import { LAB_MATERIALS } from "./labs";
-import { APPROACH_DURATION_MS, COMPRESSION_CONDITIONS, COMPRESSION_OBSERVATIONS, LIFT_DURATION_MS, PRESS_DURATION_MS, compressionMaterialResult, compressionModelObservationLabel, compressionObservationLabel, compressionVisualScale, formatCompressionMm, recordCompression, type CompressionObservation, type CompressionPhase } from "./compression";
+import { APPROACH_DURATION_MS, COMPRESSION_CONDITIONS, COMPRESSION_OBSERVATIONS, LIFT_DURATION_MS, PRESS_DURATION_MS, compressionMaterialResult, compressionObservationLabel, compressionVisualScale, formatCompressionMm, recordCompression, type CompressionObservation, type CompressionPhase } from "./compression";
 import { CompressionPress3D } from "./CompressionPress3D";
 import styles from "./CompressionLab.module.css";
 
@@ -34,11 +34,8 @@ function PanelTitle({ icon, children }: { icon: IconName; children: ReactNode })
 }
 
 function formatElapsed(ms: number) {
-  const totalTenths = Math.max(0, Math.floor(ms / 100));
-  const minutes = Math.floor(totalTenths / 600);
-  const seconds = Math.floor(totalTenths / 10) % 60;
-  const tenths = totalTenths % 10;
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${tenths}`;
+  // The classroom only needs seconds and tenths, so keep the display compact.
+  return (Math.max(0, ms) / 1000).toFixed(1);
 }
 
 /** The result choices use the same code-native material cues as the 3D specimen. */
@@ -116,8 +113,8 @@ function PressMachine({ material, phase = "idle", baseline = false }: { material
   </svg>;
 }
 
-export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false }: {
-  save: GameSave; onSave: (results: Record<string, CompressionResult>, index: number) => void; onDone: () => void; preview?: boolean;
+export function CompressionLab({ save, onSave, onAnswer, onDone }: {
+  save: GameSave; onSave: (results: Record<string, CompressionResult>, index: number) => void; onDone: () => void;
   onAnswer?: (materialId: string, answer: string) => void;
 }) {
   const materialIndex = Math.max(0, Math.min(save.compressionIndex, LAB_MATERIALS.length - 1));
@@ -155,17 +152,22 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
       window.clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
-    if (phase === "idle") {
+    if (phase === "idle" || phase === "lifting" || phase === "approach") {
       timerStartedAtRef.current = null;
       setElapsedMs(0);
       return;
     }
-    if (timerStartedAtRef.current === null) timerStartedAtRef.current = performance.now();
+    if (phase === "done") {
+      timerStartedAtRef.current = null;
+      setElapsedMs(PRESS_DURATION_MS);
+      return;
+    }
+    timerStartedAtRef.current = performance.now();
     const tick = () => {
       if (timerStartedAtRef.current !== null) setElapsedMs(performance.now() - timerStartedAtRef.current);
     };
     tick();
-    if (phase === "lifting" || phase === "approach" || phase === "pressing") timerIntervalRef.current = window.setInterval(tick, 100);
+    if (phase === "pressing") timerIntervalRef.current = window.setInterval(tick, 100);
     return () => {
       if (timerIntervalRef.current !== null) {
         window.clearInterval(timerIntervalRef.current);
@@ -190,7 +192,6 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
     setObservation(null);
     setJustSaved(false);
     setDisplayMode("after");
-    timerStartedAtRef.current = performance.now();
     setElapsedMs(0);
     setPhase("approach");
   });
@@ -207,7 +208,7 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
   return <div className={`screen ${styles.screen}`} data-focus={focusStep}>
     <header className={styles.header}>
       <button className={styles.home} onClick={() => guard(onDone)} disabled={running} aria-label="กลับไปหน้าเลือกห้องทดลอง"><Icon name="home" />กลับไปหน้าเลือกห้องทดลอง</button>
-      <div className={styles.heading}><h1>ห้องที่ 1 : ความต้านทานแรงกดทับ</h1><p>กดแล้ว ยุบแค่ไหน?</p></div>
+      <div className={styles.heading}><h1>ห้องทดลองที่ 1 : ความต้านทานแรงกดทับ</h1><p>กดแล้ว ยุบแค่ไหน?</p></div>
     </header>
 
     <aside id="compression-conditions" data-collapsed={!showConditions} className={`${styles.panel} ${styles.conditions}`}>
@@ -216,7 +217,7 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
       <div className={styles.conditionList}>
         <div><Icon name="size" /><p>ชิ้นวัสดุ<small>{COMPRESSION_CONDITIONS.specimenWidthCm} × {COMPRESSION_CONDITIONS.specimenLengthCm} ซม.<br />หนาเริ่มต้น {COMPRESSION_CONDITIONS.initialThicknessMm} มม.</small></p></div>
         <div><Icon name="arrow" /><p className={styles.forceCondition}>แรงกด<small>{COMPRESSION_CONDITIONS.forceN} นิวตัน<br />ความดัน {COMPRESSION_CONDITIONS.pressureKPa} kPa</small></p></div>
-        <div><Icon name="clock" /><p>เวลากดเท่ากัน<small>ระบบควบคุมอัตโนมัติ</small></p></div>
+        <div><Icon name="clock" /><p>เวลากดเท่ากัน<small>กดค้าง {Math.round(COMPRESSION_CONDITIONS.durationMs / 1000)} วินาที</small></p></div>
         <section><Icon name="flask" /><p>สังเกตความหนา<small>ขณะวัสดุรับแรง</small></p></section>
       </div>
     </aside>
@@ -229,8 +230,9 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
       </div>
       </CompressionPress3D>
       <div className={styles.experimentMeasurements} role="status" aria-live="polite">
-        <p>หนาเริ่มต้น {COMPRESSION_CONDITIONS.initialThicknessMm} มม.</p>
-        <p className={styles.stopwatch} role="timer" aria-label={`เวลาทดลอง ${formatElapsed(elapsedMs)} วินาที`}><Icon name="clock" />เวลา {formatElapsed(elapsedMs)} วินาที</p>
+        <div className={styles.digitalStopwatch} role="timer" aria-label={`เวลาทดลอง ${formatElapsed(elapsedMs)} วินาที`}>
+          <strong>{formatElapsed(elapsedMs)}</strong><small>วินาที</small>
+        </div>
       </div>
       <div className={styles.progressTrack} aria-hidden="true">{phase !== "idle" && <i className={phase === "pressing" ? styles.progressRunning : phase === "done" ? styles.progressDone : ""} />}</div>
     </section>
@@ -262,7 +264,7 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
 
     <section className={`${styles.panel} ${styles.recordPanel}`}>
       <div className={styles.recordButtons}>
-        <button data-saved={justSaved} onClick={justSaved ? advance : record} disabled={!justSaved && (phase !== "done" || !observation)}><Icon name={justSaved ? "play" : "save"} />{justSaved ? (nextMaterialIndex >= 0 ? "ทดลองวัสดุถัดไป" : "กลับไปเลือกห้องทดลอง") : phase === "done" && !observation ? "เลือกผลก่อน" : "บันทึกผลการทดลอง"}</button>
+        <button data-saved={justSaved} onClick={justSaved ? advance : record} disabled={!justSaved && (phase !== "done" || !observation)}><Icon name={justSaved ? "play" : "save"} />{justSaved ? (nextMaterialIndex >= 0 ? "ทดลองวัสดุถัดไป" : "ตอบคำถามสรุป") : phase === "done" && !observation ? "เลือกผลก่อน" : "บันทึกผลการทดลอง"}</button>
         <button onClick={() => setShowRecords(true)}><Icon name="book" />ดูตารางผลการทดลอง</button>
       </div>
     </section>
@@ -270,13 +272,13 @@ export function CompressionLab({ save, onSave, onAnswer, onDone, preview = false
     <dialog ref={recordsRef} className={styles.dialog} onCancel={() => setShowRecords(false)} onClose={() => setShowRecords(false)} aria-labelledby="press-record-title">
       <header><h2 id="press-record-title">บันทึกผลการทดลอง</h2><button autoFocus onClick={() => setShowRecords(false)} aria-label="ปิดบันทึก">×</button></header>
       <p>ความต้านทานแรงกดทับ · บันทึกแล้ว {count}/{LAB_MATERIALS.length} วัสดุ</p>
-      <table><thead><tr><th>วัสดุ</th><th>ยุบ</th><th>ความหนาขณะกด</th><th>ผลจากข้อมูล</th><th>ผลที่เราสังเกต</th></tr></thead><tbody>{LAB_MATERIALS.map((item) => {
+      <table><thead><tr><th>วัสดุ</th><th>ยุบ</th><th>ความหนาขณะกด</th><th>ผลที่เราสังเกต</th></tr></thead><tbody>{LAB_MATERIALS.map((item) => {
         const savedResult = save.compressionResults[item.id];
         const result = compressionMaterialResult(item);
-        return <tr key={item.id} className={!savedResult ? styles.missingRecord : undefined}><td><img src={asset(`materials/${item.image}`)} alt="" />{item.name}</td>{savedResult ? <><td>{formatCompressionMm(result.deformationMm)} มม.</td><td>{formatCompressionMm(result.loadedThicknessMm)} มม.</td><td>{compressionModelObservationLabel(item)}</td><td>{compressionObservationLabel(savedResult)}</td></> : <><td>ยังไม่มีข้อมูล</td><td>—</td><td>—</td><td>ยังไม่บันทึก</td></>}</tr>;
+        return <tr key={item.id} className={!savedResult ? styles.missingRecord : undefined}><td><img src={asset(`materials/${item.image}`)} alt="" />{item.name}</td>{savedResult ? <><td>{formatCompressionMm(result.deformationMm)} มม.</td><td>{formatCompressionMm(result.loadedThicknessMm)} มม.</td><td>{compressionObservationLabel(savedResult)}</td></> : <><td>ยังไม่มีข้อมูล</td><td>—</td><td>ยังไม่บันทึก</td></>}</tr>;
       })}</tbody></table>
-      <p className={styles.recordNote}>ค่าที่แสดงเป็นชุดข้อมูลอ้างอิงที่กำหนดให้ Simulation ภายใต้เงื่อนไขเดียวกัน เด็กยังบันทึกผลจากสิ่งที่ตนสังเกต{preview ? " · บันทึกเฉพาะรอบทดลองอิสระนี้" : ""}</p>
-      <button className={styles.dialogDone} onClick={() => { setShowRecords(false); guard(onDone); }}>กลับไปเลือกห้องทดลอง</button>
+      <p className={styles.recordNote}>ค่าที่แสดงเป็นชุดข้อมูลอ้างอิงที่กำหนดให้ Simulation ภายใต้เงื่อนไขเดียวกัน เด็กยังบันทึกผลจากสิ่งที่ตนสังเกต</p>
+      <button className={styles.dialogDone} onClick={() => { setShowRecords(false); guard(onDone); }}>{count === LAB_MATERIALS.length ? "ตอบคำถามสรุป" : "กลับไปทดลองต่อ"}</button>
     </dialog>
     <dialog ref={confirmRef} className={`${styles.dialog} ${styles.confirm}`} onCancel={() => setPendingAction(null)} aria-labelledby="press-confirm-title">
       <h2 id="press-confirm-title">ยังไม่ได้บันทึกผลครั้งนี้</h2><p>จะกลับไปบันทึกก่อน หรือออกจากการทดลองครั้งนี้?</p>
