@@ -1,4 +1,4 @@
-const CACHE_NAME = "parcel-lab-shell-v22-next15-safari12";
+const CACHE_NAME = "parcel-lab-shell-v23-safe-asset-fallback";
 const APP_SHELL = ["./", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -24,8 +24,8 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || url.pathname.endsWith("/sw.js")) return;
 
-  const isAppCode = request.mode === "navigate"
-    || request.destination === "script"
+  const isNavigation = request.mode === "navigate";
+  const isAppAsset = request.destination === "script"
     || request.destination === "style"
     || request.destination === "worker"
     || url.pathname.indexOf("/_next/") >= 0;
@@ -38,8 +38,14 @@ self.addEventListener("fetch", (event) => {
   });
 
   event.respondWith(
-    isAppCode
+    isNavigation
       ? fetchAndCache().catch(() => caches.match(request).then((cached) => cached || caches.match("./")))
+      : isAppAsset
+        // Never answer a JavaScript, CSS, worker, or Next.js asset request
+        // with the cached HTML shell. Browsers parse that HTML as JavaScript
+        // and surface "Unexpected token '<'" instead of a recoverable load
+        // failure. Use only the exact cached asset when the network is down.
+        ? fetchAndCache().catch(() => caches.match(request).then((cached) => cached || Response.error()))
       : caches.match(request).then((cached) => cached || fetchAndCache()).catch(() => caches.match("./")),
   );
 });
