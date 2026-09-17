@@ -26,11 +26,12 @@ const MISSIONS: Mission[] = [
   { id: 5, title: "พิสูจน์กล่องพัสดุรุ่นปรับปรุง", short: "ทดสอบจริงอีกครั้ง เปรียบเทียบ และสรุปผล", color: "#55a92e", icon: "trophy", outsideSim: true, outsideDescription: "นำกล่องรุ่นปรับปรุงไปทดสอบจริงอีกครั้งด้วยเงื่อนไขเดิม เปรียบเทียบหลักฐานก่อนและหลังการปรับปรุง แล้วสรุปว่ากล่องแข็งแรง ป้องกันสิ่งของ และนำวัสดุที่ใช้แล้วกลับมาใช้ใหม่ได้อย่างเหมาะสมขึ้นอย่างไร" },
 ];
 
-export function MissionOverview({ mission2Unlocked, mission3Unlocked, completedMissions, mission1Answer, unlockingMission, onUnlockAnimationDone, onBack, onSelect, onReplay }: {
+export function MissionOverview({ mission2Unlocked, mission3Unlocked, completedMissions, mission1Answer, startError, unlockingMission, onUnlockAnimationDone, onBack, onSelect, onReplay }: {
   mission2Unlocked: boolean;
   mission3Unlocked: boolean;
   completedMissions: MissionNumber[];
   mission1Answer?: string;
+  startError?: string;
   unlockingMission: MissionNumber | null;
   onUnlockAnimationDone: () => void;
   onBack: () => void;
@@ -62,6 +63,8 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, completedM
         <b>คำตอบที่สะสมได้จากภารกิจที่ 1</b>
         <span>{mission1Answer}</span>
       </aside>}
+
+      {startError && <div className={styles.startError} role="alert">{startError}</div>}
 
       <main className={styles.journey} aria-label="เส้นทางกิจกรรมสร้างกล่องแกร่ง 5 ภารกิจ">
         <svg className={styles.road} viewBox="0 0 1200 330" preserveAspectRatio="none" aria-hidden="true">

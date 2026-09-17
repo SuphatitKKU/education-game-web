@@ -61,6 +61,11 @@ describe("mission run history", () => {
     expect(visibleCompletedMissions(team([completed], null), EMPTY_SAVE)).toEqual([1]);
   });
 
+  it("keeps prerequisite missions unlocked when a later mission is already active", () => {
+    const third = trackedRun(3);
+    expect(visibleCompletedMissions(team([third], third), { ...EMPTY_SAVE, stage: "overview" })).toEqual([1, 2]);
+  });
+
   it("targets the first mission that is not complete for the unlock animation", () => {
     expect(nextUnlockMission([])).toBe(1);
     expect(nextUnlockMission([1])).toBe(2);

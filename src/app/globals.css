@@ -853,11 +853,13 @@ p,small,span,label,input,select,textarea,b,strong{font-family:var(--font-kodchas
 @keyframes box-card-happy{0%{transform:scale(.97)}60%{transform:scale(1.015)}100%{transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){.box-mission-coach-sprite,.box-mission-coach-sprite::before,.box-mission-coach-sprite::after,.box-mission-coach::before,.box-mission-header::before,.box-mission-header::after,.box-mission-grid button.selected{animation:none!important}}
 
-/* Responsive landscape canvas: fill the available viewport instead of letterboxing a fixed 16:9 frame. */
+/* The SIM always uses the iPad mini 2 landscape coordinate system. Smaller
+   browser viewports scale the complete 1024 × 768 surface without cropping or
+   changing its layout; larger screens keep the same 4:3 canvas centered. */
 html,body{position:relative;width:100%;height:100%;overflow:hidden}
 body{overscroll-behavior:none;background:#d9f1ff}
-.app-shell{position:fixed;inset:0;width:100vw;height:100vh;min-height:100vh;padding:max(0px,env(safe-area-inset-top)) max(0px,env(safe-area-inset-right)) max(0px,env(safe-area-inset-bottom)) max(0px,env(safe-area-inset-left));background:#d9f1ff}
-.game-frame{width:100%;height:100%;max-width:none;max-height:none;aspect-ratio:auto;box-shadow:none}
+.app-shell{position:fixed;inset:0;width:100vw;height:100vh;min-height:100vh;overflow:hidden;padding:0;background:#d9f1ff}
+.game-frame{width:100%;height:100%;max-width:none;max-height:none;aspect-ratio:4/3;box-shadow:none}
 .screen{inset:0;width:100%;height:100%;transform:none;container-type:inline-size}
 .menu-cover,.comic-image,.inspection-bg,.compression-bg,.group-design-bg,.material-guide-bg,.mission-route-bg,.soft-bg{object-fit:cover;object-position:center}
 
@@ -865,16 +867,18 @@ body{overscroll-behavior:none;background:#d9f1ff}
   .app-shell{height:100dvh;min-height:100dvh}
 }
 
-/* Fill the app surface directly; do not scale a fixed canvas and leave gutters. */
-.app-shell{position:absolute;inset:0;width:auto;height:auto!important;min-height:0!important;display:block;overflow:hidden;padding:0}
-.standalone-pwa{position:fixed;height:-webkit-fill-available!important;min-height:-webkit-fill-available!important}
+/* Keep the logical canvas fixed; only this outer viewport is scaled. */
+.standalone-pwa{height:-webkit-fill-available!important;min-height:-webkit-fill-available!important}
 .game-viewport{
   position:absolute;
-  inset:0;
-  width:auto!important;
-  height:auto!important;
-  aspect-ratio:auto;
+  left:50%;
+  top:50%;
+  width:1024px!important;
+  height:768px!important;
+  aspect-ratio:4/3;
   overflow:hidden;
+  transform:translate(-50%,-50%) scale(var(--simulation-scale,1));
+  transform-origin:center;
 }
 .game-frame{
   position:absolute;
@@ -883,7 +887,7 @@ body{overscroll-behavior:none;background:#d9f1ff}
   height:100%;
   max-width:none;
   max-height:none;
-  aspect-ratio:auto;
+  aspect-ratio:4/3;
   overflow:hidden;
   container-type:inline-size;
   transform:none;
@@ -891,9 +895,6 @@ body{overscroll-behavior:none;background:#d9f1ff}
 }
 .game-frame>.screen{position:absolute;inset:0;width:100%;height:100%}
 .game-frame>.loading-screen{min-height:100%;height:100%}
-@supports (height:100dvh){
-  .game-viewport{width:auto!important;height:auto!important}
-}
 
 /* The learning activity is a landscape-only iPad mini 2 experience. */
 .orientation-notice{display:none}
@@ -1192,8 +1193,10 @@ body{overscroll-behavior:none;background:#d9f1ff}
 /* Make the answer area a real scroll container on Safari 12 instead of clipping its lower questions. */
 .exit-ticket-screen{display:-webkit-box;display:flex!important;-webkit-box-orient:vertical;-webkit-box-direction:normal;flex-direction:column;overflow:hidden}.exit-ticket-screen .exit-ticket-header{display:-webkit-box;display:flex!important;-webkit-box-flex:0;flex:0 0 10%;-webkit-box-align:center;-webkit-box-pack:center;align-items:center;justify-content:center;height:auto!important;min-height:0}.exit-ticket-screen .exit-ticket-layout{display:-webkit-box;display:flex!important;-webkit-box-flex:1;flex:1 1 auto;height:auto!important;min-height:0;gap:1.3vw;padding:0 2.2vw 1.35vw}.exit-ticket-layout .student-tabs{display:block;flex:0 0 27%;width:27%;height:100%;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}.exit-ticket-layout .matching-kpv-card{display:block;flex:1 1 auto;width:0;height:100%;min-height:0;overflow-x:hidden;overflow-y:scroll!important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}.exit-ticket-layout .matching-kpv-card .kpv-actions{position:relative;bottom:auto}
 
-/* iPad Safari's visual viewport is shorter than its layout viewport while browser bars are present. */
-@media screen and (orientation:landscape) and (min-device-width:768px) and (max-device-width:1024px){.app-shell.apple-mobile{position:fixed!important;top:0;right:0;bottom:0;left:0;width:auto!important;height:-webkit-fill-available!important;min-height:-webkit-fill-available!important}.app-shell.apple-mobile .game-viewport,.app-shell.apple-mobile .game-frame{top:0;right:0;bottom:0;left:0;width:auto!important;height:-webkit-fill-available!important;min-height:-webkit-fill-available!important}}
+/* iPad Safari can expose a shorter visual viewport while browser bars are
+   present. The JS scale uses that visual viewport, so the 4:3 SIM stays whole
+   instead of being stretched or clipped. */
+@media screen and (orientation:landscape) and (min-device-width:768px) and (max-device-width:1024px){.app-shell.apple-mobile{position:fixed!important;inset:0;width:100vw!important;height:-webkit-fill-available!important;min-height:-webkit-fill-available!important}}
 
 /* iPad mini 2 needs explicit panel edges before -webkit-overflow-scrolling can calculate a scroll height. */
 @media screen and (orientation:landscape) and (min-device-width:768px) and (max-device-width:1024px){.exit-ticket-screen .exit-ticket-layout{position:relative;display:block!important}.exit-ticket-layout .student-tabs{position:absolute;top:0;bottom:1.35vw;left:2.2vw;width:27%;height:auto}.exit-ticket-layout .matching-kpv-card{position:absolute;top:0;right:2.2vw;bottom:1.35vw;left:calc(27% + 3.5vw);width:auto;height:auto;min-height:0;overflow-y:scroll!important;-webkit-overflow-scrolling:touch;touch-action:pan-y;-webkit-transform:translateZ(0);transform:translateZ(0)}}

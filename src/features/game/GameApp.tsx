@@ -2,7 +2,7 @@
 
 import { readValueAnswer, writeValueAnswer } from "./exit-ticket-values";
 
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import {
   AVATARS, BOX_MISSION_GOALS, BOX_PARTS, DAMAGE_CAUSES, DAMAGES, EMPTY_SAVE, MATERIALS, RECAP, STORY,
   type CompressionResult, type DamageCause, type ElasticityResult, type ExitTicket, type GameSave, type ImpactResult, type Stage, type TeamMember, type WaterAbsorptionResult,
@@ -67,6 +67,9 @@ import { AppIcon, type AppIconName } from "@/components/AppIcon";
 
 const SAVE_KEY = "parcel-lab-web-save-v1";
 const STATS_KEY = "parcel-lab-group-design-statistics-v1";
+const SELECTED_TEAM_KEY = "parcel-lab-selected-team-id-v1";
+const IPAD_MINI_2_WIDTH = 1024;
+const IPAD_MINI_2_HEIGHT = 768;
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const PREDICTION_ENABLED = false;
 const MISSION_TWO_ALWAYS_UNLOCKED = true;
@@ -115,6 +118,7 @@ function MaterialIcon({ icon }: { icon: string }) {
 function IpadMiniCanvas({ children }: { children: ReactNode }) {
   const [isAppleMobile, setIsAppleMobile] = useState(false);
   const [isStandalonePwa, setIsStandalonePwa] = useState(false);
+  const [simulationScale, setSimulationScale] = useState(1);
 
   useEffect(() => {
     const userAgent = window.navigator.userAgent;
@@ -127,9 +131,28 @@ function IpadMiniCanvas({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  useEffect(() => {
+    const updateScale = () => {
+      const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const nextScale = Math.min(viewportWidth / IPAD_MINI_2_WIDTH, viewportHeight / IPAD_MINI_2_HEIGHT);
+      setSimulationScale(Number.isFinite(nextScale) && nextScale > 0 ? nextScale : 1);
+    };
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    window.visualViewport?.addEventListener("resize", updateScale);
+    return () => {
+      window.removeEventListener("resize", updateScale);
+      window.visualViewport?.removeEventListener("resize", updateScale);
+    };
+  }, []);
+
   return (
-    <main className={`app-shell${isAppleMobile ? " apple-mobile" : ""}${isStandalonePwa ? " standalone-pwa" : ""}`}>
-      <section className="game-viewport">
+    <main
+      className={`app-shell${isAppleMobile ? " apple-mobile" : ""}${isStandalonePwa ? " standalone-pwa" : ""}`}
+      style={{ "--simulation-scale": simulationScale } as CSSProperties}
+    >
+      <section className="game-viewport" aria-label="พื้นที่ Simulation ขนาด iPad mini 2 1024 คูณ 768">
         <div className="game-frame" aria-live="polite">{children}</div>
       </section>
       <FullscreenInstallHelp />
@@ -264,6 +287,7 @@ export function GameApp() {
   const [unlockingMission, setUnlockingMission] = useState<MissionNumber | null>(null);
   const [activeRun, setActiveRun] = useState<ActiveRunRef | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<TeamOverview | null>(null);
+  const [missionStartError, setMissionStartError] = useState("");
   const [, setSaveIndicator] = useState<SaveIndicator>("idle");
   const [legacyBundle, setLegacyBundle] = useState<LegacyBundle>({ save: null, statistics: [] });
   const bgmRef = useRef<HTMLAudioElement>(null);
@@ -381,6 +405,37 @@ export function GameApp() {
           studyFocus: parsed.studyFocus ?? { compression: true, water: true, elasticity: true },
         });
       }
+      if (configured && parsed?.stage === "overview") {
+        let cancelled = false;
+        const selectedTeamId = localStorage.getItem(SELECTED_TEAM_KEY);
+        void listTeams()
+          .then((teams) => {
+            if (cancelled) return;
+            const team = teams.find((candidate) => candidate.id === selectedTeamId);
+            if (!team) {
+              setSave({ ...EMPTY_SAVE, audio: parsed.audio ?? EMPTY_SAVE.audio, stage: "team" });
+              return;
+            }
+            const completed = new Set(completedMissionsForTeam(team));
+            const restored: GameSave = {
+              ...EMPTY_SAVE,
+              ...parsed,
+              team: team.members,
+              mission1Completed: completed.has(1),
+              mission2Completed: completed.has(2),
+              mission3Completed: completed.has(3),
+              stage: "overview",
+            };
+            setSelectedTeam(team);
+            saveRef.current = restored;
+            setSave(restored);
+          })
+          .catch(() => {
+            if (!cancelled) setSave({ ...EMPTY_SAVE, audio: parsed.audio ?? EMPTY_SAVE.audio, stage: "team" });
+          })
+          .finally(() => { if (!cancelled) setLoaded(true); });
+        return () => { cancelled = true; };
+      }
       if (configured && parsed && shouldAutoResume(parsed)) {
         let cancelled = false;
         void listTeams()
@@ -480,11 +535,14 @@ export function GameApp() {
   };
   const go = (stage: Stage) => patch({ stage });
   // Leaving an individual-answer screen must preserve its active run and
-  // every draft, including after a browser refresh. Use the real overview
-  // stage so the answer screen (and its navigation controls) unmounts.
+  // every draft, including after a browser refresh. The route map is a local
+  // navigation surface: never persist "overview" over the run checkpoint.
   const showMissionOverview = () => {
-    go("overview");
-    void syncAnswers(activeRunIdRef.current ?? undefined);
+    const runId = activeRunIdRef.current ?? undefined;
+    const next = { ...saveRef.current, stage: "overview" as const };
+    saveRef.current = next;
+    setSave(next);
+    void syncAnswers(runId);
   };
   const toggleAudio = () => {
     const nextAudio = !save.audio;
@@ -499,6 +557,9 @@ export function GameApp() {
     activeRunIdRef.current = null;
     setActiveRun(null);
     setSelectedTeam(null);
+    setMissionStartError("");
+    try { localStorage.removeItem(SELECTED_TEAM_KEY); }
+    catch { /* continue when storage is unavailable */ }
     setTeamSetupFlow("select");
     setSave(EMPTY_SAVE);
   };
@@ -506,6 +567,9 @@ export function GameApp() {
     activeRunIdRef.current = null;
     setActiveRun(null);
     setSelectedTeam(null);
+    setMissionStartError("");
+    try { localStorage.removeItem(SELECTED_TEAM_KEY); }
+    catch { /* continue when storage is unavailable */ }
     setTeamSetupFlow("select");
     setSave((current) => ({ ...current, stage: "team" }));
   };
@@ -514,6 +578,9 @@ export function GameApp() {
     setActiveRun(null);
     completedRunRef.current = null;
     setSelectedTeam(team);
+    setMissionStartError("");
+    try { localStorage.setItem(SELECTED_TEAM_KEY, team.id); }
+    catch { /* the selected team remains available for this session */ }
     setTeamSetupFlow("select");
     const completed = new Set(completedMissionsForTeam(team));
     setUnlockingMission(nextUnlockMission(completed));
@@ -602,6 +669,9 @@ export function GameApp() {
       activeRun: run,
       runs: [run, ...currentTeam.runs.filter((item) => item.id !== run.id)],
     });
+    setMissionStartError("");
+    try { localStorage.setItem(SELECTED_TEAM_KEY, team.id); }
+    catch { /* the selected team remains available for this session */ }
     activeRunIdRef.current = run.id;
     setActiveRun({ id: run.id, teamId: run.teamId, revision: run.revision });
     completedRunRef.current = null;
@@ -631,6 +701,7 @@ export function GameApp() {
   };
   const startMissionFromOverview = async (mission: MissionNumber, isReplaying = false) => {
     setSelectedMission(mission);
+    setMissionStartError("");
     if (!configured && save.team.length >= MIN_TEAM_MEMBERS) {
       patch({
         ...EMPTY_SAVE,
@@ -641,22 +712,28 @@ export function GameApp() {
       });
       return;
     }
-    if (!selectedTeam) {
-      // A direct visit to the map without checking in still goes through the
-      // attendance screen. A checked-in team starts the selected mission here.
-      setTeamSetupFlow("select");
-      go("team");
+    let teamToOpen = selectedTeam;
+    if (!teamToOpen && configured) {
+      try {
+        const selectedTeamId = localStorage.getItem(SELECTED_TEAM_KEY);
+        if (selectedTeamId) {
+          teamToOpen = (await listTeams()).find((team) => team.id === selectedTeamId) ?? null;
+          if (teamToOpen) setSelectedTeam(teamToOpen);
+        }
+      } catch { /* show one clear error on the route map below */ }
+    }
+    if (!teamToOpen) {
+      setMissionStartError("ไม่พบทีมที่เลือก กรุณากลับไปเลือกทีมหนึ่งครั้ง");
       return;
     }
     try {
-      await openTeam(selectedTeam, mission, isReplaying);
+      await openTeam(teamToOpen, mission, isReplaying);
     } catch (error) {
       console.error("Unable to start the selected mission", error);
-      // Keep the existing run data intact. Only fall back to the team screen
-      // when the start request itself fails, so attendance is never requested
-      // twice during a normal journey from the map.
-      setTeamSetupFlow("select");
-      go("team");
+      // The team was already checked in before reaching the route map. Keep
+      // the learner on the map when a run cannot start; never ask attendance
+      // a second time as an error fallback.
+      setMissionStartError(userFacingError(error, "เปิดภารกิจไม่สำเร็จ กรุณาลองอีกครั้ง"));
     }
   };
   const openMission = (mission: MissionNumber) => { void startMissionFromOverview(mission); };
@@ -732,7 +809,7 @@ export function GameApp() {
       <audio ref={bgmRef} className="game-bgm" src={asset("audio/happy_clappy_loop.ogg")} autoPlay loop muted={!save.audio} />
         {save.stage === "menu" && <MainMenu onStart={() => go("purpose")} />}
         {save.stage === "purpose" && <MissionPurpose onBack={() => go("menu")} onDone={() => { setTeamSetupFlow("select"); go("team"); }} />}
-        {save.stage === "overview" && <MissionOverview mission2Unlocked={MISSION_TWO_ALWAYS_UNLOCKED} mission3Unlocked={save.mission2Completed} completedMissions={completedMissions} mission1Answer={save.bigQuestionProgress.mission1} unlockingMission={unlockingMission} onUnlockAnimationDone={() => setUnlockingMission(null)} onBack={() => { setTeamSetupFlow("select"); go("team"); }} onSelect={openMission} onReplay={replayCompletedMission} />}
+        {save.stage === "overview" && <MissionOverview mission2Unlocked={MISSION_TWO_ALWAYS_UNLOCKED} mission3Unlocked={completedMissions.includes(2)} completedMissions={completedMissions} mission1Answer={save.bigQuestionProgress.mission1} startError={missionStartError} unlockingMission={unlockingMission} onUnlockAnimationDone={() => setUnlockingMission(null)} onBack={() => { setMissionStartError(""); setTeamSetupFlow("select"); go("team"); }} onSelect={openMission} onReplay={replayCompletedMission} />}
         {labRoomsPaused && <LabRoomsPaused onContinue={() => go(PREDICTION_ENABLED ? "prediction" : "summary")} />}
         {!labRoomsPaused && save.stage === "team" && <TeamSetup flowMode={teamSetupFlow} preferredTeamId={selectedTeam?.id} selectedMission={selectedMission} initial={save.team} legacyBundle={legacyBundle} legacyAlreadyImported={wasLegacyImported()} onBack={() => go(teamSetupFlow === "select" ? "purpose" : "overview")} onSelectTeam={selectTeamForOverview} onSelectLocal={selectLocalTeamForOverview} onChoose={openTeam} onResumeMissionOneAnswers={resumeMissionOneAnswers} onCreate={createAndOpenTeam} onUpdate={updateExistingTeam} onImport={importExistingTeam} onLocalDone={(team) => selectedMission === 3
           ? patch({ team, runId: save.runId || createRunId(), stage: "mission3Intro" })

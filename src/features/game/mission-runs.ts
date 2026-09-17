@@ -58,6 +58,10 @@ export function visibleCompletedMissions(team: TeamOverview | null, save: GameSa
   if (save.mission3Completed) completed.add(3);
 
   const activeMission = team?.activeRun ? runMissionNumber(team.activeRun) : null;
+  // An active later mission proves that its prerequisites were already
+  // reached, even when an older imported run was not marked completed.
+  if (activeMission && activeMission >= 2) completed.add(1);
+  if (activeMission === 3) completed.add(2);
   if (activeMission && !COMPLETED_RUN_STAGES.has(save.stage)) completed.delete(activeMission);
   return [...completed];
 }
