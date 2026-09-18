@@ -1,8 +1,11 @@
-import type { Stage } from "@/features/game/data";
+import type { Stage, TeamMember } from "@/features/game/data";
 import { exitTicketProgress, type ExitTicketProgress } from "@/features/game/exit-ticket-progress";
 import { LAB_MATERIALS, LAB_ROOMS_ENABLED, LAB_STAGES } from "@/features/game/labs";
 import { STUDY_TOPICS } from "@/features/game/learning-topics";
 import type { TrackedRun } from "./types";
+import type { TeamOverview } from "./types";
+import { missionNumberForTrackedRun } from "./run-classification";
+import { missionTwoAnswerProgress } from "@/features/game/mission-runs";
 
 export const ACTIVE_STAGE_ORDER: Stage[] = [
   "mission",
@@ -21,10 +24,14 @@ export const ACTIVE_STAGE_ORDER: Stage[] = [
   "comparison",
   "mission2Assessment",
   "mission2Complete",
+  "mission3Review",
+  "mission3Question",
   "mission3Intro",
   "mission3Data",
+  "mission3Parts",
   "mission3Materials",
   "mission3Design",
+  "mission3Build",
   "mission3Reason",
   "mission3Complete",
   "summary",
@@ -57,11 +64,15 @@ export const STAGE_LABELS: Record<Stage, string> = {
   recap: "ตอบคำถามร่วมกันหลังการทดลอง",
   mission2Assessment: "ตอบคำถามรายบุคคล K–P–V",
   mission2Complete: "ทำภารกิจที่ 2 สำเร็จ",
+  mission3Review: "ทบทวนสิ่งที่ทำมาแล้ว",
+  mission3Question: "คำถามสำคัญของภารกิจที่ 3",
   mission3Intro: "รับภารกิจที่ 3",
   mission3Data: "ผลการทดลองจากภารกิจที่ 2",
+  mission3Parts: "ทบทวน 3 ส่วนของกล่อง",
   mission3Materials: "เลือกวัสดุตามหน้าที่",
-  mission3Design: "ออกแบบสามมิติและแผนการสร้าง",
-  mission3Reason: "เหตุผลของทีม",
+  mission3Design: "จัดวางวัสดุ 3 ตำแหน่ง",
+  mission3Build: "สร้างกล่องตามขั้นตอน",
+  mission3Reason: "สรุปคำตอบของทีม",
   mission3Complete: "ทำภารกิจที่ 3 สำเร็จ",
   prediction: "เลือกวัสดุ",
   summary: "สรุปภารกิจ",
@@ -75,7 +86,7 @@ export function stageProgress(stage: Stage): number {
 }
 
 const MISSION_ONE_ORDER: Stage[] = ["mission", "story", "inspection", "boxMission", "materials", "studyFocus", "exitTicket", "mission1Complete"];
-const MISSION_THREE_ORDER: Stage[] = ["mission3Intro", "mission3Data", "mission3Materials", "mission3Design", "mission3Reason", "mission3Complete"];
+const MISSION_THREE_ORDER: Stage[] = ["mission3Review", "mission3Question", "mission3Intro", "mission3Data", "mission3Parts", "mission3Materials", "mission3Design", "mission3Build", "mission3Reason", "mission3Complete"];
 
 function orderedProgress(order: Stage[], stage: Stage): number {
   const index = order.indexOf(stage);
@@ -92,7 +103,7 @@ export function missionOneAnswerProgress(run: TrackedRun): ExitTicketProgress {
 }
 
 /** Progress for one mission run. A new run naturally starts again at 0%. */
-export function runProgress(run: TrackedRun): number {
+export function runProgress(run: TrackedRun, requiredMissionTwoMembers?: TeamMember[]): number {
   const mission = run.saveState.missionNumber
     ?? (run.currentStage.startsWith("mission3") ? 3
       : ["mission2Review", "mission2Question", "mission2Parts", "mission2Intro", "testHub", "compression", "impact", "absorption", "elasticity", "recap", "notebook", "comparison", "mission2Assessment", "mission2Complete", "prediction", "summary"].includes(run.currentStage) ? 2 : 1);
@@ -115,9 +126,9 @@ export function runProgress(run: TrackedRun): number {
     const answerShare = answerProgress.percent / 100;
     return Math.min(99, Math.round(questionStageProgress + ((100 - questionStageProgress) * answerShare)));
   }
-  if (run.status === "completed") return 100;
-  if (mission === 3) return orderedProgress(MISSION_THREE_ORDER, run.currentStage);
-  if (run.currentStage === "mission2Complete" || run.currentStage === "summary") return 100;
+  if (mission === 3) return run.status === "completed" ? 100 : orderedProgress(MISSION_THREE_ORDER, run.currentStage);
+  const missionTwoAnswers = missionTwoAnswerProgress(run, requiredMissionTwoMembers);
+  if (missionTwoAnswers.complete) return 100;
   if (run.currentStage === "mission2Review") return 0;
   if (run.currentStage === "mission2Question") return 3;
   if (run.currentStage === "mission2Parts") return 5;
@@ -136,10 +147,18 @@ export function runProgress(run: TrackedRun): number {
     + (Math.min(recapDone, 3) / 3) * 15
     + (Math.min(connectionsDone, 3) / 3) * 8
     + (Math.min(individualDone, individualTarget) / individualTarget) * 7;
-  const stageFloor = run.currentStage === "mission2Assessment" ? 88
+  const stageFloor = run.currentStage === "mission2Complete" || run.currentStage === "summary" ? 95
+    : run.currentStage === "mission2Assessment" ? 88
     : run.currentStage === "comparison" || run.currentStage === "notebook" ? 80
       : 10;
   return Math.min(95, Math.round(Math.max(stageFloor, evidenceProgress)));
+}
+
+/** Keep a completed attempt visible even when a newer replay is unfinished. */
+export function missionProgressForTeam(team: TeamOverview, mission: 1 | 2 | 3): number {
+  return Math.max(0, ...team.runs
+    .filter((run) => missionNumberForTrackedRun(run) === mission)
+    .map((run) => runProgress(run, mission === 2 ? team.members : undefined)));
 }
 
 export function formatDuration(startedAt: string, endedAt?: string | null): string {

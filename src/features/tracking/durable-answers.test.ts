@@ -71,6 +71,21 @@ describe("durable answer delivery", () => {
     await expect(p.saveCheckpoint(run, second)).rejects.toBeInstanceOf(p.RevisionConflictError);
     expect(p.readOutbox()[0].save.inspectionFindings).toEqual(second.inspectionFindings);
   });
+  it("can adopt the newer server checkpoint before opening or replaying a mission", async () => {
+    const p = await import("./persistence");
+    rpc.mockResolvedValue({ error: null, data: { conflict: true, run: { id: run.id, team_id: run.teamId, revision: 4, save_state: { ...EMPTY_SAVE, stage: "mission3Review" }, current_stage: "mission3Review", status: "in_progress" } } });
+    p.queueCheckpoint(run, second);
+    let conflict: InstanceType<typeof p.RevisionConflictError> | null = null;
+    try { await p.flushOutbox(run.id); }
+    catch (error) {
+      if (error instanceof p.RevisionConflictError) conflict = error;
+      else throw error;
+    }
+    expect(conflict).not.toBeNull();
+    expect(p.readOutbox()).toHaveLength(1);
+    expect(p.adoptServerRun(conflict!.serverRun).revision).toBe(4);
+    expect(p.readOutbox()).toEqual([]);
+  });
   it("recognizes a committed completion after its HTTP response was lost and does not complete twice", async () => {
     const p = await import("./persistence");
     rpc.mockImplementation(async (_name, args) => {

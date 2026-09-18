@@ -99,7 +99,7 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, completedM
                 <b>ภารกิจที่ {mission.id}</b>
                 <strong>{mission.title}</strong>
                 <small>{mission.short}</small>
-                <span>{isUnlocking ? "ปลดล็อกแล้ว!" : completed ? "ทำสำเร็จแล้ว · กดดู ›" : simulationUnlocked ? "กดเพื่อเริ่มภารกิจ ›" : mission.outsideSim ? "กิจกรรมนอก Simulation · กดดูรายละเอียด" : "ยังไม่ปลดล็อก"}</span>
+                <span>{isUnlocking ? "ปลดล็อกแล้ว!" : completed ? "ทำสำเร็จแล้ว · กดเล่นซ้ำ ›" : simulationUnlocked ? "กดเพื่อเริ่มภารกิจ ›" : mission.outsideSim ? "กิจกรรมนอก Simulation · กดดูรายละเอียด" : "ยังไม่ปลดล็อก"}</span>
               </div>
             </article>;
           })}
@@ -136,7 +136,7 @@ export function MissionOverview({ mission2Unlocked, mission3Unlocked, completedM
           <section className={`${styles.modal} ${styles.completedModal}`} role="dialog" aria-modal="true" aria-labelledby="completed-title" onClick={(event) => event.stopPropagation()}>
             <div className={styles.completedModalIcon} aria-hidden="true"><AppIcon name="trophy" /></div>
             <h2 id="completed-title">เก่งมาก! ทีมทำภารกิจที่ {completedMission.id} เสร็จแล้ว</h2>
-            <p>ผลงานและคำตอบรอบเดิมถูกบันทึกไว้เรียบร้อย<br /><b>ต้องการเริ่มภารกิจนี้อีกครั้งหรือไม่?</b><br /><small>หากยืนยัน ระบบจะสร้างรอบใหม่พร้อมวันที่ใหม่ และไม่ลบข้อมูลเดิม</small></p>
+            <p>ผลงานและคำตอบรอบเดิมถูกบันทึกไว้เรียบร้อย<br /><b>ต้องการเริ่มภารกิจนี้อีกครั้งหรือไม่?</b><br /><small>ระบบจะสร้างรอบใหม่โดยไม่ลบข้อมูลเดิม และสามารถเล่นซ้ำได้ไม่จำกัดจำนวนรอบ</small></p>
             <div className={styles.modalActions}>
               <button className="button button-white" type="button" onClick={() => setCompletedMission(null)}>ย้อนกลับ</button>
               <button className="button button-orange" type="button" onClick={() => { const mission = completedMission.id as MissionNumber; setCompletedMission(null); onReplay(mission); }}>ยืนยัน เริ่มรอบใหม่</button>

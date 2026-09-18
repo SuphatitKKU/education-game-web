@@ -1,4 +1,4 @@
-export type Stage = "menu" | "purpose" | "overview" | "team" | "mission" | "story" | "inspection" | "boxMission" | "materials" | "studyFocus" | "exitTicket" | "mission1Complete" | "mission2Review" | "mission2Question" | "mission2Parts" | "mission2Intro" | "testHub" | "compression" | "absorption" | "elasticity" | "impact" | "notebook" | "comparison" | "recap" | "mission2Assessment" | "mission2Complete" | "mission3Intro" | "mission3Data" | "mission3Materials" | "mission3Design" | "mission3Reason" | "mission3Complete" | "prediction" | "summary";
+export type Stage = "menu" | "purpose" | "overview" | "team" | "mission" | "story" | "inspection" | "boxMission" | "materials" | "studyFocus" | "exitTicket" | "mission1Complete" | "mission2Review" | "mission2Question" | "mission2Parts" | "mission2Intro" | "testHub" | "compression" | "absorption" | "elasticity" | "impact" | "notebook" | "comparison" | "recap" | "mission2Assessment" | "mission2Complete" | "mission3Review" | "mission3Question" | "mission3Intro" | "mission3Data" | "mission3Parts" | "mission3Materials" | "mission3Design" | "mission3Build" | "mission3Reason" | "mission3Complete" | "prediction" | "summary";
 
 export type DamageCause = "แรงกด" | "แรงกระแทก" | "น้ำ";
 
@@ -78,17 +78,8 @@ export type ExitTicket = {
   v: string;
 };
 
-export type MissionThreeDesign = {
-  length: string;
-  width: string;
-  height: string;
-  structure: string;
-  impact: string;
-  water: string;
-  filler: string;
-  joints: string;
-  steps: string;
-};
+export type MissionThreeLayer = "structure" | "impact" | "water" | "impact-extra" | "water-extra";
+export type MissionThreeZone = "outside" | "inside" | "around";
 
 export const COMPRESSION_FRAME_KEYS = ["idle", "load1", "load2", "load3", "released"] as const;
 export type CompressionFrameKey = (typeof COMPRESSION_FRAME_KEYS)[number];
@@ -162,9 +153,16 @@ export type GameSave = {
   mission2AssessmentConfirmed: Record<string, boolean>;
   mission3Selections: Record<string, string>;
   mission3Reuse: Record<string, boolean>;
-  mission3Alternative: string;
-  mission3Design: MissionThreeDesign;
-  mission3Reason: string;
+  /** Material chosen for the part that the team will make from reused material. */
+  mission3ReuseMaterial?: string;
+  mission3Placements: Partial<Record<MissionThreeZone, MissionThreeLayer>>;
+  mission3Extra: "impact" | "water" | "";
+  mission3Reasons: Record<string, string>;
+  mission3BuildSteps: Record<string, boolean>;
+  /** Historical Mission 3 fields remain optional so saved classroom runs still reopen. */
+  mission3Alternative?: string;
+  mission3Design?: Record<string, string>;
+  mission3Reason?: string;
   predictions: Record<string, string>;
   audio: boolean;
 };
@@ -204,19 +202,11 @@ export const EMPTY_SAVE: GameSave = {
   mission2AssessmentConfirmed: {},
   mission3Selections: {},
   mission3Reuse: {},
-  mission3Alternative: "",
-  mission3Design: {
-    length: "12",
-    width: "10",
-    height: "8",
-    structure: "",
-    impact: "",
-    water: "",
-    filler: "",
-    joints: "",
-    steps: "",
-  },
-  mission3Reason: "",
+  mission3ReuseMaterial: "",
+  mission3Placements: {},
+  mission3Extra: "",
+  mission3Reasons: {},
+  mission3BuildSteps: {},
   predictions: {},
   audio: true,
 };

@@ -6,8 +6,10 @@ import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { formatDuration, isToday, runProgress, STAGE_LABELS } from "@/features/tracking/progress";
 import { deleteTeam, getTeacherTeamDetail, listTeams } from "@/features/tracking/persistence";
 import type { TeacherTeamDetail, TeamOverview } from "@/features/tracking/types";
+import { attemptNumberForTrackedRun } from "@/features/tracking/run-classification";
 import { studyTopicLabel } from "@/features/game/learning-topics";
 import { BOX_MISSION_GOALS, RECAP } from "@/features/game/data";
+import { LAB_MATERIALS } from "@/features/game/labs";
 import { AppIcon } from "@/components/AppIcon";
 import {
   attendanceForRun,
@@ -43,6 +45,12 @@ const EVENT_LABELS: Record<string, string> = {
   mission2_connection_changed: "เชื่อมโยงผลทดลองกับส่วนของกล่อง",
   mission2_individual_answer_changed: "ตอบคำถามรายบุคคลภารกิจที่ 2",
   mission2_individual_answer_saved: "บันทึกคำตอบรายบุคคลภารกิจที่ 2",
+  mission3_material_selected: "เลือกวัสดุภารกิจที่ 3",
+  mission3_reuse_material_changed: "เลือกวัสดุใช้แล้วภารกิจที่ 3",
+  mission3_extra_layer_changed: "เลือกชิ้นวัสดุเสริมภารกิจที่ 3",
+  mission3_placement_changed: "จัดวางวัสดุภารกิจที่ 3",
+  mission3_build_step_changed: "บันทึกขั้นสร้างกล่องภารกิจที่ 3",
+  mission3_group_reason_changed: "สรุปเหตุผลของทีมภารกิจที่ 3",
   lab_answer_changed: "เลือกคำตอบระหว่างทดลอง",
   big_question_progress_saved: "บันทึกข้อสรุปสะสมจากระบบ",
   exit_tickets_completed: "ตอบคำถามรายบุคคลครบแล้ว",
@@ -63,6 +71,39 @@ const DAMAGE_LABELS: Record<string, string> = {
   corner: "มุมกล่องบุบ",
   cup: "แก้วด้านในเสียหาย",
 };
+
+const MISSION_THREE_ROLE_LABELS: Record<string, string> = {
+  structure: "โครงกล่อง",
+  impact: "ชั้นกันกระแทก",
+  water: "ชั้นลดการเปียก",
+  reuse: "วัสดุเหลือใช้",
+};
+
+const MISSION_THREE_ZONE_LABELS: Record<string, string> = {
+  outside: "ด้านนอกกล่อง",
+  inside: "ด้านในกล่อง",
+  around: "รอบสิ่งของ",
+};
+
+const MISSION_THREE_LAYER_LABELS: Record<string, string> = {
+  impact: "ชั้นกันกระแทก",
+  water: "ชั้นลดการเปียก",
+  "impact-extra": "ชั้นกันกระแทก (ชิ้นเสริม)",
+  "water-extra": "ชั้นลดการเปียก (ชิ้นเสริม)",
+};
+
+const MISSION_THREE_REASON_LABELS: Record<string, string> = {
+  compression: "ยุบหรือเปลี่ยนรูปน้อยกว่า",
+  impact: "ทำให้สิ่งของเสียหายน้อยกว่า",
+  water: "มีรอยเปียกหรือดูดซับน้ำน้อยกว่า",
+  "part-structure": "โครงกล่อง",
+  "part-impact": "ชั้นกันกระแทก",
+  "part-water": "ชั้นลดการเปียก",
+};
+
+function materialName(materialId: string): string {
+  return LAB_MATERIALS.find((material) => material.id === materialId)?.name ?? materialId;
+}
 
 function friendlyError(error: unknown): string {
   if (error instanceof Error) {
@@ -359,14 +400,14 @@ export function TeacherDashboard() {
 }
 
 function TeacherTeamCard({ team, run, missionFilter, canDelete, onOpen, onDelete }: { team: TeamOverview; run: TeamOverview["activeRun"]; missionFilter: DashboardMissionFilter; canDelete: boolean; onOpen: () => void; onDelete: () => void }) {
-  const progress = run ? runProgress(run) : 0;
+  const progress = run ? runProgress(run, team.members) : 0;
   const attendance = run ? attendanceForRun(team, run) : [];
   const presentCount = attendance.filter((member) => member.present).length;
   const missionRuns = runsForMission(team, missionFilter);
   return <article className="teacher-team-card">
     <header><div className="teacher-avatar-stack">{team.members.slice(0, 5).map((member) => <img key={member.id ?? member.name} src={`${BASE_PATH}/assets/profiles/${member.avatar}.png`} alt="" />)}</div><span className={run?.status === "in_progress" ? "active" : run ? "complete" : "not-started"}>{run?.status === "in_progress" ? "กำลังทำ" : run ? "ทำเสร็จแล้ว" : "ยังไม่เริ่ม"}</span></header>
     <h3>{team.name}</h3><p>{team.members.map((member) => member.name).join(" · ")}</p>
-    {run && <div className="teacher-card-meta"><span>ภารกิจที่ {missionNumberForRun(run)}</span><span>มา {presentCount}/{attendance.length} คน</span></div>}
+    {run && <div className="teacher-card-meta"><span>ภารกิจที่ {missionNumberForRun(run)} · รอบที่ {attemptNumberForTrackedRun(run, team.runs)}</span><span>มา {presentCount}/{attendance.length} คน</span></div>}
     <div className="teacher-progress-label"><span>{run ? STAGE_LABELS[run.currentStage] : "ยังไม่เริ่มภารกิจ"}</span><b>{progress}%</b></div><div className="teacher-progress"><i style={{ width: `${progress}%` }} /></div>
     <footer><div><span>ระยะเวลา</span><b>{run ? formatDuration(run.startedAt, run.completedAt) : "-"}</b></div><div><span>รอบในตัวกรองนี้</span><b>{missionRuns.length}</b></div><div className="teacher-card-actions"><button className="teacher-detail-button" onClick={onOpen}>ดูรายละเอียด →</button>{canDelete && <button className="teacher-delete-button" onClick={onDelete} aria-label={`ลบทีม ${team.name}`}>ลบทีม</button>}</div></footer>
   </article>;
@@ -401,15 +442,22 @@ function TeacherDetailPanel({ team, detail, missionFilter, loading, onClose }: {
   const presentCount = attendance.filter((member) => member.present).length;
   return <div className="teacher-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="teacher-detail-panel" aria-label={`รายละเอียด ${team.name}`}>
     <header><div><span>{missionFilterLabel(missionFilter)}</span><h2>{team.name}</h2><p>{team.members.map((member) => member.name).join(" · ")}</p></div><button aria-label="ปิด" onClick={onClose}><AppIcon name="x" /></button></header>
-    {candidateRuns.length > 0 && <label className="teacher-run-picker">รอบภารกิจ<select value={runId} onChange={(event) => setRunId(event.target.value)}>{candidateRuns.map((item, index) => <option value={item.id} key={item.id}>ภารกิจที่ {missionNumberForRun(item)} · {item.status === "in_progress" ? "รอบปัจจุบัน" : `ประวัติรอบ ${candidateRuns.length - index}`} · {new Date(item.startedAt).toLocaleString("th-TH")}</option>)}</select></label>}
+    {candidateRuns.length > 0 && <label className="teacher-run-picker">รอบภารกิจ<select value={runId} onChange={(event) => setRunId(event.target.value)}>{candidateRuns.map((item) => <option value={item.id} key={item.id}>ภารกิจที่ {missionNumberForRun(item)} · รอบที่ {attemptNumberForTrackedRun(item, team.runs)}{item.status === "in_progress" ? " · กำลังทำ" : ""} · {new Date(item.startedAt).toLocaleString("th-TH")}</option>)}</select></label>}
     {loading && !detail ? <div className="teacher-empty">กำลังโหลดรายละเอียด…</div> : run ? <div className="teacher-detail-content">
-      <div className="teacher-detail-summary"><div><span>ภารกิจ</span><b>ภารกิจที่ {missionNumberForRun(run)}</b></div><div><span>สถานะ</span><b>{run.status === "in_progress" ? "กำลังทำ" : "สำเร็จแล้ว"}</b></div><div><span>ขั้นล่าสุด</span><b>{STAGE_LABELS[run.currentStage]}</b></div><div><span>เวลา</span><b>{formatDuration(run.startedAt, run.completedAt)}</b></div></div>
+      <div className="teacher-detail-summary"><div><span>ภารกิจและรอบ</span><b>ภารกิจที่ {missionNumberForRun(run)} · รอบที่ {attemptNumberForTrackedRun(run, team.runs)}</b></div><div><span>สถานะ</span><b>{run.status === "in_progress" ? "กำลังทำ" : "สำเร็จแล้ว"}</b></div><div><span>ขั้นล่าสุด</span><b>{STAGE_LABELS[run.currentStage]}</b></div><div><span>เวลา</span><b>{formatDuration(run.startedAt, run.completedAt)}</b></div></div>
       <section className="teacher-attendance-section"><h3>การเข้าเรียนประจำภารกิจ <span>มา {presentCount}/{attendance.length} คน</span></h3><div className="teacher-attendance-list">{attendance.map((member, index) => <article className={member.present ? "present" : "absent"} key={member.id ?? `${member.name}-${index}`}><img src={`${BASE_PATH}/assets/profiles/${member.avatar}.png`} alt="" /><div><b>{(member.position ?? index) + 1}. {member.name}</b><span>{member.present ? "มาเรียน" : "ไม่มาเรียน"}</span></div></article>)}</div></section>
       <section><h3>คำตอบรายบุคคล</h3>{responses.length ? <div className="teacher-response-list">{responses.map((response) => <article key={response.id}><header><b>{response.memberName}</b><span>{new Date(response.savedAt).toLocaleString("th-TH")}</span></header><p><i>K</i>{response.k || "-"}</p><p><i>P</i>{response.p || "-"}</p><p><i>V</i>{response.v || "-"}</p></article>)}</div> : <div className="teacher-inline-empty">ยังไม่มีคำตอบรายบุคคล</div>}</section>
       <section><h3>คำตอบจากหน้าหมุนกล่อง 3 มิติ</h3><div className="teacher-chip-list">{Object.entries(run.saveState.inspectionFindings ?? {}).map(([damageId, cause]) => <span key={damageId}>{DAMAGE_LABELS[damageId] ?? damageId} → {cause}</span>)}{!Object.keys(run.saveState.inspectionFindings ?? {}).length && <em>ยังไม่ได้บันทึกคำตอบ</em>}</div></section>
       <section><h3>ภารกิจของกล่องที่ทีมเลือก</h3><div className="teacher-chip-list">{BOX_MISSION_GOALS.filter((goal) => run.saveState.boxMissionGoals?.[goal.id]).map((goal) => <span key={goal.id}>{goal.label}</span>)}{!Object.values(run.saveState.boxMissionGoals ?? {}).some(Boolean) && <em>ยังไม่ได้เลือก</em>}</div></section>
       <section><h3>สิ่งที่ทีมเลือกศึกษา</h3><div className="teacher-chip-list">{Object.entries(run.saveState.studyFocus ?? {}).filter(([, selected]) => selected).map(([key]) => <span key={key}>{studyTopicLabel(key)}</span>)}{!Object.values(run.saveState.studyFocus ?? {}).some(Boolean) && <em>ยังไม่ได้เลือก</em>}</div></section>
       {Object.keys(run.saveState.recapAnswers ?? {}).length > 0 && <section><h3>คำตอบร่วมกันหลังการทดลอง</h3><div className="teacher-recap-list">{Object.entries(run.saveState.recapAnswers).map(([questionIndex, choices]) => { const item = RECAP[Number(questionIndex)]; return <article key={questionIndex}><b>{item?.question ?? `คำถามที่ ${Number(questionIndex) + 1}`}</b><span>{choices.map((choice) => item?.choices[choice]?.label ?? `ตัวเลือก ${choice + 1}`).join(" → ")}</span></article>; })}</div></section>}
+      {missionNumberForRun(run) === 3 && <>
+        <section><h3>วัสดุที่ทีมเลือก</h3><div className="teacher-chip-list">{Object.entries(run.saveState.mission3Selections ?? {}).map(([role, materialId]) => <span key={role}>{MISSION_THREE_ROLE_LABELS[role] ?? role} → {materialName(materialId)}</span>)}{!Object.keys(run.saveState.mission3Selections ?? {}).length && <em>ยังไม่ได้เลือก</em>}</div></section>
+        <section><h3>วัสดุเหลือใช้</h3><div className="teacher-chip-list">{(() => { const role = Object.keys(run.saveState.mission3Reuse ?? {}).find((key) => run.saveState.mission3Reuse?.[key]); const materialId = run.saveState.mission3ReuseMaterial || (role ? run.saveState.mission3Selections?.[role] : ""); return role && materialId ? <span>{MISSION_THREE_ROLE_LABELS[role] ?? role} → {materialName(materialId)}</span> : <em>ยังไม่ได้เลือก</em>; })()}</div></section>
+        <section><h3>แบบจัดวางของทีม</h3><div className="teacher-chip-list">{Object.entries(run.saveState.mission3Placements ?? {}).map(([zone, layer]) => <span key={zone}>{MISSION_THREE_ZONE_LABELS[zone] ?? zone} → {MISSION_THREE_LAYER_LABELS[layer] ?? layer}</span>)}{!Object.keys(run.saveState.mission3Placements ?? {}).length && <em>ยังไม่ได้จัดวาง</em>}</div></section>
+        <section><h3>เหตุผลสรุปของทีม</h3><div className="teacher-recap-list">{Object.entries(run.saveState.mission3Reasons ?? {}).map(([role, reason]) => <article key={role}><b>{MISSION_THREE_ROLE_LABELS[role] ?? role}</b><span>{MISSION_THREE_REASON_LABELS[reason] ?? reason}</span></article>)}{!Object.keys(run.saveState.mission3Reasons ?? {}).length && <div className="teacher-inline-empty">ยังไม่ได้สรุปเหตุผล</div>}</div></section>
+        <section><h3>ความคืบหน้าการสร้าง</h3><div className="teacher-chip-list"><span>ทำเสร็จ {Object.entries(run.saveState.mission3BuildSteps ?? {}).filter(([key, done]) => key.startsWith("build-v2-") && done).length}/7 ขั้น</span></div></section>
+      </>}
       <section><h3>กิจกรรมตามลำดับเวลา</h3>{events.length ? <ol className="teacher-timeline">{events.map((event) => <li key={event.id}><i /><div><b>{EVENT_LABELS[event.eventType] ?? event.eventType}</b><span>{STAGE_LABELS[event.stage] ?? event.stage}</span><small>{event.memberName ? `${event.memberName} · ` : ""}{new Date(event.occurredAt).toLocaleString("th-TH")}</small></div></li>)}</ol> : <div className="teacher-inline-empty">ยังไม่มีกิจกรรมที่บันทึกไว้</div>}</section>
     </div> : <div className="teacher-empty">ทีมนี้ยังไม่เคยเริ่มภารกิจ</div>}
   </aside></div>;

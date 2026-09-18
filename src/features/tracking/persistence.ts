@@ -20,6 +20,8 @@ type DbMember = { id: string; name: string; avatar: string; position: number; is
 type DbRun = {
   id: string;
   team_id: string;
+  mission_number?: 1 | 2 | 3 | 4 | 5 | null;
+  attempt_number?: number | null;
   status: "in_progress" | "completed";
   current_stage: Stage;
   save_state: GameSave;
@@ -59,6 +61,8 @@ function asRun(row: DbRun, members: TrackedTeamMember[] = []): TrackedRun {
   return {
     id: row.id,
     teamId: row.team_id,
+    missionNumber: row.mission_number ?? undefined,
+    attemptNumber: row.attempt_number ?? undefined,
     status: row.status,
     currentStage: row.current_stage,
     saveState,
@@ -95,6 +99,8 @@ function rpcRun(value: unknown, members: TeamMember[] = []): TrackedRun {
   const row: DbRun = {
     id: String(data.id),
     team_id: String(data.team_id),
+    mission_number: data.mission_number ? Number(data.mission_number) as 1 | 2 | 3 | 4 | 5 : null,
+    attempt_number: data.attempt_number ? Number(data.attempt_number) : null,
     status: data.status === "completed" ? "completed" : "in_progress",
     current_stage: (data.current_stage as Stage) ?? "story",
     save_state: (data.save_state as GameSave) ?? { ...EMPTY_SAVE, team: members },
@@ -113,31 +119,32 @@ function requireClient() {
   return client;
 }
 
-function isRosterCompatibilityError(error: unknown) {
-  const message = error && typeof error === "object" && "message" in error
+function databaseErrorMessage(error: unknown) {
+  return error && typeof error === "object" && "message" in error
     ? String((error as { message?: unknown }).message ?? "")
     : error instanceof Error ? error.message : String(error ?? "");
-  return /is_active|team_members.*column|column .*team_members/i.test(message);
 }
 
 export async function listTeams(): Promise<TeamOverview[]> {
   const client = requireClient();
-  const current = await client
-    .from("teams")
-    .select("id,name,created_at,updated_at,team_members(id,name,avatar,position,is_active),game_runs(id,team_id,status,current_stage,save_state,revision,started_at,updated_at,completed_at,legacy_run_id)")
-    .eq("status", "active")
-    .order("updated_at", { ascending: false });
-  let data: unknown = current.data;
-  let error = current.error;
-  // Keep existing classrooms readable while the roster migration is being deployed.
-  if (error && isRosterCompatibilityError(error)) {
-    const legacy = await client
-      .from("teams")
-      .select("id,name,created_at,updated_at,team_members(id,name,avatar,position),game_runs(id,team_id,status,current_stage,save_state,revision,started_at,updated_at,completed_at,legacy_run_id)")
-      .eq("status", "active")
-      .order("updated_at", { ascending: false });
-    data = legacy.data;
-    error = legacy.error;
+  const baseRunFields = "id,team_id,status,current_stage,save_state,revision,started_at,updated_at,completed_at,legacy_run_id";
+  // Both mission-attempt identity and archived-roster support were introduced
+  // by migrations. Try all compatible projections so the UI remains usable
+  // during a rolling deployment.
+  const selections = [
+    `id,name,created_at,updated_at,team_members(id,name,avatar,position,is_active),game_runs(${baseRunFields},mission_number,attempt_number)`,
+    `id,name,created_at,updated_at,team_members(id,name,avatar,position,is_active),game_runs(${baseRunFields})`,
+    `id,name,created_at,updated_at,team_members(id,name,avatar,position),game_runs(${baseRunFields},mission_number,attempt_number)`,
+    `id,name,created_at,updated_at,team_members(id,name,avatar,position),game_runs(${baseRunFields})`,
+  ];
+  let data: unknown = null;
+  let error: unknown = null;
+  for (const selection of selections) {
+    const result = await client.from("teams").select(selection).eq("status", "active").order("updated_at", { ascending: false });
+    data = result.data;
+    error = result.error;
+    if (!error) break;
+    if (!/is_active|mission_number|attempt_number|column/i.test(databaseErrorMessage(error))) break;
   }
   if (error) throw error;
   return ((data ?? []) as unknown as DbTeam[]).map(asTeam);
@@ -201,11 +208,11 @@ export async function updateTeamMembers(teamId: string, members: TeamMember[]): 
 }
 
 type PlayableMissionNumber = 1 | 2 | 3;
-type RunSeedCarry = Partial<Pick<GameSave, "mission1Completed" | "mission2Completed" | "mission3Completed" | "bigQuestionProgress">>;
+export type RunSeedCarry = Partial<GameSave>;
 
 function missionEntryStage(missionNumber: PlayableMissionNumber): Stage {
   if (missionNumber === 2) return "mission2Intro";
-  if (missionNumber === 3) return "mission3Intro";
+  if (missionNumber === 3) return "mission3Review";
   return "mission";
 }
 
@@ -312,6 +319,17 @@ function writeOutbox(items: OutboxItem[]): void {
     outboxStorageFailed = true;
     throw error;
   }
+}
+
+/**
+ * Drop only the stale queue for a run after the caller has explicitly chosen
+ * the newer server checkpoint. Other teams/runs remain safely queued.
+ */
+export function adoptServerRun(serverRun: TrackedRun): TrackedRun {
+  acknowledgedRuns.set(serverRun.id, serverRun);
+  memoryOutbox = readOutbox().filter((queued) => queued.run.id !== serverRun.id);
+  writeOutbox(memoryOutbox);
+  return serverRun;
 }
 
 function enqueue(item: OutboxItem): void {

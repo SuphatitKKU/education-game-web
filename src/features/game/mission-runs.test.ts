@@ -6,13 +6,15 @@ import {
   completedMissionsForTeam,
   finishMissionState,
   latestRunForTeamMission,
+  missionTwoEvidenceForTeam,
+  missionTwoAnswerProgress,
   nextUnlockMission,
   runMissionNumber,
   visibleCompletedMissions,
 } from "./mission-runs";
 
 function trackedRun(mission: 1 | 2 | 3, status: TrackedRun["status"] = "in_progress"): TrackedRun {
-  const currentStage = mission === 1 ? "mission" : mission === 2 ? "mission2Intro" : "mission3Intro";
+  const currentStage = mission === 1 ? "mission" : mission === 2 ? "mission2Intro" : "mission3Review";
   return {
     id: `run-${mission}-${status}`,
     teamId: "team-1",
@@ -66,6 +68,58 @@ describe("mission run history", () => {
   it("recognizes persisted completion history after the active run is cleared", () => {
     const completed = trackedRun(1, "completed");
     expect(visibleCompletedMissions(team([completed], null), EMPTY_SAVE)).toEqual([1]);
+  });
+
+  it("loads the newest Mission 2 attempt that contains the group's recorded evidence", () => {
+    const recorded = trackedRun(2, "completed");
+    recorded.id = "mission-2-recorded";
+    recorded.attemptNumber = 1;
+    recorded.saveState = {
+      ...recorded.saveState,
+      compressionResults: { corrugated_cardboard: { materialId: "corrugated_cardboard", deformationMm: 3, measurements: [3] } },
+      impactResults: { corrugated_cardboard: {
+        materialId: "corrugated_cardboard",
+        observation: "slight",
+        simulatedDamage: "slight",
+        method: "egg-drop-v1",
+        modelVersion: "illustrative-v1",
+        conditions: { object: "same-model-egg", height: "fixed", specimen: "equal-size" },
+      } },
+      absorptionResults: { corrugated_cardboard: { materialId: "corrugated_cardboard", riseCm: 1.5, summary: "รอยน้ำ 1.5 ซม." } },
+    };
+    const emptyReplay = trackedRun(2, "completed");
+    emptyReplay.id = "mission-2-empty-replay";
+    emptyReplay.attemptNumber = 4;
+    emptyReplay.startedAt = "2026-09-17T00:00:00.000Z";
+
+    expect(missionTwoEvidenceForTeam(team([emptyReplay, recorded], null))).toEqual({
+      compressionResults: recorded.saveState.compressionResults,
+      impactResults: recorded.saveState.impactResults,
+      absorptionResults: recorded.saveState.absorptionResults,
+    });
+  });
+
+  it("requires saved complete Mission 2 answers from every group member", () => {
+    const second = trackedRun(2);
+    second.saveState = {
+      ...second.saveState,
+      team: [
+        { id: "one", name: "หนึ่ง", avatar: "inventor_sun", position: 0, present: true },
+        { id: "two", name: "สอง", avatar: "inventor_moon", position: 1, present: true },
+        { id: "absent", name: "ลา", avatar: "inventor_star", position: 2, present: false },
+      ],
+      mission2Assessments: {
+        "member-one": { k: "คำตอบ K", p: "คำตอบ P", v: "คำตอบ V" },
+        "member-two": { k: "คำตอบ K", p: "คำตอบ P", v: "" },
+      },
+      mission2AssessmentConfirmed: { "member-one": true, "member-two": true },
+    };
+    expect(missionTwoAnswerProgress(second)).toMatchObject({ completed: 1, total: 3, percent: 33, complete: false });
+    second.saveState.mission2Assessments["member-two"].v = "คำตอบ V";
+    expect(missionTwoAnswerProgress(second)).toMatchObject({ completed: 2, total: 3, complete: false });
+    second.saveState.mission2Assessments["member-absent"] = { k: "คำตอบ K", p: "คำตอบ P", v: "คำตอบ V" };
+    second.saveState.mission2AssessmentConfirmed["member-absent"] = true;
+    expect(missionTwoAnswerProgress(second).complete).toBe(true);
   });
 
   it("keeps prerequisite missions unlocked when a later mission is already active", () => {

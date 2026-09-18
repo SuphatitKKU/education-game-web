@@ -1,12 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { GameSave, MissionThreeDesign } from "./data";
+import { useMemo, useState } from "react";
+import type { GameSave, MissionThreeLayer, MissionThreeZone } from "./data";
 import { LAB_MATERIALS } from "./labs";
 import styles from "./MissionThree.module.css";
 import { AppIcon, type AppIconName } from "@/components/AppIcon";
 
-export type MissionThreeStage = "mission3Intro" | "mission3Data" | "mission3Materials" | "mission3Design" | "mission3Reason" | "mission3Complete";
+export type MissionThreeStage =
+  | "mission3Review"
+  | "mission3Question"
+  | "mission3Intro"
+  | "mission3Data"
+  | "mission3Parts"
+  | "mission3Materials"
+  | "mission3Design"
+  | "mission3Build"
+  | "mission3Reason"
+  | "mission3Complete";
 
 type MissionThreeProps = {
   stage: MissionThreeStage;
@@ -18,279 +28,666 @@ type MissionThreeProps = {
   onFinish: () => void;
 };
 
-const ROLE_DEFINITIONS = [
-  { key: "structure", label: "โครงกล่อง", icon: "package", color: "blue", hint: "รับแรงกด ไม่ยุบง่าย", evidence: "compression" },
-  { key: "impact", label: "วัสดุกันกระแทก", icon: "egg", color: "purple", hint: "ลดความเสียหายของสิ่งของ", evidence: "impact" },
-  { key: "water", label: "ชั้นป้องกันน้ำ", icon: "drop", color: "cyan", hint: "ลดการเปียกและการซึม", evidence: "water" },
-  { key: "filler", label: "วัสดุเติมช่องว่าง", icon: "sparkles", color: "yellow", hint: "ลดการเคลื่อนที่ของของด้านใน", evidence: "impact" },
-  { key: "joints", label: "จุดเชื่อมต่อ/ปิดฝากล่อง", icon: "waves", color: "green", hint: "ยึดส่วนประกอบให้คงรูป", evidence: "compression" },
+type RoleKey = "structure" | "impact" | "water";
+type MaterialStep = RoleKey | "reuse";
+
+const PART_GUIDE_ITEMS: readonly {
+  key: MaterialStep;
+  label: string;
+  detail: string;
+  icon: AppIconName;
+}[] = [
+  { key: "structure", label: "โครงกล่อง", detail: "รับแรงกดและช่วยให้กล่องคงรูป", icon: "package" },
+  { key: "impact", label: "ชั้นกันกระแทก", detail: "ช่วยลดความเสียหายของสิ่งของ", icon: "egg" },
+  { key: "water", label: "ชั้นลดการเปียก", detail: "ช่วยชะลอน้ำซึมเข้าสู่กล่อง", icon: "drop" },
+  { key: "reuse", label: "เลือกวัสดุเหลือใช้", detail: "เลือกใช้วัสดุเหลือใช้อย่างน้อย 1 ส่วน", icon: "recycle" },
 ] as const;
 
-const GOALS = [
-  ["package", "กล่องไม่ยุบง่าย"],
-  ["shield", "ช่วยกันกระแทก"],
-  ["drop", "ช่วยกันเปียก"],
-  ["recycle", "ใช้วัสดุเก่าให้คุ้มค่า"],
+const ROLE_DEFINITIONS: readonly {
+  key: RoleKey;
+  label: string;
+  short: string;
+  icon: AppIconName;
+  hint: string;
+  evidence: "compression" | "impact" | "water";
+}[] = [
+  {
+    key: "structure",
+    label: "โครงกล่อง",
+    short: "รับแรงกด",
+    icon: "package",
+    hint: "เลือกวัสดุที่ยุบหรือเปลี่ยนรูปน้อยกว่า",
+    evidence: "compression",
+  },
+  {
+    key: "impact",
+    label: "ชั้นกันกระแทก",
+    short: "ป้องกันสิ่งของ",
+    icon: "egg",
+    hint: "เลือกวัสดุที่ทำให้สิ่งของเสียหายน้อยกว่า",
+    evidence: "impact",
+  },
+  {
+    key: "water",
+    label: "ชั้นลดการเปียก",
+    short: "ชะลอน้ำซึม",
+    icon: "drop",
+    hint: "เลือกวัสดุที่มีรอยเปียกหรือดูดซับน้ำน้อยกว่า",
+    evidence: "water",
+  },
 ] as const;
 
-const STEPS = ["รับภารกิจ", "อ่านหลักฐาน", "ออกแบบและเลือกวัสดุ", "สรุปและเตรียมสร้างจริง"] as const;
+const ZONES: readonly { key: MissionThreeZone; label: string; detail: string; icon: AppIconName }[] = [
+  { key: "outside", label: "ด้านนอกกล่อง", detail: "ชั้นนอกสุด", icon: "box" },
+  { key: "inside", label: "ด้านในกล่อง", detail: "ชั้นกลาง", icon: "package" },
+  { key: "around", label: "รอบสิ่งของ", detail: "ชั้นใกล้แก้ว", icon: "shield" },
+] as const;
+
+const REASON_OPTIONS = [
+  { value: "compression", label: "ยุบหรือเปลี่ยนรูปน้อยกว่า" },
+  { value: "impact", label: "ทำให้สิ่งของเสียหายน้อยกว่า" },
+  { value: "water", label: "มีรอยเปียกหรือดูดซับน้ำน้อยกว่า" },
+] as const;
+
+const REVIEW_ITEMS = [
+  {
+    cause: "แรงกด",
+    evidence: "กล่องยุบ",
+    image: "inspection/damaged_box_preview_top.png",
+    imageAlt: "รอยยุบด้านบนของกล่อง",
+    property: "ทดสอบความต้านทานแรงกดทับ",
+    icon: "package" as AppIconName,
+  },
+  {
+    cause: "แรงกระแทก",
+    evidence: "สิ่งของภายในเสียหาย",
+    image: "cutscene/shot_09_cracked_cup.png",
+    imageAlt: "สิ่งของภายในกล่องเสียหาย",
+    property: "ทดสอบการลดความเสียหายจากแรงกระแทก",
+    icon: "shield" as AppIconName,
+  },
+  {
+    cause: "น้ำ",
+    evidence: "กล่องเปียก",
+    image: "inspection/damaged_box_preview_wet.png",
+    imageAlt: "รอยเปียกบนกล่อง",
+    property: "ทดสอบการดูดซับน้ำของวัสดุ",
+    icon: "drop" as AppIconName,
+  },
+] as const;
 
 function asset(path: string) {
   const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
   return `${base}/assets/${path}`;
 }
 
+function materialById(id?: string) {
+  return LAB_MATERIALS.find((material) => material.id === id);
+}
+
 function formatCompression(save: GameSave, materialId: string) {
   const result = save.compressionResults?.[materialId];
-  if (!result) return "ยังไม่มีผล";
+  if (!result || (result.deformationMm === undefined && !result.measurements?.length)) return "ยังไม่มีผลแรงกด";
   return `ยุบ ${result.deformationMm ?? result.measurements?.at(-1) ?? 0} มม.`;
 }
 
 function formatImpact(save: GameSave, materialId: string) {
   const result = save.impactResults?.[materialId];
-  if (!result) return "ยังไม่มีผล";
-  return ({ none: "เสียหายน้อยมาก", slight: "เสียหายเล็กน้อย", much: "เสียหายมาก" } as const)[result.observation];
+  if (!result) return "ยังไม่มีผลแรงกระแทก";
+  return ({ none: "สิ่งของเสียหายน้อยมาก", slight: "สิ่งของเสียหายเล็กน้อย", much: "สิ่งของเสียหายมาก" } as const)[result.observation];
 }
 
 function formatWater(save: GameSave, materialId: string) {
   const result = save.absorptionResults?.[materialId];
-  return result ? result.riseCm !== undefined ? `รอยเปียก ${result.riseCm.toFixed(1)} ซม. · ${result.modelLevel ?? "ยังไม่จัดกลุ่ม"}` : `ดูดซับ ${result.absorbed ?? 0} หน่วย` : "ยังไม่มีผล";
+  if (!result || (result.riseCm === undefined && result.absorbed === undefined && !result.summary)) return "ยังไม่มีผลการดูดซับน้ำ";
+  if (result.riseCm !== undefined) return `รอยเปียก ${result.riseCm.toFixed(1)} ซม.`;
+  return `ดูดซับ ${result.absorbed ?? 0} หน่วย`;
 }
 
-function evidenceFor(save: GameSave, materialId: string, evidence: (typeof ROLE_DEFINITIONS)[number]["evidence"]) {
+function evidenceFor(save: GameSave, materialId: string, evidence: "compression" | "impact" | "water") {
   if (evidence === "compression") return formatCompression(save, materialId);
   if (evidence === "water") return formatWater(save, materialId);
   return formatImpact(save, materialId);
 }
 
-function materialById(id?: string) {
-  return LAB_MATERIALS.find((material) => material.id === id);
+function layerRole(layer?: MissionThreeLayer): RoleKey | null {
+  if (!layer) return null;
+  if (layer === "structure") return "structure";
+  return layer.startsWith("impact") ? "impact" : "water";
 }
 
-function MissionThreeProgress({ active }: { active: number }) {
-  const [expanded, setExpanded] = useState(true);
-  const stepLabel = STEPS[active - 1] ?? STEPS[0];
-
-  useEffect(() => {
-    if (!expanded) return;
-    const timer = window.setTimeout(() => setExpanded(false), 3800);
-    return () => window.clearTimeout(timer);
-  }, [active, expanded]);
-
-  return <aside className={`${styles.missionProgress} ${expanded ? "" : styles.progressCollapsed}`} role="status" aria-label={`ภารกิจที่ 3 ช่วงที่ ${active} จาก ${STEPS.length} ${stepLabel}`}>
-    {expanded ? <div className={styles.progressDetails}>
-      <div className={styles.progressHeading}><span>ภารกิจที่ 3</span><b>ช่วงที่ {active}/{STEPS.length}</b></div>
-      <strong><AppIcon name="package" />{stepLabel}</strong>
-      <div className={styles.progressTrack} role="progressbar" aria-label="ความคืบหน้าภารกิจที่ 3" aria-valuemin={1} aria-valuemax={STEPS.length} aria-valuenow={active}>
-        <i style={{ width: `${Math.round((active / STEPS.length) * 100)}%` }} />
-      </div>
-    </div> : <button className={styles.progressToggle} type="button" aria-label={`เปิดดูความคืบหน้า ช่วงที่ ${active} จาก ${STEPS.length}`} onClick={() => setExpanded(true)}>
-      <span aria-hidden="true">•••</span>
-    </button>}
-  </aside>;
+function layerLabel(layer: MissionThreeLayer, save: GameSave) {
+  const role = layerRole(layer)!;
+  const material = materialById(save.mission3Selections?.[role]);
+  const label = ROLE_DEFINITIONS.find((item) => item.key === role)?.label ?? "ส่วนของกล่อง";
+  return `${label}${layer.endsWith("extra") ? " (ชิ้นเสริม)" : ""} · ${material?.name ?? "ยังไม่เลือกวัสดุ"}`;
 }
 
-function ScreenHeader({ step, title, subtitle, onBack, centered = false }: { step: number; title: string; subtitle: string; onBack: () => void; centered?: boolean }) {
+function ScreenHeader({ title, subtitle, onBack }: { title: string; subtitle: string; onBack: () => void }) {
   return <>
     <button className={styles.back} type="button" onClick={onBack}>‹ ย้อนกลับ</button>
-    <header className={`${styles.header} ${centered ? styles.centeredHeader : ""}`}>
-      <div>{!centered && <span>ภารกิจที่ 3 · ออกแบบและสร้าง</span>}<h1>{title}</h1><p>{subtitle}</p></div>
-      <div className={styles.headerBadge}>ขั้นที่ <b>{step}/6</b></div>
+    <header className={`${styles.header} ${styles.lessonHeader} ${styles.centeredHeader}`}>
+      <div><h1>{title}</h1><p>{subtitle}</p></div>
     </header>
-    <MissionThreeProgress active={step} />
   </>;
 }
 
+function PartOutlineGraphic({ part }: { part: RoleKey }) {
+  if (part === "structure") return <svg viewBox="0 0 220 120" role="img" aria-label="ภาพเส้นประรูปโครงกล่อง">
+    <path d="M45 40 110 14l65 26-65 28Z" />
+    <path d="M45 40v48l65 26V68m65-28v48l-65 26" />
+    <path d="m45 40 65 25 65-25" />
+  </svg>;
+  if (part === "impact") return <svg viewBox="0 0 220 120" role="img" aria-label="ภาพเส้นประรูปชั้นกันกระแทก">
+    <path d="M45 43 104 18c5-2 10-2 15 0l56 24c6 3 6 9 0 12l-58 27c-5 2-10 2-15 0L45 56c-7-3-7-10 0-13Z" />
+    <path d="M40 49v20c0 4 2 7 7 9l55 25c5 2 10 2 15 0l57-27c4-2 6-5 6-9V48" />
+    <path d="m104 82-1 20m14-21v21" />
+    <path d="M68 43c9-4 17-4 25 0 8 5 17 5 26 0 8-4 17-4 26 0" />
+    <path d="M64 60c9-4 18-4 26 0s17 4 26 0 17-4 26 0" />
+  </svg>;
+  return <svg viewBox="0 0 220 120" role="img" aria-label="ภาพเส้นประรูปชั้นลดการเปียก">
+    <path d="M35 41c24-15 45 12 69-3s46 12 81-3v53c-35 15-57-12-81 3S59 79 35 94Z" />
+    <path d="M111 28c-13 18-20 27-20 38a20 20 0 0 0 40 0c0-11-7-20-20-38Z" />
+  </svg>;
+}
+
+function MissionThreeReview({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+  return <div className={`screen mission-two-screen mission-two-review-screen ${styles.mission3Review}`}>
+    <button className="button button-white mission-two-back" type="button" onClick={onBack}>‹ กลับหน้าภารกิจ</button>
+    <header><span>ทบทวนภารกิจที่ 1 และ 2</span><h1>สิ่งที่เราทำมาแล้ว</h1><p>เราพบร่องรอย แล้วทดลองสมบัติของวัสดุที่เกี่ยวข้อง</p></header>
+    <main className="mission-two-review-table" role="table" aria-label="ทบทวนร่องรอยและการทดลองที่ผ่านมา">
+      <div className="mission-two-review-table-head" role="row"><span /><b>ร่องรอยที่พบ</b><span /><b>สิ่งที่เราทดลอง</b></div>
+      {REVIEW_ITEMS.map((item, index) => <article key={item.cause} role="row">
+        <strong>{index + 1}</strong>
+        <div className="mission-two-review-evidence" role="cell"><img src={asset(item.image)} alt={item.imageAlt} /><span><b>{item.evidence}</b><em>{item.cause}</em></span></div>
+        <i className="mission-two-review-arrow" aria-hidden="true"><svg viewBox="0 0 120 48" focusable="false"><path d="M6 24h91" /><path d="m82 7 17 17-17 17" /></svg></i>
+        <div className="mission-two-review-property" role="cell"><AppIcon name={item.icon} /><span><b>{item.property}</b></span></div>
+      </article>)}
+    </main>
+    <footer className="mission-two-review-footer"><p><b>ตอนนี้เรามีหลักฐานแล้ว</b><span>ต่อไปมาดูว่าเราจะใช้หลักฐานนี้สร้างกล่องอย่างไร</span></p><button className={`button ${styles.mission3Primary}`} type="button" onClick={onNext}>ไปดูคำถามสำคัญ ›</button></footer>
+  </div>;
+}
+
+function MissionThreeQuestion({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+  return <div className={`screen mission-two-screen mission-two-question-screen ${styles.mission3Question}`}>
+    <button className="button button-white mission-two-back" type="button" onClick={onBack}>‹ กลับไปทบทวน</button>
+    <section className="mission-two-question-card" aria-labelledby="mission-three-question-title">
+      <div className="mission-two-question-symbol"><AppIcon name="message" /></div>
+      <span className="mission-two-question-label">คำถามสำคัญของภารกิจ</span>
+      <h1 id="mission-three-question-title"><span>เราจะเลือกวัสดุและจัดวางส่วนต่าง ๆ อย่างไร</span><span>ให้กล่องแข็งแรง กันกระแทก และช่วยลดการเปียก?</span></h1>
+      <p>ใช้ผลทดลองจากภารกิจที่ 2 เป็นหลักฐาน แล้วสร้างกล่องตามข้อกำหนด</p>
+      <button className={`button mission-two-question-start ${styles.mission3Primary}`} type="button" onClick={onNext}>ไปดูภาพรวมภารกิจ ›</button>
+    </section>
+  </div>;
+}
+
 function MissionThreeIntro({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
-  const [showGoals, setShowGoals] = useState(false);
-  return <div className={`screen mission-briefing-screen ${styles.welcomeScreen}`}>
+  return <div className={`screen mission-two-screen mission-two-intro mission-two-welcome-screen ${styles.mission3Welcome}`}>
     <img className="mission-route-bg" src={asset("menu/cover.png")} alt="" />
-    <button className="mission-briefing-back" type="button" onClick={() => showGoals ? setShowGoals(false) : onBack()}>‹ {showGoals ? "ย้อนกลับ" : "กลับหน้าภารกิจ"}</button>
-    <MissionThreeProgress active={1} />
-    <main key={showGoals ? "goals" : "welcome"} className={`mission-briefing-card ${styles.welcomeCard} ${showGoals ? styles.goalsCard : ""}`}>
-      {!showGoals ? <>
-        <span className={`mission-briefing-mission-badge ${styles.welcomeMissionBadge}`}>ภารกิจที่ 3</span>
-        <div className="mission-briefing-illustration" aria-hidden="true">
-          <AppIcon className={styles.welcomeToolIcon} name="hammer" />
-        </div>
-        <h1>ออกแบบและสร้างกล่องพัสดุ</h1>
-        <p className={styles.welcomeCopy}>นำผลจากภารกิจที่ 2 มาเลือกวัสดุจริงและออกแบบกล่องของเรา</p>
-        <div className={styles.mission3Route} aria-label="เส้นทางภารกิจที่ 3">
-          <article><i>1</i><b>รับภารกิจ</b><span>รู้โจทย์ของกล่อง</span></article>
-          <article><i>2</i><b>อ่านหลักฐาน</b><span>ดูผลจากภารกิจที่ 2</span></article>
-          <article><i>3</i><b>ออกแบบ</b><span>เลือกวัสดุและวาดแบบ</span></article>
-          <article><i>4</i><b>สรุป</b><span>เตรียมสร้างจริง</span></article>
-        </div>
-        <button className={`button button-orange mission-briefing-start ${styles.welcomeStart}`} type="button" onClick={() => setShowGoals(true)}>รับภารกิจ <b aria-hidden="true"><span>›</span></b></button>
-      </> : <>
-        <span className={styles.welcomeLabel}>เป้าหมายของทีมเรา</span>
-        <h1>กล่องของเราต้องช่วยอะไรบ้าง?</h1>
-        <div className={styles.goalTiles}>{GOALS.map(([icon, label]) => <div key={label}><AppIcon name={icon as AppIconName} /><b>{label}</b></div>)}</div>
-        <p className={styles.firstAction}>เรารู้แล้วว่าต้องดูผลด้านใดสำหรับแต่ละส่วน<br />ต่อไปใช้ผลของทีมเลือกวัสดุจริงและออกแบบกล่อง</p>
-        <button className={`button button-orange mission-briefing-start ${styles.welcomeStart}`} type="button" onClick={onNext}>ไปดูผลทดลอง <b aria-hidden="true"><span>›</span></b></button>
-        <p className={styles.buildLater}>ออกแบบในเกม แล้วนำไปสร้างกล่องจริงกับครู</p>
-      </>}
+    <button className="mission-briefing-back mission-two-welcome-back" type="button" onClick={onBack}>‹ กลับไปดูคำถามสำคัญ</button>
+    <main className="mission-two-welcome-card">
+      <span className="mission-two-welcome-label">ภารกิจที่ 3</span>
+      <div className={`mission-two-welcome-illustrations ${styles.mission3WelcomeIcons}`} aria-hidden="true">
+        <span><AppIcon name="microscope" /></span><span><AppIcon name="map" /></span><span><AppIcon name="hammer" /></span>
+      </div>
+      <h1>ออกแบบและสร้างกล่องพัสดุต้นแบบ</h1>
+      <p className="mission-two-welcome-copy">ทีมเลือกวัสดุและตำแหน่งจัดวาง</p>
+      <div className="mission-two-route" aria-label="เส้นทางภารกิจที่ 3">
+        <article><i>1</i><b>ดูหลักฐาน</b><span>เลือกวัสดุจากผลทดลอง</span></article>
+        <article><i>2</i><b>จัดวาง 3 จุด</b><span>ด้านนอก ด้านใน รอบสิ่งของ</span></article>
+        <article><i>3</i><b>สร้างตาม 7 ขั้น</b><span>ใช้แม่แบบที่ครูเตรียม</span></article>
+        <article><i>4</i><b>สรุปคำตอบกลุ่ม</b><span>บันทึกสั้น ๆ ใน SIM</span></article>
+      </div>
+      <button
+        className={`button mission-briefing-start mission-two-primary ${styles.mission3Primary}`}
+        type="button"
+        onClick={onNext}
+      >เริ่มทำภารกิจ <b aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></svg></b></button>
     </main>
   </div>;
 }
 
 function MissionThreeData({ save, onNext, onBack }: { save: GameSave; onNext: () => void; onBack: () => void }) {
-  const resultState = (value: string) => value === "ยังไม่มีผล" ? <span className={styles.resultEmpty}>รอผลทดลอง</span> : <span className={styles.resultValue}>{value}</span>;
-  return <div className={`${styles.screen} ${styles.dataScreen}`}>
-    <ScreenHeader step={2} centered title="ผลการทดลองของทีมเรา" subtitle="ใช้ความเชื่อมโยงจากภารกิจที่ 2 แล้วเลือกวัสดุสำหรับแต่ละส่วนของกล่อง" onBack={onBack} />
-    <main className={styles.dataLayout}>
-      <aside className={styles.dataGuide}>
-        <div className={styles.coachHeader}>
-          <div className={styles.coachAvatar}><img src={asset("menu/mission-briefing-box.png")} alt="มาสคอตกล่องนักสืบ" /></div>
-          <div><span>ผู้ช่วยนักสืบ</span><b>เจ้ากล่องชวนคิด</b></div>
+  return <div className={`${styles.screen} ${styles.guidedScreen}`}>
+    <ScreenHeader title="ทบทวนผลการทดลองของกลุ่ม" subtitle="อ่านผลที่กลุ่มบันทึกไว้จากภารกิจที่ 2 ครบทั้ง 3 ด้าน" onBack={onBack} />
+    <main className={styles.resultsReview}>
+      <section className={styles.resultsTable} role="table" aria-label="ผลการทดลองวัสดุของกลุ่มทั้ง 3 ด้าน">
+        <div className={styles.resultsHead} role="row">
+          <b role="columnheader">วัสดุ</b>
+          <b role="columnheader"><img src={asset("menu/lab-room-compression.png")} alt="" /><span>ผลแรงกด</span></b>
+          <b role="columnheader"><img src={asset("menu/lab-room-impact.png")} alt="" /><span>ผลแรงกระแทก</span></b>
+          <b role="columnheader"><img src={asset("menu/lab-room-absorption.png")} alt="" /><span>ผลการดูดซับน้ำ</span></b>
         </div>
-        <div className={styles.coachSpeech}><b>อ่านให้ครบ 3 ช่อง</b><p>แล้วใช้ผลทดลองช่วยกันเลือกวัสดุ อย่าเพิ่งเลือกจากสีหรือความชอบนะ</p></div>
-        <div className={styles.readSteps}>
-          <div className={styles.readStep}><i className={styles.stepBlue}>1</i><span><b>กด</b><small>ยุบตัวน้อย เหมาะทำโครง</small></span></div>
-          <div className={styles.readStep}><i className={styles.stepPurple}>2</i><span><b>ตก</b><small>เสียหายน้อย เหมาะกันกระแทก</small></span></div>
-          <div className={styles.readStep}><i className={styles.stepCyan}>3</i><span><b>น้ำ</b><small>ดูดซับน้อย ช่วยกันเปียก</small></span></div>
-        </div>
-        <div className={styles.coachTip}><strong>ชวนคุยกับเพื่อน</strong><span>วัสดุไหนเด่นเรื่องไหนบ้าง?</span></div>
-      </aside>
-      <section className={styles.tableCard} aria-label="ตารางผลการทดลองจากภารกิจที่ 2">
-        <div className={styles.tableTitle}>
-          <div><span className={styles.boardKicker}><AppIcon name="microscope" /> ผลจากห้องทดลอง</span><b>สมุดหลักฐานของทีม</b><small>ดูผล → คุยกัน → เลือกวัสดุ</small></div>
-          <div className={styles.resultBadge}><b>{LAB_MATERIALS.length}</b><span>วัสดุให้เลือก</span></div>
-        </div>
-        <div className={styles.dataLegend} aria-label="วิธีอ่านหัวตาราง">
-          <span className={styles.legendBlue}><AppIcon name="package" /> <b>กด</b><small>โครงกล่อง</small></span>
-          <span className={styles.legendPurple}><AppIcon name="egg" /> <b>ตก</b><small>กันกระแทก</small></span>
-          <span className={styles.legendCyan}><AppIcon name="drop" /> <b>น้ำ</b><small>กันเปียก</small></span>
-        </div>
-        <div className={styles.tableScroll}><table><thead><tr><th>วัสดุ</th><th><AppIcon name="package" /> กด<small>ยุบตัวน้อยดีกว่า</small></th><th><AppIcon name="egg" /> ตก<small>เสียหายน้อยดีกว่า</small></th><th><AppIcon name="drop" /> น้ำ<small>ซึมน้อยดีกว่า</small></th></tr></thead><tbody>{LAB_MATERIALS.map((material) => <tr key={material.id}>
-          <th><img src={asset(`materials/${material.image}`)} alt="" /><span>{material.name}</span></th><td>{resultState(formatCompression(save, material.id))}</td><td>{resultState(formatImpact(save, material.id))}</td><td>{resultState(formatWater(save, material.id))}</td>
-        </tr>)}</tbody></table></div>
-        <div className={styles.tableCaption}><strong><AppIcon name="idea" /> ภารกิจตอนนี้</strong><span>หาหลักฐานมาช่วยตอบ: วัสดุไหนเหมาะทำโครง และวัสดุไหนช่วยกันน้ำ?</span></div>
+        {LAB_MATERIALS.map((material) => <article key={material.id} className={styles.resultsRow} role="row">
+          <div className={styles.materialIdentity} role="cell"><img width="72" height="72" src={asset(`materials/${material.image}`)} alt="" /><strong>{material.name}</strong></div>
+          <span role="cell">{formatCompression(save, material.id)}</span>
+          <span role="cell">{formatImpact(save, material.id)}</span>
+          <span role="cell">{formatWater(save, material.id)}</span>
+        </article>)}
       </section>
     </main>
-    <footer className={styles.footer}><div className={styles.footerInstruction}><i>2</i><span><b>คิดจากหลักฐาน</b><small>พร้อมแล้วไปเลือกวัสดุตามหน้าที่</small></span></div><button className="button button-orange" type="button" onClick={onNext}>ไปเลือกวัสดุ ›</button></footer>
+    <footer className={styles.footer}><span><AppIcon name="idea" /> ผลเหล่านี้จะใช้เป็นหลักฐานในการเลือกวัสดุ</span><button className="button button-orange" type="button" onClick={onNext}>ทบทวนส่วนของกล่อง ›</button></footer>
+  </div>;
+}
+
+function MissionThreeParts({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+  const [activePart, setActivePart] = useState<MaterialStep>("structure");
+
+  return <div className={`${styles.screen} ${styles.guidedScreen}`}>
+    <ScreenHeader title="กล่องต้นแบบมี 4 สิ่งสำคัญ" subtitle="ทบทวน 3 ส่วนของกล่องและเกณฑ์วัสดุเหลือใช้ ก่อนเลือกวัสดุ" onBack={onBack} />
+    <main className={styles.partsGuide}>
+      <section className={styles.partsIllustration}>
+        <div className={styles.partsBlueprint} aria-label="ภาพเส้นประแทนส่วนสำคัญทั้ง 3 ส่วน">
+          {PART_GUIDE_ITEMS.filter((item): item is typeof item & { key: RoleKey } => item.key !== "reuse").map((item) => <button
+            key={item.key}
+            type="button"
+            aria-label={`ดู${item.label}`}
+            aria-pressed={activePart === item.key}
+            className={activePart === item.key ? styles.partOutlineActive : ""}
+            onClick={() => setActivePart(item.key)}
+          >
+            <PartOutlineGraphic part={item.key} />
+            <b>{item.label}</b>
+          </button>)}
+        </div>
+      </section>
+      <section className={styles.partsCards} aria-label="สามส่วนของกล่องและเกณฑ์วัสดุเหลือใช้">
+        {PART_GUIDE_ITEMS.map((item, index) => <button
+          key={item.key}
+          type="button"
+          aria-pressed={activePart === item.key}
+          className={activePart === item.key ? styles.partCardActive : ""}
+          onClick={() => setActivePart(item.key)}
+        >
+          <i>{index + 1}</i><span className={styles.partsCardIcon}><AppIcon name={item.icon} /></span><div><h2>{item.label}</h2><p>{item.detail}</p></div>
+        </button>)}
+      </section>
+    </main>
+    <footer className={`${styles.footer} ${styles.partsFooter}`}><button className="button button-orange" type="button" onClick={onNext}>เข้าใจครบ 4 เรื่องแล้ว ไปเลือกวัสดุ ›</button></footer>
   </div>;
 }
 
 function MissionThreeMaterials({ save, onPatch, onNext, onBack }: { save: GameSave; onPatch: (next: Partial<GameSave>) => void; onNext: () => void; onBack: () => void }) {
+  const [activeStep, setActiveStep] = useState<MaterialStep>("structure");
   const selections = save.mission3Selections ?? {};
   const reuse = save.mission3Reuse ?? {};
-  const complete = ROLE_DEFINITIONS.every((role) => Boolean(selections[role.key]));
-  const updateSelection = (key: string, value: string) => onPatch({ mission3Selections: { ...selections, [key]: value } });
-  const toggleReuse = (key: string) => onPatch({ mission3Reuse: { ...reuse, [key]: !reuse[key] } });
-  return <div className={`${styles.screen} ${styles.materialScreen}`}>
-    <ScreenHeader step={3} title="เลือกวัสดุตามหน้าที่" subtitle="วัสดุหนึ่งชนิดอาจมีหลายหน้าที่ได้ แต่เหตุผลต้องอ้างอิงหลักฐานให้ตรงกับงาน" onBack={onBack} />
-    <main className={styles.materialLayout}>
-      <section className={styles.materialRoles}>
-        <div className={styles.sectionTitle}><b>จับคู่หน้าที่ของกล่อง</b><small>เลือกให้ครบ {Object.values(selections).filter(Boolean).length}/{ROLE_DEFINITIONS.length} หน้าที่</small></div>
-        <div className={styles.roleGrid}>{ROLE_DEFINITIONS.map((role) => {
-          const selected = materialById(selections[role.key]);
-          return <article key={role.key} className={`${styles.roleCard} ${styles[`role${role.color}`]}`}>
-            <div className={styles.roleIcon}><AppIcon name={role.icon} /></div><div className={styles.roleCopy}><b>{role.label}</b><span>{role.hint}</span></div>
-            <select aria-label={`เลือกวัสดุสำหรับ${role.label}`} value={selections[role.key] ?? ""} onChange={(event) => updateSelection(role.key, event.target.value)}><option value="">เลือกวัสดุ…</option>{LAB_MATERIALS.map((material) => <option key={material.id} value={material.id}>{material.name}</option>)}</select>
-            <div className={styles.roleEvidence}>{selected ? <><img src={asset(`materials/${selected.image}`)} alt="" /><span><b>{evidenceFor(save, selected.id, role.evidence)}</b><small>หลักฐานที่เกี่ยวข้องกับหน้าที่นี้</small></span></> : <span className={styles.waiting}>เลือกวัสดุเพื่อดูหลักฐาน</span>}</div>
-            {selected && <label className={styles.reuseCheck}><input type="checkbox" checked={Boolean(reuse[role.key])} onChange={() => toggleReuse(role.key)} /><span>เป็นวัสดุที่ใช้แล้ว แต่ตรวจสภาพแล้วว่าเหมาะสม</span></label>}
-          </article>;
-        })}</div>
-      </section>
-      <aside className={styles.materialEvidence}>
-        <div className={styles.sectionTitle}><b>แผงหลักฐาน</b><small>กดดูผลก่อนตัดสินใจ</small></div>
-        <div className={styles.evidenceMiniList}>{LAB_MATERIALS.map((material) => <article key={material.id}><img src={asset(`materials/${material.image}`)} alt="" /><div><b>{material.name}</b><span>{formatCompression(save, material.id)} · {formatImpact(save, material.id)}</span><small>{formatWater(save, material.id)}</small></div></article>)}</div>
-        <div className={styles.reuseTip}><b><AppIcon name="recycle" /> วัสดุใช้แล้ว</b><p>ใช้ได้เมื่อสะอาด ไม่ชื้น ไม่ขึ้นรา ไม่ฉีกขาด และยังปลอดภัยต่อการตัด พับ หรือประกอบ</p></div>
-      </aside>
+  const selectedRoles = ROLE_DEFINITIONS.filter((role) => selections[role.key]);
+  const reusedRole = ROLE_DEFINITIONS.find((role) => reuse[role.key])?.key ?? "";
+  const reuseMaterialId = save.mission3ReuseMaterial ?? (reusedRole ? selections[reusedRole] : "");
+  const complete = selectedRoles.length === ROLE_DEFINITIONS.length && Boolean(reusedRole && reuseMaterialId);
+  const unlockedSteps: Record<MaterialStep, boolean> = {
+    structure: true,
+    impact: Boolean(selections.structure),
+    water: Boolean(selections.impact),
+    reuse: Boolean(selections.water),
+  };
+  const activeRole = activeStep === "reuse" ? null : ROLE_DEFINITIONS.find((role) => role.key === activeStep)!;
+  const activeMaterial = activeRole ? materialById(selections[activeRole.key]) : undefined;
+  const activeRoleIndex = activeRole ? ROLE_DEFINITIONS.findIndex((role) => role.key === activeRole.key) : -1;
+  const nextStep: MaterialStep | null = activeRoleIndex < 0
+    ? null
+    : activeRoleIndex === ROLE_DEFINITIONS.length - 1
+      ? "reuse"
+      : ROLE_DEFINITIONS[activeRoleIndex + 1].key;
+  const chooseMaterial = (role: RoleKey, materialId: string) => onPatch({
+    mission3Selections: { ...selections, [role]: materialId },
+    ...(reusedRole === role ? { mission3ReuseMaterial: materialId } : {}),
+  });
+  const chooseReuseRole = (role: RoleKey) => onPatch({
+    mission3Reuse: Object.fromEntries(ROLE_DEFINITIONS.map((item) => [item.key, item.key === role])),
+    ...(reuseMaterialId ? { mission3Selections: { ...selections, [role]: reuseMaterialId } } : {}),
+  });
+  const chooseReuseMaterial = (materialId: string) => onPatch({
+    mission3ReuseMaterial: materialId,
+    ...(reusedRole ? { mission3Selections: { ...selections, [reusedRole]: materialId } } : {}),
+  });
+
+  return <div className={`${styles.screen} ${styles.guidedScreen}`}>
+    <ScreenHeader title="เลือกวัสดุทำส่วนต่างๆ" subtitle="ดูผลการทดลองสมบัติทั้ง 3 ด้านแล้วเลือกวัสดุที่จะใช้ทำส่วนต่างๆ" onBack={onBack} />
+    <main className={styles.materialRoomLayout}>
+      <nav className={styles.roomTabs} aria-label="เลือกห้องวัสดุ" role="tablist">
+        {ROLE_DEFINITIONS.map((role, index) => <button key={role.key} type="button" role="tab" aria-selected={role.key === activeStep} disabled={!unlockedSteps[role.key]} className={role.key === activeStep ? styles.roomTabActive : ""} onClick={() => setActiveStep(role.key)}>
+          <i>{selections[role.key] ? "✓" : index + 1}</i><span><b>{`ห้องเลือก${role.label}`}</b></span>
+        </button>)}
+        <button type="button" role="tab" aria-selected={activeStep === "reuse"} disabled={!unlockedSteps.reuse} className={activeStep === "reuse" ? styles.roomTabActive : ""} onClick={() => setActiveStep("reuse")}>
+          <i>{reusedRole && reuseMaterialId ? "✓" : 4}</i><span><b>วัสดุเหลือใช้</b></span>
+        </button>
+      </nav>
+      {activeRole ? <section className={styles.materialRoomPanel} aria-labelledby={`room-${activeRole.key}`}>
+        <header><i><AppIcon name={activeRole.icon} /></i><div><h2 id={`room-${activeRole.key}`}>{`ห้องเลือก${activeRole.label}`}</h2><p>เลือกได้จากวัสดุทั้ง 5 ชนิด</p></div></header>
+        <div className={styles.materialRoomContent}>
+          <div className={styles.materialEvidence}>
+            <div className={styles.roomResultTable} role="table" aria-label={`ผลทดลองสำหรับ${activeRole.label}`}>
+              <div className={styles.roomResultHead} role="row"><b role="columnheader">วัสดุ</b><b role="columnheader">ผลการทดลอง</b><b role="columnheader">เลือก</b></div>
+              {LAB_MATERIALS.map((material) => {
+                const selected = selections[activeRole.key] === material.id;
+                return <article key={material.id} className={selected ? styles.roomResultSelected : ""} role="row">
+                  <div className={styles.materialIdentity} role="cell"><img width="72" height="72" src={asset(`materials/${material.image}`)} alt="" /><strong>{material.name}</strong></div>
+                  <span role="cell">{evidenceFor(save, material.id, activeRole.evidence)}</span>
+                  <div role="cell"><button type="button" aria-pressed={selected} onClick={() => chooseMaterial(activeRole.key, material.id)}>{selected ? "✓ เลือกแล้ว" : "เลือกวัสดุ"}</button></div>
+                </article>;
+              })}
+            </div>
+            <div className={styles.roomNext}>
+              <span>{activeMaterial ? `เลือก ${activeMaterial.name} สำหรับ${activeRole.label}` : `อ่านผลแล้วเลือกวัสดุ 1 อย่างสำหรับ${activeRole.label}`}</span>
+              {nextStep && <button className="button button-orange" type="button" disabled={!activeMaterial} onClick={() => setActiveStep(nextStep)}>{nextStep === "reuse" ? "ไปเลือกวัสดุเหลือใช้" : `ไปห้องเลือก${ROLE_DEFINITIONS.find((role) => role.key === nextStep)?.label}`} ›</button>}
+            </div>
+          </div>
+          <aside className={styles.materialPreview} aria-live="polite">
+            <h3>วัสดุที่เลือก</h3>
+            <div className={`${styles.materialPreviewShape} ${activeMaterial ? styles.materialPreviewFilled : ""}`}>
+              <span><AppIcon name={activeRole.icon} /></span>
+              {activeMaterial && <img
+                src={activeRole.key === "structure"
+                  ? asset(`mission3/structure-previews/${activeMaterial.id}.png`)
+                  : asset(`materials/${activeMaterial.image}`)}
+                alt={`${activeMaterial.name} สำหรับ${activeRole.label}`}
+              />}
+            </div>
+            <b>{activeMaterial?.name ?? "ยังไม่ได้เลือกวัสดุ"}</b>
+          </aside>
+        </div>
+      </section> : <section className={styles.reuseRoomPanel} aria-labelledby="room-reuse">
+        <header><i><AppIcon name="recycle" /></i><div><h2 id="room-reuse">เลือกใช้วัสดุเหลือใช้</h2><p>เลือก 1 ส่วนของกล่อง แล้วเลือกวัสดุ 1 จาก 5 ชนิด</p></div></header>
+        <div className={styles.reuseRoomGrid}>
+          <section><h3><i>1</i> เลือกส่วนของกล่อง</h3><div className={styles.reusePartChoices}>{ROLE_DEFINITIONS.map((role) => <button key={role.key} type="button" aria-pressed={reusedRole === role.key} className={reusedRole === role.key ? styles.reuseSelected : ""} onClick={() => chooseReuseRole(role.key)}><AppIcon name={role.icon} /><span><b>{role.label}</b><small>{role.short}</small></span></button>)}</div></section>
+          <section><h3><i>2</i> เลือกวัสดุเหลือใช้</h3><div className={styles.reuseMaterialChoices}>{LAB_MATERIALS.map((material) => <button key={material.id} type="button" aria-pressed={reuseMaterialId === material.id} className={reuseMaterialId === material.id ? styles.reuseSelected : ""} onClick={() => chooseReuseMaterial(material.id)}><img src={asset(`materials/${material.image}`)} alt="" /><b>{material.name}</b></button>)}</div></section>
+        </div>
+        <div className={styles.reuseRoomSummary}>{reusedRole && reuseMaterialId ? <><AppIcon name="check" /><span>ทีมจะใช้ <b>{materialById(reuseMaterialId)?.name}</b> ที่เป็นวัสดุเหลือใช้ทำ <b>{ROLE_DEFINITIONS.find((role) => role.key === reusedRole)?.label}</b></span></> : <><AppIcon name="idea" /><span>เลือกให้ครบทั้ง “ส่วนของกล่อง” และ “วัสดุ”</span></>}</div>
+      </section>}
     </main>
-    <footer className={styles.footer}><span className={complete ? styles.readyText : ""}>{complete ? "✓ เลือกวัสดุครบทุกหน้าที่แล้ว" : "เลือกวัสดุให้ครบทุกหน้าที่ก่อน"}</span><button className="button button-orange" type="button" disabled={!complete} onClick={onNext}>ไปออกแบบสามมิติ ›</button></footer>
+    <footer className={styles.footer}><span className={complete ? styles.readyText : ""}>{complete ? "✓ เลือกวัสดุครบ 3 ส่วนและเลือกวัสดุเหลือใช้แล้ว" : "เลือกวัสดุให้ครบ 3 ส่วน แล้วทำขั้นวัสดุเหลือใช้เป็นขั้นสุดท้าย"}</span><button className="button button-orange" type="button" disabled={!complete} onClick={onNext}>ไปจัดวางวัสดุ ›</button></footer>
   </div>;
 }
 
-function BoxBlueprint({ save, activePart, onSelect }: { save: GameSave; activePart: string; onSelect: (key: string) => void }) {
-  const selected = save.mission3Selections ?? {};
-  const dimensions = save.mission3Design ?? {};
-  return <div className={styles.blueprintWrap}>
-    <div className={styles.blueprintTag}>แบบสามมิติของทีม <span>แตะส่วนต่าง ๆ เพื่อดูหน้าที่</span></div>
-    <svg className={styles.blueprint} viewBox="0 0 560 300" role="img" aria-label="ภาพร่างสามมิติของกล่องพัสดุ">
-      <defs><linearGradient id="box-front" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stopColor="#b5e9e1" /><stop offset="1" stopColor="#61c5c1" /></linearGradient><linearGradient id="box-side" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stopColor="#8eddd6" /><stop offset="1" stopColor="#36a8ae" /></linearGradient><linearGradient id="box-top" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stopColor="#f5ffff" /><stop offset="1" stopColor="#c5eeee" /></linearGradient></defs>
-      <path className={styles.shadow} d="M121 259 Q277 292 459 250 Q386 281 181 279Z" />
-      <g onClick={() => onSelect("structure")} className={`${styles.svgPart} ${activePart === "structure" ? styles.svgActive : ""}`}><path fill="url(#box-front)" d="M122 127 L352 159 L352 252 L122 219Z" /><path fill="url(#box-side)" d="M352 159 L457 108 L457 203 L352 252Z" /><path fill="url(#box-top)" d="M122 127 L227 76 L457 108 L352 159Z" /><path className={styles.innerLine} d="M151 130 L351 158 L351 225 L151 197Z" /></g>
-      <g onClick={() => onSelect("water")} className={`${styles.svgPart} ${activePart === "water" ? styles.svgActive : ""}`}><path className={styles.layerWater} d="M138 121 L229 80 L442 110 L351 151Z" /></g>
-      <g onClick={() => onSelect("impact")} className={`${styles.svgPart} ${activePart === "impact" ? styles.svgActive : ""}`}><path className={styles.layerImpact} d="M166 157 L327 180 L327 210 L166 187Z" /></g>
-      <g onClick={() => onSelect("filler")} className={`${styles.svgPart} ${activePart === "filler" ? styles.svgActive : ""}`}><path className={styles.layerFiller} d="M190 180 L226 169 L257 180 L220 192Z" /><path className={styles.layerFiller} d="M272 193 L308 182 L337 193 L300 205Z" /></g>
-      <path className={styles.foldLine} d="M122 127 L352 159 M352 159 L457 108 M352 159 L352 252" />
-      <g className={styles.dimension}><path d="M122 238 L352 271" /><path d="M122 238 l8 -5 M122 238 l8 6 M352 271 l-8 -6 M352 271 l-8 4" /><text x="231" y="291">ยาว {dimensions.length || "—"} ซม.</text></g>
-      <g className={styles.dimension}><path d="M373 263 L478 211" /><path d="M373 263 l9 -1 M373 263 l4 -8 M478 211 l-9 1 M478 211 l-4 8" /><text x="428" y="251">กว้าง {dimensions.width || "—"} ซม.</text></g>
-      <g className={styles.dimension}><path d="M101 125 L101 218" /><path d="M101 125 l-4 9 M101 125 l4 9 M101 218 l-4 -9 M101 218 l4 -9" /><text x="58" y="177" transform="rotate(-90 58 177)">สูง {dimensions.height || "—"} ซม.</text></g>
-      <g onClick={() => onSelect("joints")} className={`${styles.jointMarker} ${activePart === "joints" ? styles.svgActive : ""}`}><circle cx="353" cy="159" r="9" /><circle cx="353" cy="252" r="7" /><text x="367" y="150">จุดพับ/ปิดฝากล่อง</text></g>
-    </svg>
-    <div className={styles.blueprintLegend}>{ROLE_DEFINITIONS.map((role) => { const material = materialById(selected[role.key]); return <button key={role.key} type="button" className={activePart === role.key ? styles.legendActive : ""} onClick={() => onSelect(role.key)}><i className={styles[`swatch${role.color}`]} /><span><b>{role.label}</b><small>{material?.name ?? "ยังไม่เลือก"}</small></span></button>; })}</div>
-  </div>;
+const PLACEMENT_PATHS: Record<MissionThreeZone, string> = {
+  outside: "M70 78 H535 V350 L424 432 H72",
+  inside: "M92 116 H497 V326 L402 397 H86",
+  around: "M116 154 H459 V302 L377 363 H103",
+};
+
+const MATERIAL_TEXTURE_ASSETS: Record<string, string> = {
+  corrugated_cardboard: "mission3/material-textures/corrugated_cardboard-v1.png",
+  cardboard: "mission3/material-textures/cardboard-v1.png",
+  bubble_wrap: "mission3/material-textures/bubble_wrap-v1.png",
+  closed_cell_pe_foam: "mission3/material-textures/closed_cell_pe_foam-v1.png",
+  pe_sheet: "mission3/material-textures/pe_sheet-v1.png",
+};
+
+function materialTexture(material: (typeof LAB_MATERIALS)[number]) {
+  return asset(MATERIAL_TEXTURE_ASSETS[material.id] ?? `materials/${material.image}`);
+}
+
+const PLACEMENT_LABELS: Record<MissionThreeZone, { x: number; y: number; width: number }> = {
+  outside: { x: 62, y: 44, width: 138 },
+  inside: { x: 200, y: 83, width: 132 },
+  around: { x: 320, y: 121, width: 138 },
+};
+
+function PlacementDiagram({ save, placements }: { save: GameSave; placements: Partial<Record<MissionThreeZone, MissionThreeLayer>> }) {
+  const placementAt = (zone: MissionThreeZone): RoleKey | undefined => {
+    const layer = placements[zone];
+    return layer === "structure" || layer === "impact" || layer === "water" ? layer : undefined;
+  };
+
+  return <svg className={styles.placementDiagram} viewBox="0 0 620 470" role="img" aria-label="ภาพตัดกล่องสามชั้น มีด้านนอก ด้านใน รอบสิ่งของ และแก้วอยู่ตรงกลาง">
+    <defs>
+      {ZONES.map((zone) => {
+        const role = placementAt(zone.key);
+        const material = role ? materialById(save.mission3Selections?.[role]) : undefined;
+        return material && <pattern key={zone.key} id={`placement-material-${zone.key}`} patternUnits="userSpaceOnUse" width="84" height="84">
+          <image href={materialTexture(material)} width="84" height="84" preserveAspectRatio="xMidYMid slice" />
+        </pattern>;
+      })}
+      <filter id="placement-shadow" x="-30%" y="-30%" width="160%" height="180%">
+        <feDropShadow dx="0" dy="7" stdDeviation="7" floodColor="#254f45" floodOpacity=".22" />
+      </filter>
+    </defs>
+    <ellipse className={styles.diagramFloorShadow} cx="286" cy="399" rx="128" ry="22" />
+    {ZONES.map((zone) => {
+      const role = placementAt(zone.key);
+      const material = role ? materialById(save.mission3Selections?.[role]) : undefined;
+      const label = PLACEMENT_LABELS[zone.key];
+      return <g key={zone.key}>
+        <path className={styles.diagramGuide} d={PLACEMENT_PATHS[zone.key]} />
+        {material && <>
+          <path className={styles.diagramMaterialBase} d={PLACEMENT_PATHS[zone.key]} />
+          <path className={styles.diagramMaterialTexture} d={PLACEMENT_PATHS[zone.key]} stroke={`url(#placement-material-${zone.key})`} />
+        </>}
+        <g className={styles.diagramLabel} transform={`translate(${label.x} ${label.y})`}>
+          <rect width={label.width} height="31" rx="15.5" />
+          <text x={label.width / 2} y="21" textAnchor="middle">{zone.label}</text>
+        </g>
+      </g>;
+    })}
+    <image className={styles.diagramCup} href={asset("mission3/cup-cutout-v1.png")} x="154" y="169" width="205" height="195" preserveAspectRatio="xMidYMid meet" filter="url(#placement-shadow)" />
+  </svg>;
 }
 
 function MissionThreeDesign({ save, onPatch, onNext, onBack }: { save: GameSave; onPatch: (next: Partial<GameSave>) => void; onNext: () => void; onBack: () => void }) {
-  const design = save.mission3Design;
-  const [activePart, setActivePart] = useState("structure");
-  const update = (key: keyof MissionThreeDesign, value: string) => onPatch({ mission3Design: { ...design, [key]: value } });
-  const ready = [design.length, design.width, design.height, design.joints, design.steps].every((value) => value?.trim());
-  const active = ROLE_DEFINITIONS.find((role) => role.key === activePart) ?? ROLE_DEFINITIONS[0];
-  const activeMaterial = materialById(save.mission3Selections?.[active.key]);
-  return <div className={`${styles.screen} ${styles.designScreen}`}>
-    <ScreenHeader step={3} title="ออกแบบสามมิติและแผนการสร้าง" subtitle="กำหนดขนาด ระบุตำแหน่งส่วนประกอบ จุดพับ และลำดับการสร้างให้ทีมทำงานตรงกัน" onBack={onBack} />
-    <main className={styles.designLayout}>
-      <BoxBlueprint save={save} activePart={activePart} onSelect={setActivePart} />
-      <section className={styles.designControls}>
-        <div className={styles.sectionTitle}><b>รายละเอียดแบบ</b><small>ดินน้ำมันมาตรฐานประมาณ 4 × 4 × 4 ซม.</small></div>
-        <div className={styles.dimensionGrid}>{(["length", "width", "height"] as const).map((key) => <label key={key}><span>{key === "length" ? "ความยาว" : key === "width" ? "ความกว้าง" : "ความสูง"} (ซม.)</span><input inputMode="decimal" min="1" max="60" type="number" value={design[key]} onChange={(event) => update(key, event.target.value)} /></label>)}</div>
-        <div className={styles.inspectCard}><span className={styles.inspectIcon}><AppIcon name={active.icon} /></span><div><b>{active.label}</b><p>ใช้ <strong>{activeMaterial?.name ?? "ยังไม่เลือกวัสดุ"}</strong> · {active.hint}</p><small>{activeMaterial ? evidenceFor(save, activeMaterial.id, active.evidence) : "กลับไปเลือกวัสดุก่อน"}</small></div></div>
-        <label className={styles.textField}><span>จุดพับ จุดเชื่อมต่อ และวิธีปิดฝากล่อง</span><textarea value={design.joints} maxLength={180} onChange={(event) => update("joints", event.target.value)} placeholder="เช่น พับแถบด้านข้าง 2 ซม. ใช้เทปปิดรอยต่อ และทำฝาเสียบล็อก..." /></label>
-        <label className={styles.textField}><span>ลำดับขั้นตอนการสร้างและแบ่งหน้าที่</span><textarea value={design.steps} maxLength={240} onChange={(event) => update("steps", event.target.value)} placeholder="เช่น 1 ผู้วัด 2 ผู้ทำเครื่องหมาย 3 ผู้พับ 4 ผู้ประกอบ 5 ผู้ตรวจสอบ..." /></label>
+  const placements = save.mission3Placements ?? {};
+  const tokens = ROLE_DEFINITIONS.map((role) => role.key);
+  const placementAt = (zone: MissionThreeZone): RoleKey | undefined => {
+    const layer = placements[zone];
+    return layer === "structure" || layer === "impact" || layer === "water" ? layer : undefined;
+  };
+  const used = ZONES.map((zone) => placementAt(zone.key)).filter((role): role is RoleKey => Boolean(role));
+  const ready = ZONES.every((zone) => placementAt(zone.key)) && tokens.every((token) => used.includes(token));
+
+  const place = (zone: MissionThreeZone, layer: RoleKey) => {
+    const next = { ...placements };
+    const active = placementAt(zone);
+    if (active === layer) {
+      delete next[zone];
+    } else {
+      const previousZone = ZONES.find((item) => placementAt(item.key) === layer)?.key;
+      if (previousZone && previousZone !== zone) {
+        if (active) next[previousZone] = active;
+        else delete next[previousZone];
+      }
+      next[zone] = layer;
+    }
+    onPatch({ mission3Extra: "", mission3Placements: next });
+  };
+
+  return <div className={`${styles.screen} ${styles.guidedScreen}`}>
+    <ScreenHeader title="เลือกว่าจะวางวัสดุไว้ตรงไหน" subtitle="มี 3 ตำแหน่ง ทีมเป็นผู้ตัดสินใจ และยังไม่มีคำตอบถูกหรือผิดในขั้นนี้" onBack={onBack} />
+    <main className={styles.placementLayout}>
+      <section className={styles.placementPreviewPanel} aria-label="ภาพตัวอย่างตำแหน่งวัสดุสามชั้น">
+        <h2>ภาพกล่องของทีม</h2>
+        <div className={styles.placementPreviewScene} aria-live="polite">
+          <PlacementDiagram save={save} placements={placements} />
+        </div>
+      </section>
+      <section className={styles.zoneBoard}>
+        <h2>เลือกวัสดุให้แต่ละตำแหน่ง</h2>
+        <div className={styles.zoneGrid}>{ZONES.map((zone) => <article key={zone.key} className={placementAt(zone.key) ? styles.zoneFilled : ""}>
+          <header><i><AppIcon name={zone.icon} /></i><div><b>{zone.label}</b><small>{zone.detail}</small></div></header>
+          <div>{tokens.map((token) => {
+            const role = ROLE_DEFINITIONS.find((item) => item.key === token)!;
+            const material = materialById(save.mission3Selections?.[token]);
+            const active = placementAt(zone.key) === token;
+            return <button key={token} type="button" disabled={!material} aria-pressed={active} className={active ? styles.tokenSelected : ""} onClick={() => place(zone.key, token)}>
+              {material && <img src={materialTexture(material)} alt="" />}
+              <span><b>{role.label}</b><small>{material?.name ?? "ยังไม่ได้เลือกวัสดุ"}</small></span>
+              {active && <i>✓</i>}
+            </button>;
+          })}</div>
+        </article>)}</div>
       </section>
     </main>
-    <footer className={styles.footer}><span className={ready ? styles.readyText : ""}>{ready ? "✓ แบบมีขนาด จุดเชื่อมต่อ และลำดับสร้างแล้ว" : "เติมขนาด จุดเชื่อมต่อ และลำดับสร้างให้ครบ"}</span><button className="button button-orange" type="button" disabled={!ready} onClick={onNext}>บันทึกเหตุผลของทีม ›</button></footer>
+    <footer className={styles.footer}><span className={ready ? styles.readyText : ""}>{ready ? "✓ วางส่วนของกล่องครบทั้ง 3 ตำแหน่งแล้ว" : "กดเลือกวัสดุ · กดตัวเดิมซ้ำเพื่อยกเลิก"}</span><button className="button button-orange" type="button" disabled={!ready} onClick={onNext}>ดูขั้นตอนสร้าง ›</button></footer>
+  </div>;
+}
+
+function MissionThreeBuild({ save, onPatch, onNext, onBack }: { save: GameSave; onPatch: (next: Partial<GameSave>) => void; onNext: () => void; onBack: () => void }) {
+  const steps = [
+    { id: "build-v2-materials", title: "รับวัสดุจากครู", summary: "ตรวจรายการของทีมให้ครบก่อนเริ่ม", icon: "truck" as AppIconName },
+    { id: "build-v2-rules", title: "ข้อกำหนดการสร้างกล่อง", summary: "อ่านขนาด อุปกรณ์ และความปลอดภัย", icon: "notebook" as AppIconName },
+    { id: "build-v2-structure", title: "ทำชั้นโครงกล่อง", summary: "ทาบแบบ ตัดเส้นทึบ และพับเส้นประ", icon: "package" as AppIconName },
+    { id: "build-v2-impact", title: "ทำชั้นกันกระแทก", summary: "ประกอบด้วยวัสดุและตำแหน่งที่ทีมเลือก", icon: "shield" as AppIconName },
+    { id: "build-v2-water", title: "ชั้นลดการเปียก", summary: "ประกอบด้วยวัสดุและตำแหน่งที่ทีมเลือก", icon: "drop" as AppIconName },
+    { id: "build-v2-object", title: "วางวัสดุรอบสิ่งของ", summary: "ใช้ดินน้ำมันเป็นสิ่งของจำลอง", icon: "target" as AppIconName },
+    { id: "build-v2-check", title: "ปิดงานและตรวจความเรียบร้อย", summary: "ตรวจทีละข้อก่อนนำไปทดสอบ", icon: "check" as AppIconName },
+  ];
+  const completed = save.mission3BuildSteps ?? {};
+  const firstOpen = steps.findIndex((step) => !completed[step.id]);
+  const [active, setActive] = useState(firstOpen < 0 ? steps.length - 1 : firstOpen);
+  const doneCount = steps.filter((step) => completed[step.id]).length;
+  const ready = doneCount === steps.length;
+  const markDone = () => {
+    const next = { ...completed, [steps[active].id]: true };
+    onPatch({ mission3BuildSteps: next });
+    if (active < steps.length - 1) setActive(active + 1);
+  };
+
+  const reusedRole = ROLE_DEFINITIONS.find((role) => save.mission3Reuse?.[role.key]);
+  const reuseMaterial = materialById(save.mission3ReuseMaterial || (reusedRole ? save.mission3Selections?.[reusedRole.key] : ""));
+  const selectedParts = ROLE_DEFINITIONS.map((role) => ({
+    ...role,
+    material: materialById(save.mission3Selections?.[role.key]),
+    zone: ZONES.find((zone) => layerRole(save.mission3Placements?.[zone.key]) === role.key),
+  }));
+  const renderLayerDetail = (roleKey: "impact" | "water") => {
+    const part = selectedParts.find((item) => item.key === roleKey)!;
+    return <div className={styles.buildLayerDetail}>
+      <figure>
+        {part.material && <img src={asset(`materials/${part.material.image}`)} alt={part.material.name} />}
+        <figcaption>{part.label}</figcaption>
+      </figure>
+      <section>
+        <span className={styles.buildAnswerBadge}>คำตอบของทีม</span>
+        <h3>{part.material?.name ?? "ยังไม่ได้เลือกวัสดุ"}</h3>
+        <p><b>ตำแหน่ง:</b> {part.zone?.label ?? "ยังไม่ได้กำหนดตำแหน่ง"}</p>
+        <ol>
+          <li>นำวัสดุของทีมมาเทียบกับภาพและชื่อด้านซ้าย</li>
+          <li>วางวัสดุที่ <b>{part.zone?.label ?? "ตำแหน่งตามแบบของทีม"}</b> แล้วประกอบให้แนบกับชั้นข้างเคียง</li>
+          <li>ตรวจว่าไม่มีช่องว่าง ขอบแหลม หรือส่วนที่หลุดง่าย</li>
+        </ol>
+      </section>
+    </div>;
+  };
+  const renderBuildDetail = () => {
+    if (active === 0) return <>
+      <div className={styles.buildMaterialList}>{selectedParts.map((part) => <article key={part.key}>
+        {part.material && <img src={asset(`materials/${part.material.image}`)} alt="" />}
+        <span><small>{part.label}</small><b>{part.material?.name ?? "ยังไม่ได้เลือกวัสดุ"}</b></span>
+        {reusedRole?.key === part.key && <em>วัสดุเหลือใช้</em>}
+      </article>)}</div>
+      <div className={styles.buildSupplyStrip}>
+        <span><AppIcon name="map" /><b>แบบคลี่กล่อง 8 × 8 × 8 ซม.</b></span>
+        <span><AppIcon name="target" /><b>ดินน้ำมันและกระดาษทิชชู</b></span>
+        {reusedRole && reuseMaterial && <span><AppIcon name="recycle" /><b>{reuseMaterial.name} สำหรับ{reusedRole.label}</b></span>}
+      </div>
+    </>;
+    if (active === 1) return <div className={styles.buildRules}>
+      <article><i><AppIcon name="ruler" /></i><div><b>ขนาดสำเร็จ</b><span>กว้าง 8 ซม. × ยาว 8 ซม. × สูง 8 ซม.</span></div></article>
+      <article><i><AppIcon name="package" /></i><div><b>ส่วนประกอบที่ต้องมี</b><span>โครงกล่อง ชั้นกันกระแทก ชั้นลดการเปียก และใช้วัสดุเหลือใช้อย่างน้อย 1 ส่วน</span></div></article>
+      <article><i><AppIcon name="pencil" /></i><div><b>อุปกรณ์ที่ใช้ได้</b><span>ไม้บรรทัด ปากกา กรรไกรปลายมน เทปใส และกาวสำหรับงานเรียน</span></div></article>
+      <article><i><AppIcon name="shield" /></i><div><b>ความปลอดภัย</b><span>ตัดบนโต๊ะ หันกรรไกรออกจากตัว ไม่หยอกล้อ ปิดกรรไกรแล้วหันด้ามให้ผู้รับ และให้ครูช่วยเมื่อวัสดุตัดยาก</span></div></article>
+      <article><i><AppIcon name="check" /></i><div><b>เกณฑ์ร่วมของทุกทีม</b><span>ใช้เฉพาะวัสดุที่บันทึกไว้ใน Sim ประกอบให้แน่น และยังไม่ปิดฝากล่องจนกว่าจะตรวจครบทุกชั้น</span></div></article>
+    </div>;
+    if (active === 2) return <>
+      <div className={styles.buildNetGuide}>
+        <figure><img src={asset("mission3/cube-net-8cm-v1.svg")} alt="แบบคลี่กล่องลูกบาศก์ขนาด 8 คูณ 8 คูณ 8 เซนติเมตร เส้นทึบใช้ตัด เส้นประใช้พับ" /></figure>
+        <ol>
+          <li><b>ดูแบบโครงกล่อง</b><span>แต่ละหน้าเป็นสี่เหลี่ยม 8 × 8 ซม. เส้นทึบใช้ตัด เส้นประใช้พับ</span></li>
+          <li><b>รับแม่แบบจากครู</b><span>ทาบแบบลงบน <strong>{selectedParts[0].material?.name ?? "วัสดุโครงกล่องของทีม"}</strong> แล้วตัดและพับตามรอย</span></li>
+          <li><b>ขออุปกรณ์เพิ่มเมื่อจำเป็น</b><span>ไม้บรรทัด ปากกา กรรไกรปลายมน เทปใส หรือกาว</span></li>
+        </ol>
+      </div>
+      <div className={styles.buildToolStrip}>{["ไม้บรรทัด", "ปากกา", "กรรไกรปลายมน", "เทปใส", "กาว"].map((tool) => <span key={tool}>{tool}</span>)}</div>
+    </>;
+    if (active === 3) return renderLayerDetail("impact");
+    if (active === 4) return renderLayerDetail("water");
+    if (active === 5) {
+      const aroundLayer = layerRole(save.mission3Placements?.around);
+      const aroundPart = selectedParts.find((item) => item.key === aroundLayer);
+      return <div className={styles.buildObjectDetail}>
+        <figure><img src={asset("mission3/clay-object-v1.png")} alt="ดินน้ำมันสีส้มห่อด้วยกระดาษทิชชูสำหรับใช้เป็นสิ่งของจำลอง" /><figcaption>สิ่งของจำลอง: ดินน้ำมันห่อทิชชู</figcaption></figure>
+        <section>
+          <span className={styles.buildAnswerBadge}>วัสดุรอบสิ่งของของทีม</span>
+          <div className={styles.buildAroundMaterial}>{aroundPart?.material && <img src={asset(`materials/${aroundPart.material.image}`)} alt="" />}<span><small>{aroundPart?.label ?? "ส่วนที่ทีมเลือก"}</small><b>{aroundPart?.material?.name ?? "ยังไม่ได้เลือกวัสดุ"}</b></span></div>
+          <ol><li>ห่อดินน้ำมันด้วยทิชชูให้มองเห็นรอยเปลี่ยนแปลงหลังทดสอบได้</li><li>วางดินน้ำมันไว้กลางกล่อง</li><li>จัด <b>{aroundPart?.material?.name ?? "วัสดุของทีม"}</b> รอบสิ่งของ โดยไม่กดดินน้ำมันจนเสียรูป</li></ol>
+        </section>
+      </div>;
+    }
+    return <div className={styles.buildFinalCheck}>
+      <img src={asset("mission3/final-inspection-v1.png")} alt="กล่องที่ปิดเรียบร้อยพร้อมแว่นขยายสำหรับตรวจงาน" />
+      <ul>
+        <li>กล่องมีขนาดประมาณ 8 × 8 × 8 ซม. และตั้งได้ตรง</li>
+        <li>ชั้นทั้ง 3 อยู่ตามตำแหน่งที่ทีมออกแบบไว้</li>
+        <li>ดินน้ำมันอยู่กลางกล่องและไม่ถูกกดจนเสียรูป</li>
+        <li>รอยต่อแน่น เทปและกาวไม่ยื่น ไม่มีขอบแหลม</li>
+        <li>ปิดฝากล่องและติดชื่อทีมให้เรียบร้อย</li>
+        <li>เก็บเศษวัสดุและอุปกรณ์คืนครู ก่อนนำกล่องไปทดสอบ</li>
+      </ul>
+    </div>;
+  };
+
+  return <div className={`${styles.screen} ${styles.guidedScreen}`}>
+    <ScreenHeader title="สร้างตามขั้นตอนทีละข้อ" subtitle="เปิดหน้านี้ไว้ระหว่างสร้าง ไม่ต้องจำขั้นตอนเอง" onBack={onBack} />
+    <main className={styles.buildLayout}>
+      <aside className={styles.buildSteps}>{steps.map((step, index) => <button key={step.id} type="button" className={index === active ? styles.buildActive : completed[step.id] ? styles.buildDone : ""} onClick={() => setActive(index)}><i>{completed[step.id] ? "✓" : index + 1}</i><span><b>{step.title}</b><small>{completed[step.id] ? "ทำเสร็จแล้ว" : "แตะเพื่อเปิด"}</small></span></button>)}</aside>
+      <section className={styles.buildCard}>
+        <header className={styles.buildCardHeader}><span>ขั้นที่ {active + 1} จาก {steps.length}</span><i><AppIcon name={steps[active].icon} /></i><div><h2>{steps[active].title}</h2><p>{steps[active].summary}</p></div></header>
+        <div className={styles.buildDetailBody}>{renderBuildDetail()}</div>
+        <footer className={styles.buildCardFooter}><small><AppIcon name="shield" /> ทำงานบนโต๊ะและขอให้ครูช่วยเมื่อวัสดุตัดยาก</small><button className="button button-orange" type="button" onClick={markDone}>{completed[steps[active].id] ? "เปิดดูหรือทำซ้ำอีกครั้ง ✓" : "ทำขั้นนี้เสร็จแล้ว ✓"}</button></footer>
+      </section>
+    </main>
+    <footer className={styles.footer}><span className={ready ? styles.readyText : ""}>{ready ? "✓ สร้างครบทุกขั้นแล้ว พร้อมสรุปคำตอบของทีม" : `ทำเสร็จแล้ว ${doneCount}/${steps.length} ขั้น`}</span><button className="button button-orange" type="button" disabled={!ready} onClick={onNext}>สรุปคำตอบทีม ›</button></footer>
   </div>;
 }
 
 function MissionThreeReason({ save, onPatch, onComplete, onBack }: { save: GameSave; onPatch: (next: Partial<GameSave>) => void; onComplete: () => void; onBack: () => void }) {
-  const reason = save.mission3Reason ?? "";
-  const alternative = save.mission3Alternative ?? "";
-  const selections = save.mission3Selections ?? {};
-  const ready = reason.trim().length >= 24 && alternative.trim().length >= 12;
-  const addEvidence = (text: string) => onPatch({ mission3Reason: reason ? `${reason.trim()} ${text}` : text });
-  return <div className={`${styles.screen} ${styles.reasonScreen}`}>
-    <ScreenHeader step={4} title="เหตุผลของทีม" subtitle="บอกให้ชัดว่าเลือกวัสดุอะไร ทำหน้าที่ใด และผลการทดลองข้อใดสนับสนุนการตัดสินใจ" onBack={onBack} />
-    <main className={styles.reasonLayout}>
-      <section className={styles.reasonCard}>
-        <div className={styles.sectionTitle}><b>บันทึกเสียงของทีมเป็นข้อความ</b><small>เขียนด้วยภาษาของทีมได้เลย</small></div>
-        <label className={styles.reasonLabel}><span>แบบที่ทีมเลือกและหลักฐานสนับสนุน</span><textarea value={reason} maxLength={600} onChange={(event) => onPatch({ mission3Reason: event.target.value })} placeholder="ทีมของเราเลือกใช้ … สำหรับ … เพราะผลจากห้องทดลอง … แสดงว่า …" /><small className={reason.trim().length >= 24 ? styles.goodHint : ""}>{reason.trim().length}/24 ตัวอักษรขั้นต่ำ</small></label>
-        <div className={styles.evidenceButtons}><b>เติมหลักฐานเร็ว ๆ</b>{LAB_MATERIALS.slice(0, 5).map((material) => <button key={material.id} type="button" onClick={() => addEvidence(`${material.name}: ${formatCompression(save, material.id)}, ${formatImpact(save, material.id)}, ${formatWater(save, material.id)}.`)}>{material.name}</button>)}</div>
-        <label className={styles.reasonLabel}><span>ทางเลือกอื่นที่ทีมพิจารณาก่อนเลือกแบบนี้</span><textarea value={alternative} maxLength={360} onChange={(event) => onPatch({ mission3Alternative: event.target.value })} placeholder="แบบสำรองคือ … แต่ทีมเลือกแบบนี้ เพราะ …" /><small className={alternative.trim().length >= 12 ? styles.goodHint : ""}>{alternative.trim().length}/12 ตัวอักษรขั้นต่ำ</small></label>
+  const reasons = save.mission3Reasons ?? {};
+  const ready = ROLE_DEFINITIONS.every((role) => reasons[role.key]) && Boolean(reasons.reuse);
+  const chooseReason = (question: string, value: string) => onPatch({ mission3Reasons: { ...reasons, [question]: value } });
+  const reuseRole = ROLE_DEFINITIONS.find((role) => save.mission3Reuse?.[role.key]);
+  const reuseMaterial = materialById(save.mission3ReuseMaterial || (reuseRole ? save.mission3Selections?.[reuseRole.key] : ""));
+
+  return <div className={`${styles.screen} ${styles.guidedScreen}`}>
+    <ScreenHeader title="บัตรสรุปสั้น ๆ ของทีม" subtitle="ตอบให้ครบ 4 ข้อ โดยใช้สิ่งที่ทีมทดลองและเลือกไว้ก่อนหน้า" onBack={onBack} />
+    <main className={styles.groupSummary}>
+      <section className={styles.reasonChoices}>{ROLE_DEFINITIONS.map((role) => {
+        const material = materialById(save.mission3Selections?.[role.key]);
+        return <article key={role.key}><header><i><AppIcon name={role.icon} /></i><div><span>{role.label}</span><h2>{material?.name}</h2><small>หลักฐาน: {material ? evidenceFor(save, material.id, role.evidence) : "—"}</small></div></header><p>ทีมเลือกวัสดุนี้ เพราะผลทดลองแสดงว่า…</p><div>{REASON_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={reasons[role.key] === option.value} className={reasons[role.key] === option.value ? styles.reasonSelected : ""} onClick={() => chooseReason(role.key, option.value)}>{option.label}</button>)}</div></article>;
+      })}
+        <article className={styles.reuseReasonCard}>
+          <header><i><AppIcon name="recycle" /></i><div><span>วัสดุเหลือใช้</span><h2>{reuseMaterial?.name ?? "ยังไม่ได้เลือกวัสดุ"}</h2><small>ย้อนดูสิ่งที่ทีมเลือกไว้ในห้องวัสดุ</small></div></header>
+          <p>ทีมเลือกใช้วัสดุเหลือใช้ทำส่วนใด?</p>
+          <div>{ROLE_DEFINITIONS.map((role) => {
+            const value = `part-${role.key}`;
+            return <button key={role.key} type="button" aria-pressed={reasons.reuse === value} className={reasons.reuse === value ? styles.reasonSelected : ""} onClick={() => chooseReason("reuse", value)}>{role.label}</button>;
+          })}</div>
+        </article>
       </section>
-      <aside className={styles.reasonSummary}>
-        <div className={styles.sectionTitle}><b>การเลือกของทีม</b><small>หน้าที่ · วัสดุ · หลักฐาน</small></div>
-        {ROLE_DEFINITIONS.map((role) => { const material = materialById(selections[role.key]); return <div key={role.key} className={styles.choiceRow}><i><AppIcon name={role.icon} /></i><span><b>{role.label}</b><small>{material?.name ?? "ยังไม่เลือก"}</small></span><em>{material ? evidenceFor(save, material.id, role.evidence) : "—"}</em></div>; })}
-        <div className={styles.reasonTip}><AppIcon name="message" /> ทุกส่วนไม่จำเป็นต้องใช้วัสดุชนิดเดียวกัน ให้ดูว่า “สมบัติ” สัมพันธ์กับ “หน้าที่” อย่างไร</div>
-      </aside>
     </main>
-    <footer className={styles.footer}><span className={ready ? styles.readyText : ""}>{ready ? "✓ เหตุผลและทางเลือกอื่นครบแล้ว" : "เขียนเหตุผลอย่างน้อย 24 ตัวอักษร และทางเลือกอื่นอย่างน้อย 12 ตัวอักษร"}</span><button className="button button-orange" type="button" disabled={!ready} onClick={onComplete}>สรุปภารกิจ ›</button></footer>
+    <footer className={styles.footer}><span className={ready ? styles.readyText : ""}>{ready ? "✓ ตอบคำถามกลุ่มครบทั้ง 4 ข้อแล้ว" : "ตอบคำถามให้ครบทั้ง 4 ข้อ"}</span><button className="button button-orange" type="button" disabled={!ready} onClick={onComplete}>บันทึกและจบภารกิจ ›</button></footer>
   </div>;
 }
 
 function MissionThreeComplete({ save, onFinish }: { save: GameSave; onFinish: () => void }) {
-  const selectedMaterials = useMemo(() => ROLE_DEFINITIONS.map((role) => materialById(save.mission3Selections?.[role.key])?.name).filter(Boolean), [save.mission3Selections]);
+  const reuseRole = ROLE_DEFINITIONS.find((role) => save.mission3Reuse?.[role.key]);
   return <div className={`${styles.screen} ${styles.completeScreen}`}>
-    <div className={styles.confetti} aria-hidden="true">✦　•　★　✦　•　✧　★　•</div>
     <section className={styles.completeCard}>
-      <div className={styles.completeMedal}><AppIcon name="package" /></div><span className={styles.completePill}>ภารกิจที่ 3 สำเร็จ</span><h1>ทีมพร้อมสร้างกล่องต้นแบบแล้ว!</h1><p>เลือกวัสดุตามหน้าที่ ออกแบบแบบสามมิติ และใช้หลักฐานอธิบายเหตุผลเรียบร้อย</p>
-      <div className={styles.completeGrid}><article><b>วัสดุที่ทีมวางแผนใช้</b><span>{[...new Set(selectedMaterials)].join(" · ") || "บันทึกแล้ว"}</span></article><article><b>ขนาดกล่อง</b><span>{save.mission3Design.length} × {save.mission3Design.width} × {save.mission3Design.height} ซม.</span></article><article><b>ขั้นต่อไปนอก Simulation</b><span>ลงมือวัด ตัด พับ ประกอบ และติดป้ายชื่อทีม</span></article></div>
-      <div className={styles.nextMission}><div><AppIcon name="hammer" /></div><span><b>เชื่อมต่อภารกิจที่ 4</b><small>นำกล่องจริงไปทดสอบแรงกด แรงกระแทก และน้ำกับครู</small></span><strong>→</strong></div>
-      <button className="button button-orange" type="button" onClick={onFinish}>ไปเส้นทางภารกิจที่ 4 ›</button>
+      <div className={styles.completeMedal}><AppIcon name="package" /></div><span className={styles.completePill}>ภารกิจที่ 3 สำเร็จ</span><h1>ทีมสร้างกล่องตามแบบสำเร็จแล้ว!</h1><p>ทีมเลือกวัสดุจากหลักฐาน จัดวางใน 3 ตำแหน่ง และบันทึกคำตอบร่วมกันเรียบร้อย</p>
+      <div className={styles.completeGrid}><article><b>ขนาดกล่องที่กำหนด</b><span>8 × 8 × 8 ซม.</span></article><article><b>วัสดุเหลือใช้</b><span>{reuseRole ? materialById(save.mission3ReuseMaterial || save.mission3Selections?.[reuseRole.key])?.name : "บันทึกแล้ว"}</span></article><article><b>ขั้นต่อไป</b><span>ทดสอบแรงกด แรงกระแทก และน้ำ</span></article></div>
+      <div className={styles.nextMission}><div><AppIcon name="hammer" /></div><span><b>ภารกิจที่ 4 จะให้คำตอบ</b><small>ตำแหน่งที่ทีมเลือกช่วยป้องกันกล่องและสิ่งของได้ดีเพียงใด</small></span><strong>→</strong></div>
+      <button className="button button-orange" type="button" onClick={onFinish}>กลับเส้นทาง 5 ภารกิจ ›</button>
     </section>
   </div>;
 }
 
 export function MissionThreeScreen({ stage, save, onPatch, onBack, onNext, onComplete, onFinish }: MissionThreeProps) {
+  if (stage === "mission3Review") return <MissionThreeReview onBack={onBack} onNext={() => onNext("mission3Question")} />;
+  if (stage === "mission3Question") return <MissionThreeQuestion onBack={onBack} onNext={() => onNext("mission3Intro")} />;
   if (stage === "mission3Intro") return <MissionThreeIntro onBack={onBack} onNext={() => onNext("mission3Data")} />;
-  if (stage === "mission3Data") return <MissionThreeData save={save} onBack={onBack} onNext={() => onNext("mission3Materials")} />;
+  if (stage === "mission3Data") return <MissionThreeData save={save} onBack={onBack} onNext={() => onNext("mission3Parts")} />;
+  if (stage === "mission3Parts") return <MissionThreeParts onBack={onBack} onNext={() => onNext("mission3Materials")} />;
   if (stage === "mission3Materials") return <MissionThreeMaterials save={save} onPatch={onPatch} onBack={onBack} onNext={() => onNext("mission3Design")} />;
-  if (stage === "mission3Design") return <MissionThreeDesign save={save} onPatch={onPatch} onBack={onBack} onNext={() => onNext("mission3Reason")} />;
+  if (stage === "mission3Design") return <MissionThreeDesign save={save} onPatch={onPatch} onBack={onBack} onNext={() => onNext("mission3Build")} />;
+  if (stage === "mission3Build") return <MissionThreeBuild save={save} onPatch={onPatch} onBack={onBack} onNext={() => onNext("mission3Reason")} />;
   if (stage === "mission3Reason") return <MissionThreeReason save={save} onPatch={onPatch} onBack={onBack} onComplete={onComplete} />;
   return <MissionThreeComplete save={save} onFinish={onFinish} />;
 }

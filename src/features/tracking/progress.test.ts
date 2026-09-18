@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_SAVE } from "@/features/game/data";
-import type { TrackedRun } from "./types";
-import { ACTIVE_STAGE_ORDER, formatDuration, isToday, runProgress, stageProgress } from "./progress";
+import type { TeamOverview, TrackedRun } from "./types";
+import { ACTIVE_STAGE_ORDER, formatDuration, isToday, missionProgressForTeam, runProgress, stageProgress } from "./progress";
 
 function run(overrides: Partial<TrackedRun> = {}): TrackedRun {
   return {
@@ -54,7 +54,7 @@ describe("tracking progress", () => {
     expect(runProgress(run({ currentStage: "mission2Question", saveState: { ...EMPTY_SAVE, missionNumber: 2 } }))).toBe(3);
     expect(runProgress(run({ currentStage: "mission2Parts", saveState: { ...EMPTY_SAVE, missionNumber: 2 } }))).toBe(5);
     expect(runProgress(run({ currentStage: "mission2Intro", saveState: { ...EMPTY_SAVE, missionNumber: 2 } }))).toBe(7);
-    expect(runProgress(run({ status: "completed", currentStage: "mission2Complete", completedAt: "2026-09-16T02:00:00.000Z", saveState: { ...EMPTY_SAVE, missionNumber: 2 } }))).toBe(100);
+    expect(runProgress(run({ status: "completed", currentStage: "mission2Complete", completedAt: "2026-09-16T02:00:00.000Z", saveState: { ...EMPTY_SAVE, missionNumber: 2 } }))).toBe(95);
   });
 
   it("keeps the completed Mission 1 journey visible while individual answers fill the final segment", () => {
@@ -91,6 +91,60 @@ describe("tracking progress", () => {
       mission2AssessmentConfirmed: { "member-one": true },
     };
     expect(runProgress(run({ currentStage: "testHub", saveState: save }))).toBe(17);
+  });
+
+  it("fills Mission 2 when any attempt has every individual answer saved", () => {
+    const completeSave = {
+      ...EMPTY_SAVE,
+      missionNumber: 2 as const,
+      team: [{ id: "one", name: "หนึ่ง", avatar: "inventor_sun", position: 0 }],
+      mission2Assessments: { "member-one": { k: "K", p: "P", v: "V" } },
+      mission2AssessmentConfirmed: { "member-one": true },
+    };
+    const completedAttempt = run({ id: "mission-2-round-1", currentStage: "mission2Complete", saveState: completeSave });
+    const replay = run({ id: "mission-2-round-2", currentStage: "mission2Assessment", saveState: { ...EMPTY_SAVE, missionNumber: 2 } });
+    const team = {
+      id: "team-1",
+      name: "ทีมทดสอบ",
+      createdAt: completedAttempt.startedAt,
+      updatedAt: replay.updatedAt,
+      members: completeSave.team,
+      runs: [replay, completedAttempt],
+      activeRun: replay,
+      completedRuns: [],
+    } satisfies TeamOverview;
+
+    expect(runProgress(completedAttempt)).toBe(100);
+    expect(runProgress(replay)).toBe(88);
+    expect(missionProgressForTeam(team, 2)).toBe(100);
+  });
+
+  it("does not fill Mission 2 when a round covers only part of the current group", () => {
+    const partialSave = {
+      ...EMPTY_SAVE,
+      missionNumber: 2 as const,
+      team: [{ id: "one", name: "หนึ่ง", avatar: "inventor_sun", position: 0 }],
+      mission2Assessments: { "member-one": { k: "K", p: "P", v: "V" } },
+      mission2AssessmentConfirmed: { "member-one": true },
+    };
+    const partialAttempt = run({ id: "mission-2-partial", currentStage: "mission2Complete", saveState: partialSave });
+    const fullGroup = [
+      ...partialSave.team,
+      { id: "two", name: "สอง", avatar: "inventor_moon", position: 1 },
+    ];
+    const team = {
+      id: "team-1",
+      name: "ทีมทดสอบ",
+      createdAt: partialAttempt.startedAt,
+      updatedAt: partialAttempt.updatedAt,
+      members: fullGroup,
+      runs: [partialAttempt],
+      activeRun: null,
+      completedRuns: [partialAttempt],
+    } satisfies TeamOverview;
+
+    expect(runProgress(partialAttempt)).toBe(100);
+    expect(missionProgressForTeam(team, 2)).toBe(95);
   });
 
   it("recognizes completions from today", () => {

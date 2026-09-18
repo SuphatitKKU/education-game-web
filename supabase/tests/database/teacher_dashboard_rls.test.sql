@@ -1,8 +1,10 @@
 begin;
-select plan(16);
+select plan(18);
 
 select has_table('public', 'teams', 'teams table exists');
 select has_table('public', 'game_runs', 'game_runs table exists');
+select has_column('public', 'game_runs', 'mission_number', 'runs store their real mission identity');
+select has_column('public', 'game_runs', 'attempt_number', 'runs store an attempt number within the mission');
 select has_table('public', 'student_responses', 'student_responses table exists');
 select has_table('public', 'learning_events', 'learning_events table exists');
 select policies_are('public', 'teams', array['teams_public_read'], 'teams has explicit public read policy');

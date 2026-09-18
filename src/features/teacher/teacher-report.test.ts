@@ -59,6 +59,8 @@ describe("teacher report", () => {
 
   it("creates an Excel-friendly UTF-8 CSV with attendance and answers", () => {
     const testRun = run({
+      missionNumber: 1,
+      attemptNumber: 2,
       saveState: {
         ...EMPTY_SAVE,
         team: [members[0]],
@@ -68,6 +70,8 @@ describe("teacher report", () => {
     });
     const csv = buildTeacherCsv([team(testRun)], 1);
     expect(csv.startsWith("\uFEFF")).toBe(true);
+    expect(csv).toContain('"ภารกิจ","ชื่อภารกิจ","รอบที่"');
+    expect(csv).toContain('"1","วิเคราะห์ปัญหา","2","ทีมทดลอง"');
     expect(csv).toContain('"มะลิ","มาเรียน","รู้แล้ว","ลอง,สังเกต"');
     expect(csv).toContain('"ปัน,ปัน","ไม่มาเรียน"');
   });

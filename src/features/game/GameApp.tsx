@@ -11,6 +11,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { createBrowserId } from "@/lib/browser-id";
 import { hasLegacyData, markLegacyImported, markSupabaseCacheBound, readLegacyBundle, wasLegacyImported } from "@/features/tracking/legacy";
 import {
+  adoptServerRun,
   createTeam,
   flushOutbox,
   importLegacyBundle,
@@ -19,10 +20,12 @@ import {
   queueCheckpoint,
   readOutbox,
   startOrResumeRun,
+  type RunSeedCarry,
   updateTeamMembers,
 } from "@/features/tracking/persistence";
-import { runProgress, STAGE_LABELS } from "@/features/tracking/progress";
-import type { ActiveRunRef, LegacyBundle, SaveIndicator, TeamOverview } from "@/features/tracking/types";
+import { missionProgressForTeam, STAGE_LABELS } from "@/features/tracking/progress";
+import type { ActiveRunRef, LegacyBundle, SaveIndicator, TeamOverview, TrackedRun } from "@/features/tracking/types";
+import { attemptNumberForTrackedRun, runsGroupedByMission } from "@/features/tracking/run-classification";
 import { answerEvents } from "@/features/tracking/answer-events";
 import { MAX_TEAM_MEMBERS, MIN_TEAM_MEMBERS, validateTeamDraft } from "@/features/tracking/validation";
 import { allLabsComplete, canContinueAfterLabs, LAB_MATERIALS, LAB_ROOMS, LAB_ROOMS_ENABLED, LAB_STAGES, labQuestionIndex, labRecapRequired, labResultCount, openLabPatch, restartMissionTwoLabsPatch, type LabRoom } from "./labs";
@@ -38,7 +41,9 @@ import {
   completedMissionsForTeam,
   finishMissionState,
   latestRunForTeamMission,
+  missionTwoEvidenceForTeam,
   missionOneAnswerProgress,
+  missionTwoAnswerProgress,
   nextUnlockMission,
   runMissionNumber,
   visibleCompletedMissions,
@@ -387,7 +392,7 @@ export function GameApp() {
       // Preview mode is for visual QA, so open Mission 3 directly without
       // touching a live team's Supabase run or competing with another tab.
       setSelectedMission(3);
-      setSave({ ...EMPTY_SAVE, stage: "mission3Intro", mission2Completed: true });
+      setSave({ ...EMPTY_SAVE, stage: "mission3Review", mission2Completed: true });
       setLoaded(true);
       return;
     }
@@ -613,9 +618,19 @@ export function GameApp() {
     saveRef.current = next;
     setSave(next);
   };
-  const openTeam = async (team: TeamOverview, mission = selectedMission, isReplaying = false, targetStage?: Stage) => {
+  const openTeam = async (team: TeamOverview, mission = selectedMission, isReplaying = false, targetStage?: Stage, replaySeed: RunSeedCarry = {}) => {
     // Finish/recover this team's durable queue before loading server state.
-    for (const queued of readOutbox().filter((item) => item.run.teamId === team.id)) await flushOutbox(queued.run.id);
+    for (const queued of readOutbox().filter((item) => item.run.teamId === team.id)) {
+      try {
+        await flushOutbox(queued.run.id);
+      } catch (error) {
+        // A different tab or an earlier server migration may already have
+        // advanced this run. Entering a mission should adopt that newer
+        // checkpoint instead of trapping the teacher in the dev error screen.
+        if (error instanceof RevisionConflictError) adoptServerRun(error.serverRun);
+        else throw error;
+      }
+    }
     let currentTeam = (await listTeams()).find((candidate) => candidate.id === team.id) ?? team;
     const selectedMemberKeys = new Set(attendingMembers(team.members).map((member) => member.id ?? `${member.name}|${member.avatar}`));
     const rosterWithAttendance = currentTeam.members.map((member) => ({
@@ -649,7 +664,10 @@ export function GameApp() {
     }
 
     const attendingTeam = { ...currentTeam, members: selectedMembers };
+    const missionTwoEvidence = mission === 3 ? missionTwoEvidenceForTeam(currentTeam) : null;
     const run = await startOrResumeRun(attendingTeam, mission, rosterWithAttendance, {
+      ...replaySeed,
+      ...(missionTwoEvidence ?? {}),
       mission1Completed: save.mission1Completed || mission > 1,
       mission2Completed: save.mission2Completed || mission > 2,
       mission3Completed: save.mission3Completed,
@@ -660,7 +678,7 @@ export function GameApp() {
     const sessionMembers = currentTeam.activeRun && run.saveState.team?.length ? run.saveState.team : selectedMembers;
     const exitTickets = reconcileExitTickets(run.saveState.team ?? [], sessionMembers, run.saveState.exitTickets ?? {});
     const mission2Assessments = reconcileExitTickets(run.saveState.team ?? [], sessionMembers, run.saveState.mission2Assessments ?? {});
-    const serverState = { ...EMPTY_SAVE, ...run.saveState, team: sessionMembers, exitTickets, mission2Assessments, stage: run.currentStage };
+    const serverState = { ...EMPTY_SAVE, ...run.saveState, ...(missionTwoEvidence ?? {}), team: sessionMembers, exitTickets, mission2Assessments, stage: run.currentStage };
     // "ทำภารกิจต่อ" must honor the server checkpoint. Only a team without an
     // active run should enter at the beginning of the mission selected on the map.
     const restoredStage = targetStage ?? stageAfterChoosingTeam(currentTeam.activeRun ? run.currentStage : null, mission);
@@ -709,7 +727,7 @@ export function GameApp() {
         team: save.team,
         audio: save.audio,
         runId: createRunId(),
-        stage: mission === 3 ? "mission3Intro" : mission === 2 ? "mission2Review" : "mission",
+        stage: mission === 3 ? "mission3Review" : mission === 2 ? "mission2Review" : "mission",
       });
       return;
     }
@@ -730,7 +748,7 @@ export function GameApp() {
     try {
       await openTeam(teamToOpen, mission, isReplaying);
     } catch (error) {
-      console.error("Unable to start the selected mission", error);
+      console.warn("Unable to start the selected mission", error);
       // The team was already checked in before reaching the route map. Keep
       // the learner on the map when a run cannot start; never ask attendance
       // a second time as an error fallback.
@@ -745,6 +763,20 @@ export function GameApp() {
     // This is a navigation checkpoint only. The existing run, attendance, and
     // every saved answer stay intact while the group returns to Exit Ticket.
     await openTeam(team, 1, false, "exitTicket");
+  };
+  const resumeMissionTwoAnswers = async (team: TeamOverview, sourceRun: TrackedRun) => {
+    // Mission 2 uses the same active run and attendance snapshot, so drafts
+    // remain in place. A historical round becomes a new attempt seeded with
+    // those answers instead of mutating the completed record.
+    const activeSameRun = team.activeRun?.id === sourceRun.id;
+    const sourceMembers = sourceRun.saveState.team?.length ? sourceRun.saveState.team : team.members;
+    await openTeam(
+      { ...team, members: sourceMembers },
+      2,
+      !activeSameRun,
+      "mission2Assessment",
+      activeSameRun ? {} : { ...sourceRun.saveState, missionNumber: 2, stage: "mission2Assessment", mission2Completed: false },
+    );
   };
   const goBack = () => {
     if (labRoomsPaused) { go("exitTicket"); return; }
@@ -772,11 +804,15 @@ export function GameApp() {
     if (save.stage === "notebook" || save.stage === "comparison" || save.stage === "recap") { go("testHub"); return; }
     if (save.stage === "mission2Assessment") { go("comparison"); return; }
     if (save.stage === "mission2Complete") { go("overview"); return; }
-    if (save.stage === "mission3Intro") { go("overview"); return; }
+    if (save.stage === "mission3Review") { go("overview"); return; }
+    if (save.stage === "mission3Question") { go("mission3Review"); return; }
+    if (save.stage === "mission3Intro") { go("mission3Question"); return; }
     if (save.stage === "mission3Data") { go("mission3Intro"); return; }
-    if (save.stage === "mission3Materials") { go("mission3Data"); return; }
+    if (save.stage === "mission3Parts") { go("mission3Data"); return; }
+    if (save.stage === "mission3Materials") { go("mission3Parts"); return; }
     if (save.stage === "mission3Design") { go("mission3Materials"); return; }
-    if (save.stage === "mission3Reason") { go("mission3Design"); return; }
+    if (save.stage === "mission3Build") { go("mission3Design"); return; }
+    if (save.stage === "mission3Reason") { go("mission3Build"); return; }
     if (save.stage === "mission3Complete") { go("overview"); return; }
     if (save.stage === "prediction") { go(LAB_ROOMS_ENABLED ? "recap" : "exitTicket"); return; }
     if (save.stage === "summary") { go(PREDICTION_ENABLED ? "prediction" : "exitTicket"); }
@@ -812,8 +848,8 @@ export function GameApp() {
         {save.stage === "purpose" && <MissionPurpose onBack={() => go("menu")} onDone={() => { setTeamSetupFlow("select"); go("team"); }} />}
         {save.stage === "overview" && <MissionOverview mission2Unlocked={MISSION_TWO_ALWAYS_UNLOCKED} mission3Unlocked={completedMissions.includes(2)} completedMissions={completedMissions} mission1Answer={save.bigQuestionProgress.mission1} startError={missionStartError} unlockingMission={unlockingMission} onUnlockAnimationDone={() => setUnlockingMission(null)} onBack={() => { setMissionStartError(""); setTeamSetupFlow("select"); go("team"); }} onSelect={openMission} onReplay={replayCompletedMission} />}
         {labRoomsPaused && <LabRoomsPaused onContinue={() => go(PREDICTION_ENABLED ? "prediction" : "summary")} />}
-        {!labRoomsPaused && save.stage === "team" && <TeamSetup flowMode={teamSetupFlow} preferredTeamId={selectedTeam?.id} selectedMission={selectedMission} initial={save.team} legacyBundle={legacyBundle} legacyAlreadyImported={wasLegacyImported()} onBack={() => go(teamSetupFlow === "select" ? "purpose" : "overview")} onSelectTeam={selectTeamForOverview} onSelectLocal={selectLocalTeamForOverview} onChoose={openTeam} onResumeMissionOneAnswers={resumeMissionOneAnswers} onCreate={createAndOpenTeam} onUpdate={updateExistingTeam} onImport={importExistingTeam} onLocalDone={(team) => selectedMission === 3
-          ? patch({ team, runId: save.runId || createRunId(), stage: "mission3Intro" })
+        {!labRoomsPaused && save.stage === "team" && <TeamSetup flowMode={teamSetupFlow} preferredTeamId={selectedTeam?.id} selectedMission={selectedMission} initial={save.team} legacyBundle={legacyBundle} legacyAlreadyImported={wasLegacyImported()} onBack={() => go(teamSetupFlow === "select" ? "purpose" : "overview")} onSelectTeam={selectTeamForOverview} onSelectLocal={selectLocalTeamForOverview} onChoose={openTeam} onResumeMissionOneAnswers={resumeMissionOneAnswers} onResumeMissionTwoAnswers={resumeMissionTwoAnswers} onCreate={createAndOpenTeam} onUpdate={updateExistingTeam} onImport={importExistingTeam} onLocalDone={(team) => selectedMission === 3
+          ? patch({ team, runId: save.runId || createRunId(), stage: "mission3Review" })
           : patch({ ...EMPTY_SAVE, team, audio: save.audio, runId: createRunId(), stage: selectedMission === 2 ? "mission2Review" : "mission" })} />}
         {!labRoomsPaused && save.stage === "mission" && <MissionRoute onBack={reset} onDone={() => {
           const firstScene = STORY[save.storyIndex] ?? STORY[0];
@@ -833,9 +869,9 @@ export function GameApp() {
         {!labRoomsPaused && <LabScreens save={save} onPatch={patch} onBack={leaveRunToTeams} onComplete={() => go("comparison")} />}
         {!labRoomsPaused && (save.stage === "notebook" || save.stage === "comparison") && <MissionTwoConnection values={save.mission2Connections ?? {}} onBack={() => go("testHub")} onChange={(mission2Connections) => patch({ mission2Connections })} onDone={() => go("mission2Assessment")} />}
         {!labRoomsPaused && save.stage === "recap" && <Recap index={save.recapIndex} answers={save.recapAnswers} onAnswer={(recapAnswers) => patch({ recapAnswers })} onDone={() => go("testHub")} />}
-        {!labRoomsPaused && save.stage === "mission2Assessment" && <MissionTwoAssessment team={save.team} values={save.mission2Assessments ?? {}} confirmed={save.mission2AssessmentConfirmed ?? {}} onBack={() => go("comparison")} onChange={(mission2Assessments, mission2AssessmentConfirmed) => patch({ mission2Assessments, mission2AssessmentConfirmed })} onDone={() => { playSound("10_idea_chime.ogg", save.audio); patch({ mission2Completed: true, stage: "mission2Complete" }); }} />}
+        {!labRoomsPaused && save.stage === "mission2Assessment" && <MissionTwoAssessment team={save.team} values={save.mission2Assessments ?? {}} confirmed={save.mission2AssessmentConfirmed ?? {}} onBack={() => go("comparison")} onHome={showMissionOverview} onChange={(mission2Assessments, mission2AssessmentConfirmed) => patch({ mission2Assessments, mission2AssessmentConfirmed })} onDone={() => { playSound("10_idea_chime.ogg", save.audio); patch({ mission2Completed: true, stage: "mission2Complete" }); }} />}
         {!labRoomsPaused && save.stage === "mission2Complete" && <MissionTwoComplete team={save.team} onHome={() => { setUnlockingMission(3); patch({ mission2Completed: true, stage: "overview" }); }} />}
-        {!["menu", "overview", "team"].includes(save.stage) && ["mission3Intro", "mission3Data", "mission3Materials", "mission3Design", "mission3Reason", "mission3Complete"].includes(save.stage) && <MissionThreeScreen stage={save.stage as MissionThreeStage} save={save} onPatch={patch} onBack={goBack} onNext={(stage) => go(stage)} onComplete={() => patch({ mission3Completed: true, stage: "mission3Complete" })} onFinish={() => patch({ mission3Completed: true, stage: "overview" })} />}
+        {!["menu", "overview", "team"].includes(save.stage) && ["mission3Review", "mission3Question", "mission3Intro", "mission3Data", "mission3Parts", "mission3Materials", "mission3Design", "mission3Build", "mission3Reason", "mission3Complete"].includes(save.stage) && <MissionThreeScreen stage={save.stage as MissionThreeStage} save={save} onPatch={patch} onBack={goBack} onNext={(stage) => go(stage)} onComplete={() => patch({ mission3Completed: true, stage: "mission3Complete" })} onFinish={() => patch({ mission3Completed: true, stage: "overview" })} />}
         {!labRoomsPaused && PREDICTION_ENABLED && save.stage === "prediction" && <Prediction labsEnabled={LAB_ROOMS_ENABLED} values={save.predictions} compressionResults={save.compressionResults} absorptionResults={save.absorptionResults} elasticityResults={save.elasticityResults} onChange={(predictions) => patch({ predictions })} onDone={() => go("summary")} />}
         {!labRoomsPaused && save.stage === "summary" && <Summary save={save} onReplay={() => void startNewAttempt()} onReset={reset} />}
         {(save.stage === "story" || save.stage === "inspection") && <button className="back-nav-button" onClick={(event) => { event.stopPropagation(); goBack(); }}>‹ ย้อนกลับ</button>}
@@ -952,6 +988,7 @@ function TeamSetup({
   onSelectLocal,
   onChoose,
   onResumeMissionOneAnswers,
+  onResumeMissionTwoAnswers,
   onCreate,
   onUpdate,
   onImport,
@@ -968,6 +1005,7 @@ function TeamSetup({
   onSelectLocal: (team: TeamMember[]) => void;
   onChoose: (team: TeamOverview) => Promise<void>;
   onResumeMissionOneAnswers: (team: TeamOverview) => Promise<void>;
+  onResumeMissionTwoAnswers: (team: TeamOverview, run: TrackedRun) => Promise<void>;
   onCreate: (name: string, team: TeamMember[]) => Promise<TeamOverview>;
   onUpdate: (teamId: string, team: TeamMember[]) => Promise<TeamOverview>;
   onImport: (name: string) => Promise<TeamOverview>;
@@ -1111,7 +1149,7 @@ function TeamSetup({
     openRosterEditor(importedTeam, flowMode === "select" ? "overview" : "mission");
   };
 
-  if (historyTeam) return <TeamHistory team={historyTeam} onBack={() => setHistoryTeam(null)} onResumeMissionOneAnswers={onResumeMissionOneAnswers} />;
+  if (historyTeam) return <TeamHistory team={historyTeam} onBack={() => setHistoryTeam(null)} onResumeMissionOneAnswers={onResumeMissionOneAnswers} onResumeMissionTwoAnswers={onResumeMissionTwoAnswers} />;
   return (
     <div className={`screen team-screen${remoteConfigured && mode === "create" ? " team-create-screen" : ""}`}>
       <img className="soft-bg" src={asset("menu/cover.png")} alt="" />
@@ -1152,8 +1190,8 @@ function TeamSetup({
               <div className="team-mission-progress-list" aria-label={`ความคืบหน้ารายภารกิจของ ${team.name}`}>
                 {([1, 2, 3] as MissionNumber[]).map((mission) => {
                   const missionRun = latestRunForTeamMission(team, mission);
-                  const progress = missionRun ? runProgress(missionRun) : 0;
-                  const complete = mission === 1 ? progress === 100 : missionRun?.status === "completed";
+                  const progress = missionProgressForTeam(team, mission);
+                  const complete = progress === 100;
                   return <div className={complete ? "complete" : missionRun ? "active" : "empty"} key={mission}>
                     <span>ภารกิจ {mission}</span>
                     <i><b style={{ width: `${progress}%` }} /></i>
@@ -1237,19 +1275,23 @@ function TeamSetup({
   );
 }
 
-function TeamHistory({ team, onBack, onResumeMissionOneAnswers }: { team: TeamOverview; onBack: () => void; onResumeMissionOneAnswers: (team: TeamOverview) => Promise<void> }) {
+function TeamHistory({ team, onBack, onResumeMissionOneAnswers, onResumeMissionTwoAnswers }: { team: TeamOverview; onBack: () => void; onResumeMissionOneAnswers: (team: TeamOverview) => Promise<void>; onResumeMissionTwoAnswers: (team: TeamOverview, run: TrackedRun) => Promise<void> }) {
   const [selectedRunId, setSelectedRunId] = useState(team.runs[0]?.id ?? "");
   const run = team.runs.find((item) => item.id === selectedRunId) ?? team.runs[0];
   const runMembers = run?.saveState.team?.length ? run.saveState.team : team.members;
   const missionOneAnswers = run && runMissionNumber(run) === 1 ? missionOneAnswerProgress(run) : null;
+  const missionTwoAnswers = run && runMissionNumber(run) === 2 ? missionTwoAnswerProgress(run, team.members) : null;
   const needsMissionOneAnswers = Boolean(missionOneAnswers && missionOneAnswers.total > 0 && !missionOneAnswers.complete);
+  const needsMissionTwoAnswers = Boolean(missionTwoAnswers && missionTwoAnswers.total > 0 && !missionTwoAnswers.complete);
+  const groupedRuns = runsGroupedByMission(team);
   return <div className="screen team-history-screen">
     <header><button className="button button-yellow compact" onClick={onBack}>‹ กลับไปเลือกทีม</button><div><span>คำตอบและประวัติทีม</span><h1>{team.name}</h1></div></header>
     <div className="team-history-layout">
-      <aside>{team.runs.map((item, index) => <button className={item.id === run?.id ? "active" : ""} key={item.id} onClick={() => setSelectedRunId(item.id)}><b>{item.status === "in_progress" ? "รอบที่กำลังทำ" : `ภารกิจครั้งที่ ${team.runs.length - index}`}</b><span>{new Date(item.completedAt ?? item.updatedAt).toLocaleString("th-TH")}</span></button>)}</aside>
+      <aside>{groupedRuns.map((group) => <div className="team-history-mission-group" key={group.missionNumber}><h2>ภารกิจที่ {group.missionNumber}</h2>{group.runs.map((item) => <button className={item.id === run?.id ? "active" : ""} key={item.id} onClick={() => setSelectedRunId(item.id)}><b>รอบที่ {attemptNumberForTrackedRun(item, team.runs)}{item.status === "in_progress" ? " · กำลังทำ" : ""}</b><span>{new Date(item.completedAt ?? item.updatedAt).toLocaleString("th-TH")}</span></button>)}</div>)}</aside>
       <section>{run ? <>
-        <div className="history-summary"><div><span>สถานะ</span><b>{run.status === "in_progress" ? "กำลังทำภารกิจ" : "ทำภารกิจสำเร็จ"}</b></div><div><span>ขั้นล่าสุด</span><b>{STAGE_LABELS[run.currentStage]}</b></div><div><span>สมาชิก</span><b>{runMembers.length} คน</b></div></div>
+        <div className="history-summary"><div><span>ภารกิจและรอบ</span><b>ภารกิจที่ {runMissionNumber(run)} · รอบที่ {attemptNumberForTrackedRun(run, team.runs)}</b></div><div><span>สถานะ</span><b>{run.status === "in_progress" ? "กำลังทำภารกิจ" : "ทำภารกิจสำเร็จ"}</b></div><div><span>ขั้นล่าสุด</span><b>{STAGE_LABELS[run.currentStage]}</b></div><div><span>สมาชิก</span><b>{runMembers.length} คน</b></div></div>
         {needsMissionOneAnswers && <div className="history-answer-return"><div><b>คำถามภารกิจที่ 1 ยังไม่ครบ</b><span>ตอบแล้ว {missionOneAnswers?.completed}/{missionOneAnswers?.total} คน</span></div><button type="button" onClick={() => void onResumeMissionOneAnswers(team)}><AppIcon name="pencil" /> ไปตอบคำถามภารกิจที่ 1</button></div>}
+        {needsMissionTwoAnswers && <div className="history-answer-return"><div><b>คำถามภารกิจที่ 2 ยังไม่ครบ</b><span>บันทึกแล้ว {missionTwoAnswers?.completed}/{missionTwoAnswers?.total} คน</span></div><button type="button" onClick={() => void onResumeMissionTwoAnswers(team, run)}><AppIcon name="pencil" /> ไปตอบคำถามภารกิจที่ 2</button></div>}
         <h2>คำตอบจากหน้าหมุนกล่อง 3 มิติ</h2><div className="history-chip-list history-inspection-list">{Object.entries(run.saveState.inspectionFindings ?? {}).map(([damageId, cause]) => <span key={damageId}>{DAMAGES.find((damage) => damage.id === damageId)?.label ?? damageId} → {cause}</span>)}{!Object.keys(run.saveState.inspectionFindings ?? {}).length && <em>ยังไม่มีคำตอบ</em>}</div>
         <h2>สิ่งที่ทีมเลือกศึกษา</h2><div className="history-chip-list">{Object.entries(run.saveState.studyFocus ?? {}).filter(([, value]) => value).map(([key]) => <span key={key}>{studyTopicLabel(key)}</span>)}{!Object.values(run.saveState.studyFocus ?? {}).some(Boolean) && <em>ยังไม่ได้เลือก</em>}</div>
         <h2>คำตอบรายบุคคล</h2><div className="history-response-grid">{runMembers.map((member, index) => { const legacyKey = `student-${member.position ?? index}`; const tickets = runMissionNumber(run) === 2 ? run.saveState.mission2Assessments : run.saveState.exitTickets; const ticket = tickets?.[exitTicketKey(member, index)] ?? tickets?.[legacyKey] ?? tickets?.[member.name]; return <article key={member.id ?? member.name}><b>{member.name}</b>{ticket ? <><p><i>K</i>{ticket.k || "-"}</p><p><i>P</i>{ticket.p || "-"}</p><p><i>V</i>{ticket.v || "-"}</p></> : <span>ไม่มีคำตอบที่บันทึกไว้</span>}</article>; })}</div>
@@ -3136,9 +3178,10 @@ function missionTwoTicketComplete(ticket?: ExitTicket) {
   return Boolean(ticket?.k && ticket?.p && ticket?.v);
 }
 
-function MissionTwoAssessment({ team, values, confirmed, onBack, onChange, onDone }: { team: TeamMember[]; values: Record<string, ExitTicket>; confirmed: Record<string, boolean>; onBack: () => void; onChange: (values: Record<string, ExitTicket>, confirmed: Record<string, boolean>) => void; onDone: () => void }) {
+function MissionTwoAssessment({ team, values, confirmed, onBack, onHome, onChange, onDone }: { team: TeamMember[]; values: Record<string, ExitTicket>; confirmed: Record<string, boolean>; onBack: () => void; onHome: () => void; onChange: (values: Record<string, ExitTicket>, confirmed: Record<string, boolean>) => void; onDone: () => void }) {
   const members = attendingMembers(team);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [confirmHome, setConfirmHome] = useState(false);
   const member = members[activeIndex] ?? members[0];
   const memberKey = member ? exitTicketKey(member, activeIndex) : "student-0";
   const ticket = values[memberKey] ?? EMPTY_EXIT_TICKET;
@@ -3160,6 +3203,7 @@ function MissionTwoAssessment({ team, values, confirmed, onBack, onChange, onDon
   if (!member) return <div className="screen mission-two-screen mission-two-assessment-screen"><button className="button button-white mission-two-back" onClick={onBack}>‹ ย้อนกลับ</button><main className="mission-two-assessment-empty"><h1>ยังไม่มีรายชื่อนักเรียน</h1><p>กลับไปเลือกทีมก่อนเริ่มคำถามรายบุคคล</p></main></div>;
   return <div className="screen mission-two-screen mission-two-assessment-screen">
     <button className="button button-white mission-two-back" type="button" onClick={onBack}>‹ กลับหน้าสรุป</button>
+    <button className="exit-home-button mission-two-assessment-home" type="button" aria-label="กลับไปหน้าเส้นทางภารกิจ" onClick={() => setConfirmHome(true)}><AppIcon name="home" /></button>
     <header><span>คำถามรายบุคคล</span><h1>เลือกชื่อ แล้วตอบคำถามทั้ง 3 ข้อ</h1><p>ตอบให้ครบทุกข้อ แล้วกดบันทึกคำตอบของคนนี้</p></header>
     <main className="mission-two-assessment-layout">
       <aside className="mission-two-student-list"><h2><AppIcon name="users" /> เลือกชื่อนักเรียน</h2>{members.map((candidate, index) => {
@@ -3186,6 +3230,17 @@ function MissionTwoAssessment({ team, values, confirmed, onBack, onChange, onDon
       </section>
     </main>
     <div className="mission-two-assessment-finish"><span>{allConfirmed ? "✓ บันทึกครบทุกคนแล้ว" : `บันทึกแล้ว ${confirmedCount}/${members.length} คน ต้องครบทุกคนจึงไปต่อได้`}</span><button className="button button-orange" type="button" disabled={!allConfirmed} onClick={onDone}>ไปหน้าแสดงความยินดี ›</button></div>
+    {confirmHome && <div className="exit-home-confirm-backdrop" role="presentation" onClick={() => setConfirmHome(false)}>
+      <section className="exit-home-confirm" role="dialog" aria-modal="true" aria-labelledby="mission-two-home-confirm-title" onClick={(event) => event.stopPropagation()}>
+        <div className="exit-home-confirm-icon"><AppIcon name="home" /></div>
+        <h2 id="mission-two-home-confirm-title">กลับไปหน้าเส้นทางภารกิจไหม?</h2>
+        <p>คำตอบและรายชื่อคนที่บันทึกแล้วจะยังอยู่ครบ กลับมาตอบต่อได้ภายหลัง</p>
+        <div className="exit-home-confirm-actions">
+          <button type="button" className="button button-white" onClick={() => setConfirmHome(false)}>อยู่ต่อ</button>
+          <button type="button" className="button button-orange" onClick={() => { setConfirmHome(false); onHome(); }}>กลับหน้าเส้นทาง</button>
+        </div>
+      </section>
+    </div>}
   </div>;
 }
 

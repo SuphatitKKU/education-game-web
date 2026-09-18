@@ -21,6 +21,10 @@ export type TrackedTeamMember = TeamMember & {
 export type TrackedRun = {
   id: string;
   teamId: string;
+  /** Durable mission identity. Optional while older deployments are upgraded. */
+  missionNumber?: 1 | 2 | 3 | 4 | 5;
+  /** One-based attempt number, scoped to this team and mission. */
+  attemptNumber?: number;
   status: RunStatus;
   currentStage: Stage;
   saveState: GameSave;

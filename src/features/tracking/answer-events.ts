@@ -24,9 +24,9 @@ export function answerEvents(current: GameSave, next: Partial<GameSave>): Learni
     ["bigQuestionProgress", "big_question_progress_saved", "studyFocus"],
     ["mission3Selections", "mission3_material_selected", "mission3Materials"],
     ["mission3Reuse", "mission3_reuse_material_changed", "mission3Materials"],
-    ["mission3Design", "mission3_design_changed", "mission3Design"],
-    ["mission3Alternative", "mission3_alternative_changed", "mission3Reason"],
-    ["mission3Reason", "mission3_reason_changed", "mission3Reason"],
+    ["mission3Placements", "mission3_placement_changed", "mission3Design"],
+    ["mission3Reasons", "mission3_group_reason_changed", "mission3Reason"],
+    ["mission3BuildSteps", "mission3_build_step_changed", "mission3Build"],
   ] as const;
   for (const [field, eventType, stage] of maps) {
     if (!next[field]) continue;
@@ -39,6 +39,20 @@ export function answerEvents(current: GameSave, next: Partial<GameSave>): Learni
         payload: { field, key, previous: before[key] ?? null, answer: after[key] ?? null },
       });
     }
+  }
+  if (next.mission3Extra !== undefined && current.mission3Extra !== next.mission3Extra) {
+    events.push({
+      eventType: "mission3_extra_layer_changed",
+      stage: "mission3Design",
+      payload: { field: "mission3Extra", previous: current.mission3Extra || null, answer: next.mission3Extra || null },
+    });
+  }
+  if (next.mission3ReuseMaterial !== undefined && current.mission3ReuseMaterial !== next.mission3ReuseMaterial) {
+    events.push({
+      eventType: "mission3_reuse_material_changed",
+      stage: "mission3Materials",
+      payload: { field: "mission3ReuseMaterial", previous: current.mission3ReuseMaterial || null, answer: next.mission3ReuseMaterial || null },
+    });
   }
   if (next.stage && current.stage !== next.stage) events.push({ eventType: "stage_changed", stage: next.stage, payload: { from: current.stage, to: next.stage } });
   return events;

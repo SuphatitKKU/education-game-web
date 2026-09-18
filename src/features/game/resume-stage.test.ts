@@ -16,9 +16,14 @@ describe("stageAfterChoosingTeam", () => {
     "notebook",
     "comparison",
     "recap",
+    "mission3Review",
+    "mission3Question",
+    "mission3Intro",
     "mission3Data",
+    "mission3Parts",
     "mission3Materials",
     "mission3Design",
+    "mission3Build",
     "mission3Reason",
   ] as const)("resumes an active run at %s without restarting it", (stage) => {
     expect(stageAfterChoosingTeam(stage, 1)).toBe(stage);
@@ -33,7 +38,7 @@ describe("stageAfterChoosingTeam", () => {
   it.each([
     [1, "mission"],
     [2, "mission2Review"],
-    [3, "mission3Intro"],
+    [3, "mission3Review"],
   ] as const)("uses the selected mission %s only for a new run", (mission, expected) => {
     expect(stageAfterChoosingTeam(null, mission)).toBe(expected);
   });
@@ -42,7 +47,7 @@ describe("stageAfterChoosingTeam", () => {
     ["menu", 2, "mission2Review"],
     ["purpose", 2, "mission2Review"],
     ["overview", 2, "mission2Review"],
-    ["team", 3, "mission3Intro"],
+    ["team", 3, "mission3Review"],
   ] as const)("does not resume the non-playing checkpoint %s", (stage, mission, expected) => {
     expect(stageAfterChoosingTeam(stage, mission)).toBe(expected);
   });

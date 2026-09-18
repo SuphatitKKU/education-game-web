@@ -22,6 +22,6 @@ export function stageAfterChoosingTeam(
   // teacher selected instead of trapping the team on the route map.
   if (activeRunStage && !NON_PLAYING_STAGES.has(activeRunStage)) return resumeLabStage(activeRunStage);
   if (selectedMission === 2) return "mission2Review";
-  if (selectedMission === 3) return "mission3Intro";
+  if (selectedMission === 3) return "mission3Review";
   return "mission";
 }

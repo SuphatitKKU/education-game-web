@@ -1,5 +1,6 @@
 import type { TeamMember } from "@/features/game/data";
 import type { TeamOverview, TrackedRun } from "@/features/tracking/types";
+import { attemptNumberForTrackedRun, missionNumberForTrackedRun } from "@/features/tracking/run-classification";
 
 export type DashboardMissionFilter = "all" | 1 | 2 | 3 | 4 | 5;
 
@@ -11,33 +12,8 @@ export const MISSION_LABELS: Record<1 | 2 | 3 | 4 | 5, string> = {
   5: "พิสูจน์ผลงาน",
 };
 
-const MISSION_TWO_STAGES = new Set([
-  "mission2Review",
-  "mission2Question",
-  "mission2Parts",
-  "mission2Intro",
-  "testHub",
-  "compression",
-  "absorption",
-  "elasticity",
-  "impact",
-  "notebook",
-  "comparison",
-  "recap",
-  "mission2Assessment",
-  "mission2Complete",
-  "prediction",
-  "summary",
-]);
-
 export function missionNumberForRun(run: TrackedRun): 1 | 2 | 3 | 4 | 5 {
-  const savedMission = run.saveState.missionNumber;
-  if (savedMission && savedMission >= 1 && savedMission <= 5) return savedMission;
-  // The stage is authoritative for old checkpoints. Completion flags may be
-  // carried into a later mission and therefore cannot classify a run safely.
-  if (run.currentStage.startsWith("mission3")) return 3;
-  if (MISSION_TWO_STAGES.has(run.currentStage)) return 2;
-  return 1;
+  return missionNumberForTrackedRun(run);
 }
 
 export function runsForMission(team: TeamOverview, mission: DashboardMissionFilter): TrackedRun[] {
@@ -91,6 +67,7 @@ export function buildTeacherCsv(teams: TeamOverview[], mission: DashboardMission
   const rows: unknown[][] = [[
     "ภารกิจ",
     "ชื่อภารกิจ",
+    "รอบที่",
     "ทีม",
     "รหัสรอบ",
     "วันที่เริ่ม",
@@ -114,6 +91,7 @@ export function buildTeacherCsv(teams: TeamOverview[], mission: DashboardMission
         rows.push([
           missionNumber,
           MISSION_LABELS[missionNumber],
+          attemptNumberForTrackedRun(run, team.runs),
           team.name,
           run.id,
           new Date(run.startedAt).toLocaleString("th-TH"),

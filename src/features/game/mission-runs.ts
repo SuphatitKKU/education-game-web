@@ -1,6 +1,8 @@
 import type { GameSave, Stage } from "./data";
 import type { TeamOverview, TrackedRun } from "@/features/tracking/types";
-import { exitTicketProgress } from "./exit-ticket-progress";
+import { missionNumberForTrackedRun } from "@/features/tracking/run-classification";
+import { exitTicketProgress, type ExitTicketProgress } from "./exit-ticket-progress";
+import { exitTicketKey } from "./team-attendance";
 
 export type MissionNumber = 1 | 2 | 3;
 
@@ -17,10 +19,8 @@ export const COMPLETED_RUN_STAGES = new Set<Stage>([
 ]);
 
 export function runMissionNumber(run: TrackedRun): MissionNumber {
-  if (run.saveState.missionNumber === 2 || run.saveState.missionNumber === 3) return run.saveState.missionNumber;
-  if (["mission2Review", "mission2Question", "mission2Parts", "mission2Intro", "testHub", "compression", "absorption", "elasticity", "impact", "notebook", "comparison", "recap", "mission2Assessment", "mission2Complete"].includes(run.currentStage)) return 2;
-  if (["mission3Intro", "mission3Data", "mission3Materials", "mission3Design", "mission3Reason", "mission3Complete"].includes(run.currentStage)) return 3;
-  return 1;
+  const mission = missionNumberForTrackedRun(run);
+  return mission === 2 || mission === 3 ? mission : 1;
 }
 
 export function finishMissionState(run: TrackedRun, mission: MissionNumber): GameSave {
@@ -33,6 +33,30 @@ export function latestRunForTeamMission(team: TeamOverview, mission: MissionNumb
   return team.runs.find((run) => runMissionNumber(run) === mission) ?? null;
 }
 
+const hasMissionTwoEvidence = (run: TrackedRun) =>
+  Object.keys(run.saveState.compressionResults ?? {}).length > 0
+  || Object.keys(run.saveState.impactResults ?? {}).length > 0
+  || Object.keys(run.saveState.absorptionResults ?? {}).length > 0;
+
+/**
+ * Use the newest Mission 2 attempt that actually contains recorded evidence.
+ * Empty replay attempts must not hide the group's latest saved experiment.
+ */
+export function missionTwoEvidenceForTeam(team: TeamOverview): Pick<GameSave, "compressionResults" | "impactResults" | "absorptionResults"> {
+  const missionTwoRuns = team.runs
+    .filter((run) => runMissionNumber(run) === 2)
+    .sort((left, right) => {
+      const attemptDifference = (right.attemptNumber ?? 0) - (left.attemptNumber ?? 0);
+      return attemptDifference || new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime();
+    });
+  const source = missionTwoRuns.find(hasMissionTwoEvidence) ?? missionTwoRuns[0];
+  return {
+    compressionResults: source?.saveState.compressionResults ?? {},
+    impactResults: source?.saveState.impactResults ?? {},
+    absorptionResults: source?.saveState.absorptionResults ?? {},
+  };
+}
+
 export function completedMissionsForTeam(team: TeamOverview): MissionNumber[] {
   return ([1, 2, 3] as MissionNumber[]).filter((mission) => team.completedRuns.some((run) => runMissionNumber(run) === mission));
 }
@@ -40,6 +64,32 @@ export function completedMissionsForTeam(team: TeamOverview): MissionNumber[] {
 /** Summarize the saved individual K-P-V answers for Mission 1. */
 export function missionOneAnswerProgress(run: TrackedRun) {
   return exitTicketProgress(run.saveState.team ?? [], run.saveState.exitTickets ?? {});
+}
+
+/** Count Mission 2 answers that were completed and explicitly saved. */
+export function missionTwoAnswerProgress(run: TrackedRun, requiredMembers?: TeamOverview["members"]): ExitTicketProgress {
+  const recordedRoster = run.saveState.attendance?.members ?? [];
+  const members = requiredMembers?.length
+    ? requiredMembers
+    : recordedRoster.length
+      ? recordedRoster
+      : run.saveState.team ?? [];
+  const tickets = run.saveState.mission2Assessments ?? {};
+  const confirmed = run.saveState.mission2AssessmentConfirmed ?? {};
+  const completed = members.filter((member, index) => {
+    const stableKey = exitTicketKey(member, index);
+    const legacyKey = `student-${member.position ?? index}`;
+    const ticket = tickets[stableKey] ?? tickets[legacyKey] ?? tickets[member.name];
+    const wasConfirmed = confirmed[stableKey] ?? confirmed[legacyKey] ?? confirmed[member.name];
+    return Boolean(wasConfirmed && ticket?.k && ticket?.p && ticket?.v);
+  }).length;
+  const total = members.length;
+  return {
+    completed,
+    total,
+    percent: total ? Math.round((completed / total) * 100) : 0,
+    complete: total > 0 && completed === total,
+  };
 }
 
 /** Return the next mission whose unlock celebration should be shown. */

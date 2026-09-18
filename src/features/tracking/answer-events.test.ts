@@ -27,4 +27,23 @@ describe("answer audit", () => {
     expect(answerEvents(EMPTY_SAVE, { labAnswerDrafts: { impact: { cardboard: "much" } }, recapAnswers: { "0": [1, 0] } })).toHaveLength(2);
     expect(answerEvents(EMPTY_SAVE, { inspectionFindings: {}, exitTickets: {} })).toEqual([]);
   });
+  it("records Mission 3 group choices, placement, reason and build progress", () => {
+    const events = answerEvents(EMPTY_SAVE, {
+      mission3Selections: { structure: "corrugated_cardboard" },
+      mission3ReuseMaterial: "cardboard",
+      mission3Extra: "impact",
+      mission3Placements: { outside: "water" },
+      mission3Reasons: { structure: "compression" },
+      mission3BuildSteps: { "0": true },
+    });
+    expect(events.map((event) => event.eventType)).toEqual([
+      "mission3_material_selected",
+      "mission3_placement_changed",
+      "mission3_group_reason_changed",
+      "mission3_build_step_changed",
+      "mission3_extra_layer_changed",
+      "mission3_reuse_material_changed",
+    ]);
+    expect(events[1]).toMatchObject({ stage: "mission3Design", payload: { key: "outside", answer: "water" } });
+  });
 });
