@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { GameSave, MissionThreeLayer, MissionThreeZone } from "./data";
 import { LAB_MATERIALS } from "./labs";
+import { recordedExperimentResult } from "./mission-three-evidence";
 import styles from "./MissionThree.module.css";
 import { AppIcon, type AppIconName } from "@/components/AppIcon";
 
@@ -125,29 +126,8 @@ function materialById(id?: string) {
   return LAB_MATERIALS.find((material) => material.id === id);
 }
 
-function formatCompression(save: GameSave, materialId: string) {
-  const result = save.compressionResults?.[materialId];
-  if (!result || (result.deformationMm === undefined && !result.measurements?.length)) return "ยังไม่มีผลแรงกด";
-  return `ยุบ ${result.deformationMm ?? result.measurements?.at(-1) ?? 0} มม.`;
-}
-
-function formatImpact(save: GameSave, materialId: string) {
-  const result = save.impactResults?.[materialId];
-  if (!result) return "ยังไม่มีผลแรงกระแทก";
-  return ({ none: "สิ่งของเสียหายน้อยมาก", slight: "สิ่งของเสียหายเล็กน้อย", much: "สิ่งของเสียหายมาก" } as const)[result.observation];
-}
-
-function formatWater(save: GameSave, materialId: string) {
-  const result = save.absorptionResults?.[materialId];
-  if (!result || (result.riseCm === undefined && result.absorbed === undefined && !result.summary)) return "ยังไม่มีผลการดูดซับน้ำ";
-  if (result.riseCm !== undefined) return `รอยเปียก ${result.riseCm.toFixed(1)} ซม.`;
-  return `ดูดซับ ${result.absorbed ?? 0} หน่วย`;
-}
-
 function evidenceFor(save: GameSave, materialId: string, evidence: "compression" | "impact" | "water") {
-  if (evidence === "compression") return formatCompression(save, materialId);
-  if (evidence === "water") return formatWater(save, materialId);
-  return formatImpact(save, materialId);
+  return recordedExperimentResult(save, materialId, evidence);
 }
 
 function layerRole(layer?: MissionThreeLayer): RoleKey | null {
@@ -260,9 +240,9 @@ function MissionThreeData({ save, onNext, onBack }: { save: GameSave; onNext: ()
         </div>
         {LAB_MATERIALS.map((material) => <article key={material.id} className={styles.resultsRow} role="row">
           <div className={styles.materialIdentity} role="cell"><img width="72" height="72" src={asset(`materials/${material.image}`)} alt="" /><strong>{material.name}</strong></div>
-          <span role="cell">{formatCompression(save, material.id)}</span>
-          <span role="cell">{formatImpact(save, material.id)}</span>
-          <span role="cell">{formatWater(save, material.id)}</span>
+          <span role="cell">{evidenceFor(save, material.id, "compression")}</span>
+          <span role="cell">{evidenceFor(save, material.id, "impact")}</span>
+          <span role="cell">{evidenceFor(save, material.id, "water")}</span>
         </article>)}
       </section>
     </main>

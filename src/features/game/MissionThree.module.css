@@ -1538,7 +1538,7 @@
 .reuseChoice > button small { font-size: clamp(11px, .85cqw, 13px); }
 .reuseChoice > button.reuseSelected { border-color: #32a675; background: #e8f9ee; color: #166f4d; }
 
-.placementLayout { box-sizing: border-box; display: grid; grid-template-columns: 62% 36%; gap: 1.2cqw; height: 61%; padding: 1% 3.3% 0; }
+.placementLayout { box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 54fr) minmax(0, 44fr); gap: 1.2cqw; height: 69%; padding: 1% 3.3% 0; }
 .placementPreviewPanel,.zoneBoard { box-sizing: border-box; min-width: 0; min-height: 0; padding: .85cqw; border: .15cqw solid #addbe4; border-radius: 1cqw; background: #fff; box-shadow: 0 .32cqw 0 #bfdce2; }
 .placementPreviewPanel h2,.zoneBoard h2 { margin: 0; color: #185a6e; font-size: clamp(18px,1.42cqw,22px); text-align: center; }
 .placementPreviewScene { position: relative; display: grid; place-items: center; height: calc(100% - 2.4cqw); margin-top: .35cqw; overflow: hidden; border-radius: .8cqw; background: radial-gradient(circle at 43% 56%,#fff 0 25%,#f5fcfa 62%,#e8f7f3 100%); }
@@ -1551,7 +1551,7 @@
 .diagramLabel text { fill: #176d59; font-family: inherit; font-size: 16px; font-weight: 800; }
 .diagramCup { pointer-events: none; }
 .zoneBoard { display: grid; grid-template-rows: auto minmax(0,1fr); }
-.zoneGrid { display: grid; grid-template-rows: repeat(3,minmax(0,1fr)); gap: .58cqw; min-height: 0; margin-top: .55cqw; }
+.zoneGrid { display: grid; grid-template-rows: repeat(3,minmax(min-content,1fr)); gap: .58cqw; min-height: 0; margin-top: .55cqw; overflow-y: auto; }
 .zoneGrid article { display: grid; grid-template-columns: 34% minmax(0,1fr); align-items: center; gap: .55cqw; min-width: 0; min-height: 0; padding: .58cqw .65cqw; border: .14cqw dashed #b7d3da; border-radius: .9cqw; background: #f8fcfd; transition: background .18s ease,border-color .18s ease; }
 .zoneGrid article.zoneFilled { border-style: solid; border-color: #4abca5; background: #effbf7; }
 .zoneGrid header { display: grid; grid-template-columns: 2.9cqw minmax(0,1fr); align-items: center; gap: .55cqw; min-width: 0; }
@@ -1561,10 +1561,10 @@
 .zoneGrid header b { color: #245e70; font-size: clamp(17px,1.3cqw,20px); line-height: 1.15; }
 .zoneGrid header small { color: #6e838a; font-size: clamp(12px,.92cqw,14px); line-height: 1.2; }
 .zoneGrid article > div { display: grid; grid-template-rows: repeat(3,minmax(0,1fr)); gap: .25cqw; min-width: 0; min-height: 0; }
-.zoneGrid article > div button { position: relative; display: grid; grid-template-columns: 2.8cqw minmax(0,1fr); align-items: center; gap: .45cqw; min-width: 0; min-height: 3.45cqw; padding: .3cqw .48cqw; border: .11cqw solid #d2e2e6; border-radius: .62cqw; background: #fff; color: #526e77; text-align: left; cursor: pointer; }
+.zoneGrid article > div button { position: relative; display: grid; grid-template-columns: 2.8cqw minmax(0,1fr); align-items: center; gap: .45cqw; min-width: 0; min-height: 4.1cqw; padding: .3cqw .48cqw; border: .11cqw solid #d2e2e6; border-radius: .62cqw; background: #fff; color: #526e77; text-align: left; cursor: pointer; }
 .zoneGrid article > div button > img { width: 2.8cqw; height: 2.8cqw; border: .08cqw solid #d3e5df; border-radius: .48cqw; object-fit: cover; }
 .zoneGrid article > div button > span { display: grid; min-width: 0; gap: .08cqw; }
-.zoneGrid article > div button b { font-size: clamp(14px,1.08cqw,16px); line-height: 1.12; }
+.zoneGrid article > div button b { overflow: hidden; font-size: clamp(14px,1.08cqw,16px); line-height: 1.12; text-overflow: ellipsis; white-space: nowrap; }
 .zoneGrid article > div button small { overflow: hidden; color: #73858a; font-size: clamp(11px,.86cqw,13px); line-height: 1.12; text-overflow: ellipsis; white-space: nowrap; }
 .zoneGrid article > div button > i { position: absolute; top: .25cqw; right: .25cqw; display: grid; place-items: center; width: 1.25cqw; height: 1.25cqw; border-radius: 50%; background: #168e71; color: #fff; font-size: clamp(9px,.7cqw,11px); font-style: normal; }
 .zoneGrid article > div button:disabled { opacity: .38; cursor: not-allowed; }
